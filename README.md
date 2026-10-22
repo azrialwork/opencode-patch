@@ -52,7 +52,11 @@ The initial basis is upstream `v1.19.4` (commit
    x64 job `--single --baseline`, arm64 job `--single`.
    `OPENCODE_VERSION` is set to the upstream version being built;
    `OPENCODE_RELEASE` is intentionally not set, so packaging and upload
-   stay with this repo's workflow.
+   stay with this repo's workflow. One upstream quirk is handled here:
+   `--single --baseline` also selects the `linux-x64-musl-baseline`
+   target (its avx2 check runs before its abi check), so the workflow
+   deletes any `*musl*` output directory before smoke-testing and
+   packaging — scope stays glibc only.
 6. Smoke-test the native binaries (`opencode --version`), package the
    `.tar.gz` assets, checksum them, and create the GitHub Release.
 

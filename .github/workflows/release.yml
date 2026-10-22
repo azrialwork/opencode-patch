@@ -161,6 +161,17 @@ jobs:
           OPENCODE_VERSION: ${{ needs.check.outputs.version }}
         run: ./packages/opencode/script/build.ts ${{ matrix.build_flags }}
 
+      - name: Remove out-of-scope targets
+        run: |
+          # Scope is Linux glibc only. Upstream's --single --baseline
+          # target filter also selects the linux-x64-musl-baseline target
+          # (its avx2 check runs before its abi check), so that directory
+          # is deleted here: a musl binary cannot even execute on this
+          # glibc runner (exit 127), and it must never be packaged.
+          ls upstream/packages/opencode/dist
+          rm -rf upstream/packages/opencode/dist/*musl*
+          ls upstream/packages/opencode/dist
+
       - name: Smoke test native binaries
         env:
           EXPECTED: ${{ needs.check.outputs.version }}
