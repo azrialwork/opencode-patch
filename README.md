@@ -43,10 +43,13 @@ The initial basis is upstream `v1.19.4` (commit
 1. Resolve the latest stable `v1.x.x` (above).
 2. Check out `anomalyco/opencode` at that exact commit.
 3. Install the Bun version upstream pins in its root `package.json`
-   (`packageManager`), then `bun install --frozen-lockfile`.
+   (`packageManager`).
 4. Apply `patches/*.patch` in filename order (`scripts/apply-patches.sh`).
    Any patch that does not apply cleanly fails the build — no release is
-   produced from a half-patched tree.
+   produced from a half-patched tree. Then `bun install` (deliberately
+   not `--frozen-lockfile`: patches may remove `package.json` entries, so
+   the upstream lockfile no longer matches, and removed dependencies must
+   never be installed).
 5. Build with upstream's own script, `./packages/opencode/script/build.ts`,
    restricted to Linux glibc targets by runner + flags:
    x64 job `--single --baseline`, arm64 job `--single`.
@@ -62,8 +65,21 @@ The initial basis is upstream `v1.19.4` (commit
 
 ## Patches
 
-Currently **no patches** — the series is intentionally empty and releases
-are plain upstream rebuilds while the pipeline is being proven.
+Patch principle for this repo: patches **remove** — code, data, and
+dependencies are deleted at the root, never merely hidden or filtered
+from view.
+
+- `0001-remove-builtin-providers.patch` — removes every built-in provider
+  and its models. The only built-in provider left is `opencode` (Zen);
+  custom providers defined in `opencode.json` keep working. The models.dev
+  catalogue is cut down to the `opencode` entry at the data source
+  (build-time embed, on-disk cache, and runtime fetch in
+  `packages/core/src/models-dev.ts` + `packages/opencode/script/generate.ts`),
+  all other providers' SDK packages are dropped from `package.json`
+  (and therefore never installed or bundled), their custom loaders,
+  built-in auth plugins (V1 and the V2 provider plugins in
+  `packages/core`), the GitLab workflow integration, and their tests are
+  deleted.
 
 To add a patch later:
 

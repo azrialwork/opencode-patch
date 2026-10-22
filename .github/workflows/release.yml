@@ -143,12 +143,15 @@ jobs:
         with:
           bun-version: ${{ steps.bun.outputs.version }}
 
-      - name: Install upstream dependencies
-        working-directory: upstream
-        run: bun install --frozen-lockfile
-
       - name: Apply patches
         run: scripts/apply-patches.sh upstream
+
+      # Patches may remove entries from package.json (e.g. provider SDKs), so
+      # the upstream lockfile no longer matches: install after patching and
+      # without --frozen-lockfile so removed dependencies are never installed.
+      - name: Install upstream dependencies
+        working-directory: upstream
+        run: bun install
 
       - name: Build CLI
         working-directory: upstream
