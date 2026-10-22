@@ -1,0 +1,256 @@
+name: Release
+
+# Track upstream OpenCode v1.x.x and rebuild it (with this repo's patches)
+# for Linux glibc, published as a GitHub Release of this repo.
+#
+# There is no cross-repo release event on GitHub, so upstream is polled
+# every 6 hours. workflow_dispatch allows building a specific version, or
+# rebuilding the latest one, on demand.
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Upstream version override, e.g. v1.19.4 (empty = latest stable v1.x.x)"
+        required: false
+        type: string
+      force:
+        description: "Rebuild even if this repo already released that version"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: opencode-patch-release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check upstream
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.decide.outputs.should_build }}
+      version: ${{ steps.decide.outputs.version }}
+      tag: ${{ steps.decide.outputs.tag }}
+      sha: ${{ steps.decide.outputs.sha }}
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Decide whether to build
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OVERRIDE: ${{ inputs.version }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$OVERRIDE" ]; then
+            if ! echo "$OVERRIDE" | grep -qE '^v1\.[0-9]+\.[0-9]+$'; then
+              echo "override must be an exact v1.x.x tag, got: $OVERRIDE" >&2
+              exit 1
+            fi
+            sha="$(git ls-remote https://github.com/anomalyco/opencode.git "refs/tags/$OVERRIDE" | cut -f1)"
+            if [ -z "$sha" ]; then
+              echo "upstream tag not found: $OVERRIDE" >&2
+              exit 1
+            fi
+            echo "version=${OVERRIDE#v}" >> "$GITHUB_OUTPUT"
+            echo "tag=$OVERRIDE" >> "$GITHUB_OUTPUT"
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          else
+            scripts/latest-upstream.sh >> "$GITHUB_OUTPUT"
+          fi
+
+          version="$(grep '^version=' "$GITHUB_OUTPUT" | cut -d= -f2)"
+          tag="v$version"
+          echo "candidate upstream: $tag"
+
+          # The tag must be a published, stable upstream release. If it is
+          # not (yet), skip quietly - the next scheduled run will retry.
+          if ! release_json="$(gh api "repos/anomalyco/opencode/releases/tags/$tag" 2>/dev/null)"; then
+            echo "no upstream release published for $tag yet, skipping"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$(echo "$release_json" | jq -r '.draft or .prerelease')" = "true" ]; then
+            echo "upstream release $tag is a draft/prerelease, skipping"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$FORCE" != "true" ] && gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "this repo already released $tag, skipping"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.slug }})
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # --single keeps the build to this runner's own platform/arch,
+          # --baseline adds the no-AVX2 x64 binary. Both are glibc.
+          - slug: x64
+            runner: ubuntu-latest
+            build_flags: "--single --baseline"
+          - slug: arm64
+            runner: ubuntu-24.04-arm
+            build_flags: "--single"
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Checkout upstream at the pinned tag
+        uses: actions/checkout@v4
+        with:
+          repository: anomalyco/opencode
+          ref: ${{ needs.check.outputs.tag }}
+          path: upstream
+
+      - name: Verify upstream commit
+        run: |
+          actual="$(git -C upstream rev-parse HEAD)"
+          if [ "$actual" != "${{ needs.check.outputs.sha }}" ]; then
+            echo "upstream HEAD $actual != expected ${{ needs.check.outputs.sha }}" >&2
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Get Bun version from upstream
+        id: bun
+        run: echo "version=$(node -p "require('./upstream/package.json').packageManager.split('@')[1]")" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      - name: Install upstream dependencies
+        working-directory: upstream
+        run: bun install --frozen-lockfile
+
+      - name: Apply patches
+        run: scripts/apply-patches.sh upstream
+
+      - name: Build CLI
+        working-directory: upstream
+        env:
+          # Without OPENCODE_VERSION the upstream script would derive a
+          # version from npm instead of the version being built.
+          # OPENCODE_RELEASE is deliberately not set: packaging and the
+          # release upload are owned by this workflow, not upstream's
+          # build script.
+          OPENCODE_VERSION: ${{ needs.check.outputs.version }}
+        run: ./packages/opencode/script/build.ts ${{ matrix.build_flags }}
+
+      - name: Smoke test native binaries
+        env:
+          EXPECTED: ${{ needs.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          for bin in upstream/packages/opencode/dist/opencode-linux-*/bin/opencode; do
+            # Only the runner's native binaries can execute here; the
+            # upstream build script smoke-tests those itself, and every
+            # other binary in this job is also native by construction
+            # (--single). Run them all and compare versions.
+            got="$("$bin" --version)"
+            echo "$bin -> $got"
+            [ "$got" = "$EXPECTED" ] || { echo "version mismatch" >&2; exit 1; }
+          done
+
+      - name: Package Linux glibc assets
+        run: scripts/package-linux-glibc.sh upstream/packages/opencode/dist release-assets
+
+      - name: Upload assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-${{ matrix.slug }}
+          path: release-assets/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Release
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Download assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-assets-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Verify and checksum assets
+        env:
+          EXPECTED: ${{ needs.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          for name in opencode-linux-x64 opencode-linux-arm64 opencode-linux-x64-baseline; do
+            [ -f "release-assets/$name.tar.gz" ] || { echo "missing asset $name.tar.gz" >&2; exit 1; }
+          done
+          ls -la release-assets
+
+          # Final smoke test of the exact x64 artifact being shipped.
+          mkdir -p /tmp/smoke
+          tar -xzf release-assets/opencode-linux-x64.tar.gz -C /tmp/smoke
+          got="$(/tmp/smoke/opencode --version)"
+          echo "shipped binary version: $got"
+          [ "$got" = "$EXPECTED" ]
+
+          (cd release-assets && sha256sum *.tar.gz > SHA256SUMS)
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.check.outputs.version }}
+          SHA: ${{ needs.check.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          patch_list="none"
+          if ls patches/*.patch >/dev/null 2>&1; then
+            patch_list="$(for p in patches/*.patch; do echo "- \`$(basename "$p")\`"; done)"
+          fi
+
+          cat > release-notes.md <<EOF
+          Rebuild of upstream OpenCode **$TAG** with this repo's patch series applied.
+
+          - Upstream: [anomalyco/opencode $TAG](https://github.com/anomalyco/opencode/releases/tag/$TAG) (commit \`$SHA\`)
+          - Scope: CLI only, Linux only, glibc only
+          - Assets: \`opencode-linux-x64.tar.gz\`, \`opencode-linux-arm64.tar.gz\`, \`opencode-linux-x64-baseline.tar.gz\` (no-AVX2), plus \`SHA256SUMS\`
+          - Patches applied:
+          $patch_list
+
+          Each archive contains a single \`opencode\` binary. Extract it and put it on your \`PATH\`.
+          EOF
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$TAG" --notes-file release-notes.md --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" release-assets/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG" \
+              --notes-file release-notes.md
+          fi

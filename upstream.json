@@ -1,0 +1,1 @@
+{"checkScheduleCronUtc":"0 */6 * * *","initialBasis":{"sha":"148842ef7cb1bc34192b3fff57d0f9721ab9c801","tag":"v1.19.4"},"repository":"anomalyco/opencode","stableOnly":true,"track":"latest stable v1.x.x release","url":"https://github.com/anomalyco/opencode.git"}
