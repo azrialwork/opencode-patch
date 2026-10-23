@@ -138,7 +138,7 @@ dari jendela. Kalau OpenCode baru sudah lahir, ia bergegas pulang dan
 membangunkan robot-robot pembangun di GitHub, dan mereka melakukan
 semuanya lagi: mengambil robot yang segar, membuka ranselnya, dan
 melakukan potongan-potongan penjahit sesuai urutannya, satu sampai
-tiga belas. Kalau satu potongan saja tidak pas di robot baru itu,
+empat belas. Kalau satu potongan saja tidak pas di robot baru itu,
 mereka berhenti saat itu juga dan tidak mengirim apa-apa — robot
 setengah terpotong lebih buruk daripada tidak ada robot sama sekali,
 dan semua orang di bengkel tahu itu.
@@ -178,10 +178,45 @@ menanyakan namanya untuk memastikan ia tiba dengan utuh, dan minggir.
 Kamu mengetik `opencode`, dan di situlah dia.
 
 Dua catatan kecil yang jujur, karena penjahit percaya pada catatan
-kecil yang jujur. Kotak-kotaknya hanya pas untuk komputer Linux jenis
-glibc. Dan kalau kamu menginginkan satu robot tertentu, bukan yang
-terbaru, kamu bisa memintanya dengan nama — tambahkan
-`bash -s -- --version v1.19.4` di akhir baris kartu itu.
+kecil yang jujur. Kalau kamu menginginkan satu robot tertentu, bukan
+yang terbaru, kamu bisa memintanya dengan nama — tambahkan
+`bash -s -- --version v1.19.4` di akhir baris kartu itu. Dan
+kotak-kotaknya pas untuk komputer Linux jenis glibc.
+
+Semuanya, kecuali satu.
+
+Ada satu rumah lebih kecil yang belum pernah dikunjungi si robot:
+telepon di sakumu.
+
+Telepon adalah rumah yang pemilih. Segala sesuatu di dalamnya
+dijahit dari satu kain istimewa, dan penjaga di pintunya memeriksa
+pakaianmu sebelum kamu boleh melangkah masuk. Pakaian perjalanan si
+robot adalah pakaian yang bagus, tetapi terpotong dari kain yang
+salah — dan saat pertama kali ia mengetuk, para penjaga hanya
+menggeleng. Ia bahkan tidak bisa melangkah masuk.
+
+Sebagian robot memecahkan ini dengan membawa seluruh rumah pura-pura
+di punggung mereka, lalu mengetuk dari dalam rumah itu. Si penjahit
+tidak mau mendengarnya. Terlalu berat. Terlalu konyol. Kalau si
+robot akan tinggal di telepon, ia akan tinggal di sana sebagai
+dirinya sendiri.
+
+Maka penjahit memotongkan untuknya seperangkat pakaian kedua, dari
+kain telepon itu sendiri. Sepatu baru juga, dianyam kembali di
+bengkel, karena lantai rumah kecil itu tidak seperti lantai di
+rumah. Dan ia mengajari si robot satu ketukan kecil yang baru,
+karena para penjaga menghentikan semua yang mengetuk dengan cara
+lama — satu ketukan kecil yang sopan, dihafal dengan hati, dan para
+penjaga pun melambaikannya masuk.
+
+Sekarang kartu yang sama juga bekerja di rumah kecil itu. Ucapkan
+baris penjahit di dalam terminal milik telepon itu sendiri — Termux,
+begitu orang dewasa menyebutnya — dan kartunya tahu persis di mana
+ia berada. Ia membawakan kotak kecilnya, memeriksa stempel amannya,
+dan menempatkan si robot di dalam, lengkap dengan sepatunya.
+
+Robot yang sama. Potongan yang sama, keempat belasnya. Hanya rumah
+yang lebih kecil, dan pakaian yang pas untuknya.
 
 Di rumahmu, kamu akan menemukan ia tidak kehilangan satu pun hal yang
 penting. Ia tetap duduk bersamamu di terminal dan membantumu menulis
@@ -198,7 +233,7 @@ mainan orang asing.
 
 Adapun si penjahit — ia masih di sini, di repo ini, menjaga daftarnya
 tetap rapi. Daftar itulah satu-satunya yang pernah dimiliki rumah
-ini: tiga belas potongan, pak pos yang tidak pernah lupa memeriksa,
+ini: empat belas potongan, pak pos yang tidak pernah lupa memeriksa,
 dan janji yang ia buat kepada setiap robot yang meninggalkan bengkel.
 
 Tidak ada yang disembunyikan. Semua yang dipotong, dipotong
@@ -209,12 +244,13 @@ Dan setiap enam jam, pak pos mengetuk lagi.
 <details>
 <summary>Catatan yang disematkan di halaman terakhir, untuk orang dewasa</summary>
 
-- **Ruang lingkup:** hanya CLI (`packages/opencode`), hanya Linux, hanya **glibc** (tanpa musl).
-- **Aset rilis:** `opencode-linux-x64.tar.gz`, `opencode-linux-x64-baseline.tar.gz` (tanpa AVX2), `opencode-linux-arm64.tar.gz`, `SHA256SUMS`. Setiap arsip berisi satu binary `opencode`.
+- **Ruang lingkup:** hanya CLI (`packages/opencode`). Linux **glibc** (tanpa musl), plus Android (Termux) **Bionic** arm64.
+- **Aset rilis:** `opencode-linux-x64.tar.gz`, `opencode-linux-x64-baseline.tar.gz` (tanpa AVX2), `opencode-linux-arm64.tar.gz`, `opencode-termux-arm64.tar.gz`, `SHA256SUMS`. Setiap arsip Linux berisi satu binary `opencode`; arsip Termux berisi launcher plus binary Bionic dan library native-nya di bawah `lib/opencode-patch/`.
 - **Pelacakan versi:** tanpa pin — cron GitHub Actions (`0 */6 * * *` UTC) mengikuti `v1.x.x` stabil terbaru dari upstream; versi yang sudah terilis dilewati. Run manual bisa menerima override versi dan flag `force`. Rilis upstream baru menerapkan ulang seluruh seri secara otomatis; patch yang berhenti pas akan menggagalkan build dengan keras, memang begitu desainnya.
 - **Urutan build:** patch di `patches/` diterapkan sesuai urutan nama file **sebelum** `bun install`, dan install berjalan *tanpa* `--frozen-lockfile`, jadi dependensi yang dihapus patch tidak pernah terinstall.
 - **Basis:** upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801`.
 - **Hasil sejauh ini:** binary 214.526.128 → 160.073.904 byte (−25,4%). Memori idle TUI juga turun, dari ~386 MiB menjadi ~336 MiB RSS dalam pengukuran kami.
+- **Build Termux:** patch 0014 menambahkan target Android milik Bun (`OPENCODE_LIBC=bionic`) ke script build upstream. Dua job CI tambahan membangun `libopentui.so` dari sumber OpenTUI v0.4.5 yang di-pin (Zig + Android NDK, alignment halaman 16 KB) dan shim kecil `close_range` (seccomp Termux yang targetSdk 28 menjebak syscall itu, jadi launcher me-`LD_PRELOAD` shim-nya), lalu memeriksa binary Bionic dengan `readelf` — dependensi glibc apa pun menggagalkan build. Tidak ada proot di mana pun. Untuk v1.19.4, binary Termux berukuran 138.289.528 byte, terverifikasi end-to-end di perangkat Termux Android 12 asli (install, `opencode run`, dan TUI).
 - **Daftar potongan lengkap, dengan kata-kata teknis:** lihat [`patches/README.id.md`](patches/README.id.md).
 - **Menambah potongan:** buat perubahannya di clone upstream yang bisa ditulis, uji, ekspor `git diff` sebagai file bernomor berikutnya di `patches/`, lalu commit di sini. Build terjadwal berikutnya akan mengambilnya.
 

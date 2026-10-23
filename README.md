@@ -131,7 +131,7 @@ the postman walks up to OpenCode's house and looks in the window. If
 a new OpenCode has been born, he hurries back and wakes the builder
 robots at GitHub, and they do the whole thing again: fetch the fresh
 robot, open the backpack, and make the tailor's cuts in the tailor's
-order, one to thirteen. If even one cut does not fit the new robot,
+order, one to fourteen. If even one cut does not fit the new robot,
 they stop at once and ship nothing — a half-cut robot is worse than
 no robot at all, and everyone in the workshop knows it.
 
@@ -168,10 +168,43 @@ sure he arrived whole, and steps aside. You type `opencode`, and there
 he is.
 
 Two honest small-print notes, because the tailor believes in honest
-small print. The boxes fit Linux computers of the glibc kind only.
-And if you want one particular robot rather than the newest, you can
-ask for him by name — add `bash -s -- --version v1.19.4` to the end
-of the card's line.
+small print. If you want one particular robot rather than the newest,
+you can ask for him by name — add `bash -s -- --version v1.19.4` to
+the end of the card's line. And the boxes fit Linux computers of the
+glibc kind.
+
+All of them, that is, except one.
+
+There is a smaller house the robot had never visited: the telephone
+in your pocket.
+
+A telephone is a picky house. Everything inside it is sewn from one
+special cloth, and the guards at the door check your clothes before
+you may step in. The robot's travelling clothes are good clothes,
+but they are cut from the wrong cloth — and the first time he
+knocked, the guards only shook their heads. He could not even step
+inside.
+
+Some robots solve this by carrying a whole pretend house on their
+backs, and knocking from inside it. The tailor would not hear of it.
+Too heavy. Too silly. If the robot is going to live in the
+telephone, he will live there as himself.
+
+So the tailor cut him a second set of clothes, from the telephone's
+own cloth. New shoes as well, woven back at the workshop, because
+the floors of the small house are not like the floors at home. And
+he taught the robot one small new knock, because the guards stop
+everyone who knocks the old way — one polite little knock, learned
+by heart, and the guards wave him through.
+
+Now the same card works in the small house too. Speak the tailor's
+line inside the telephone's own terminal — Termux, the grown-ups
+call it — and the card knows exactly where it is. It brings the
+small box, checks the safety stamp, and settles the robot in, shoes
+and all.
+
+Same robot. Same cuts, all fourteen of them. Just a smaller house,
+and clothes that fit it.
 
 At your house, you will find he has lost none of the things that
 matter. He still sits with you in the terminal and helps you write
@@ -186,7 +219,7 @@ them to him in his configuration. No configuration, no tools. He will
 not pick up strangers' toys.
 
 As for the tailor — he is still here, in this repository, keeping his
-list tidy. The list is all this house has ever held: thirteen cuts, a
+list tidy. The list is all this house has ever held: fourteen cuts, a
 postman who never forgets to check, and a promise he makes to every
 robot who leaves the workshop.
 
@@ -197,12 +230,13 @@ And every six hours, the postman knocks again.
 <details>
 <summary>A note pinned to the last page, for grown-ups</summary>
 
-- **Scope:** CLI only (`packages/opencode`), Linux only, **glibc** only (no musl).
-- **Release assets:** `opencode-linux-x64.tar.gz`, `opencode-linux-x64-baseline.tar.gz` (no AVX2), `opencode-linux-arm64.tar.gz`, `SHA256SUMS`. Each archive holds one `opencode` binary.
+- **Scope:** CLI only (`packages/opencode`). Linux **glibc** (no musl), plus Android (Termux) **Bionic** arm64.
+- **Release assets:** `opencode-linux-x64.tar.gz`, `opencode-linux-x64-baseline.tar.gz` (no AVX2), `opencode-linux-arm64.tar.gz`, `opencode-termux-arm64.tar.gz`, `SHA256SUMS`. Each Linux archive holds one `opencode` binary; the Termux archive holds a launcher plus the Bionic binary and its native libraries under `lib/opencode-patch/`.
 - **Version tracking:** no pin — a GitHub Actions cron (`0 */6 * * *` UTC) follows the newest stable upstream `v1.x.x`; already-released versions are skipped. Manual runs accept a version override and a `force` flag. New upstream releases re-apply the whole series automatically; a patch that stops applying fails the build loudly, by design.
 - **Build order:** patches in `patches/` are applied in filename order **before** `bun install`, and install runs *without* `--frozen-lockfile`, so dependencies removed by a patch are never installed.
 - **Basis:** upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801`.
 - **Result so far:** binary 214,526,128 → 160,073,904 bytes (−25.4%). TUI idle memory also fell, from ~386 MiB to ~336 MiB RSS in our measurements.
+- **Termux build:** patch 0014 adds Bun's Android targets (`OPENCODE_LIBC=bionic`) to the upstream build script. Two extra CI jobs build `libopentui.so` from the pinned OpenTUI v0.4.5 sources (Zig + Android NDK, 16 KB page alignment) and a small `close_range` compat shim (Termux's targetSdk 28 seccomp traps that syscall, so the launcher `LD_PRELOAD`s the shim), then check the Bionic binary with `readelf` — any glibc dependency fails the build. No proot anywhere. For v1.19.4 the Termux binary measures 138,289,528 bytes, verified end-to-end on a real Android 12 Termux device (install, `opencode run`, and the TUI).
 - **The full cut list, in technical words:** see [`patches/README.md`](patches/README.md).
 - **Adding a cut:** make the change in a writable upstream clone, test it, export `git diff` as the next numbered file in `patches/`, and commit it here. The next scheduled build picks it up.
 
