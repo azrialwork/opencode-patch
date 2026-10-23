@@ -133,6 +133,20 @@ every model gets, Zen or custom. The plan-mode reminder texts and
 the built-in agent prompts (title, summary, explore, compaction)
 are separate surfaces and are not touched.
 
+**16. `0016-complete-env-block.patch` — the environment block tells
+the whole truth about the device.** The "You are powered by the
+model named …" line is removed from the environment string, and the
+`<env>` block grows from five lines to a complete device snapshot:
+working directory, workspace root, git repo and branch (read from
+`.git/HEAD`), device name, operating system (distro name on Linux),
+platform, architecture, CPU model and cores, RAM, free disk,
+home, user, shell, terminal, locale, timezone, date, and the Bun
+runtime version. On Android it renders a Termux variant instead —
+product and market name, an `Android:` line (version, API level,
+build, security patch, all from one `getprop` dump), and a
+`Termux:` line. Facts are collected once per process and cached;
+anything that cannot be determined is omitted, never guessed.
+
 ---
 
 A note for careful readers: this README is not a patch.

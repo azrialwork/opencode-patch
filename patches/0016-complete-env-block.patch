@@ -1,0 +1,240 @@
+diff --git a/packages/opencode/src/session/system.ts b/packages/opencode/src/session/system.ts
+index a86ec804ff..c98e66fb6c 100644
+--- a/packages/opencode/src/session/system.ts
++++ b/packages/opencode/src/session/system.ts
+@@ -1,5 +1,9 @@
+ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+ import { Context, Effect, Layer } from "effect"
++import { execFileSync } from "child_process"
++import { readFileSync, statfsSync } from "fs"
++import * as os from "os"
++import path from "path"
+ 
+ import { InstanceState } from "@/effect/instance-state"
+ 
+@@ -22,6 +26,183 @@ export function provider(_model: Provider.Model) {
+   return [PROMPT_DEFAULT]
+ }
+ 
++// opencode-patch 0016: the <env> block no longer introduces the model by
++// name, and it describes the device as completely as the runtime allows,
++// with a dedicated Android/Termux variant. Device facts are collected
++// once per process and cached; git branch and free disk space describe
++// the current worktree and are read per call. Every fact that cannot be
++// determined is omitted silently.
++type DeviceInfo = {
++  device?: string
++  android?: string
++  osLine: string
++  cpu?: string
++  termux?: string
++  memory?: string
++  home?: string
++  user?: string
++  shell?: string
++  terminal?: string
++  locale?: string
++  timezone?: string
++  runtime?: string
++}
++
++let deviceCache: DeviceInfo | undefined
++
++function formatBytes(bytes: number) {
++  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`
++}
++
++function readText(file: string) {
++  try {
++    return readFileSync(file, "utf-8")
++  } catch {
++    return undefined
++  }
++}
++
++function androidProps() {
++  const props = new Map<string, string>()
++  try {
++    const out = execFileSync("getprop", [], { timeout: 2000, maxBuffer: 1024 * 1024 }).toString()
++    for (const line of out.split("\n")) {
++      const match = /^\[(.+)\]: \[(.*)\]$/.exec(line.trim())
++      if (match?.[1] && match[2]) props.set(match[1], match[2])
++    }
++  } catch {}
++  return props
++}
++
++function deviceInfo(): DeviceInfo {
++  if (deviceCache) return deviceCache
++  const android = process.platform === "android"
++  const props = android ? androidProps() : new Map<string, string>()
++  const prop = (key: string) => props.get(key)
++
++  const device = (() => {
++    if (android) {
++      const name = [prop("ro.product.manufacturer"), prop("ro.product.model")].filter(Boolean).join(" ")
++      const market = prop("ro.product.marketname")
++      if (name) return market && market !== prop("ro.product.model") ? `${name} (${market})` : name
++    }
++    try {
++      return os.hostname() || undefined
++    } catch {
++      return undefined
++    }
++  })()
++
++  const androidLine = (() => {
++    if (!android) return undefined
++    const version = prop("ro.build.version.release")
++    if (!version) return undefined
++    const sdk = prop("ro.build.version.sdk")
++    const build = prop("ro.build.id")
++    const patch = prop("ro.build.version.security_patch")
++    return (
++      `${version}${sdk ? ` (API ${sdk})` : ""}` +
++      `${build ? `, build ${build}` : ""}` +
++      `${patch ? `, security patch ${patch}` : ""}`
++    )
++  })()
++
++  const osLine = (() => {
++    if (android) return `Linux ${os.release()}`
++    if (process.platform === "linux") {
++      const pretty = readText("/etc/os-release")?.match(/^PRETTY_NAME="?([^"\n]+)"?$/m)?.[1]
++      return pretty ? `${pretty}, kernel ${os.release()}` : `Linux ${os.release()}`
++    }
++    return `${os.type()} ${os.release()}`
++  })()
++
++  const cpu = (() => {
++    const list = os.cpus()
++    const model = list.find((entry) => entry.model.trim())?.model.trim()
++    const soc = android ? (prop("ro.soc.model") ?? prop("ro.board.platform")) : undefined
++    const name = model ?? soc
++    if (!name && list.length === 0) return undefined
++    return [name, list.length > 0 ? `(${list.length} cores)` : undefined].filter(Boolean).join(" ")
++  })()
++
++  const termux = (() => {
++    if (!android) return undefined
++    const version = process.env.TERMUX_VERSION
++    const prefix = process.env.PREFIX
++    if (!version && !prefix) return undefined
++    return [version, prefix ? `prefix ${prefix}` : undefined].filter(Boolean).join(", ")
++  })()
++
++  const intl = (() => {
++    try {
++      return Intl.DateTimeFormat().resolvedOptions()
++    } catch {
++      return undefined
++    }
++  })()
++
++  deviceCache = {
++    device,
++    android: androidLine,
++    osLine,
++    cpu,
++    termux,
++    memory: (() => {
++      try {
++        return `${formatBytes(os.totalmem())} total`
++      } catch {
++        return undefined
++      }
++    })(),
++    home: (() => {
++      try {
++        return os.homedir() || undefined
++      } catch {
++        return undefined
++      }
++    })(),
++    user: (() => {
++      try {
++        const name = os.userInfo().username
++        return name && name !== "unknown" ? name : undefined
++      } catch {
++        return undefined
++      }
++    })(),
++    shell: process.env.SHELL || undefined,
++    terminal: process.env.TERM || undefined,
++    locale: intl?.locale,
++    timezone: intl?.timeZone,
++    runtime: process.versions.bun ? `Bun ${process.versions.bun}` : undefined,
++  }
++  return deviceCache
++}
++
++function gitBranch(worktree: string) {
++  const direct = readText(path.join(worktree, ".git", "HEAD"))
++  const head =
++    direct ??
++    (() => {
++      const file = readText(path.join(worktree, ".git"))
++      const dir = file?.match(/^gitdir: (.+)$/m)?.[1]?.trim()
++      if (!dir) return undefined
++      return readText(path.join(path.isAbsolute(dir) ? dir : path.join(worktree, dir), "HEAD"))
++    })()
++  return head?.match(/^ref: refs\/heads\/(.+)$/m)?.[1]?.trim()
++}
++
++function diskLine(worktree: string) {
++  try {
++    const stats = statfsSync(worktree)
++    const total = Number(stats.blocks) * Number(stats.bsize)
++    const free = Number(stats.bavail) * Number(stats.bsize)
++    if (!total) return undefined
++    return `${formatBytes(free)} free of ${formatBytes(total)}`
++  } catch {
++    return undefined
++  }
++}
++
+ export interface Interface {
+   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
+   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
+@@ -38,21 +219,38 @@ const layer = Layer.effect(
+     const locations = yield* LocationServiceMap.Service
+ 
+     return Service.of({
+-      environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
++      environment: Effect.fn("SystemPrompt.environment")(function* (_model: Provider.Model) {
+         const ctx = yield* InstanceState.context
+         const references = yield* Effect.gen(function* () {
+           return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
+         }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
++        const info = deviceInfo()
++        const branch = ctx.project.vcs === "git" ? gitBranch(ctx.worktree) : undefined
++        const disk = diskLine(ctx.worktree)
+         return [
+           [
+-            `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
+             `Here is some useful information about the environment you are running in:`,
+             `<env>`,
+             `  Working directory: ${ctx.directory}`,
+             `  Workspace root folder: ${ctx.worktree}`,
+-            `  Is directory a git repo: ${ctx.project.vcs === "git" ? "yes" : "no"}`,
++            `  Is directory a git repo: ${ctx.project.vcs === "git" ? `yes${branch ? ` (branch: ${branch})` : ""}` : "no"}`,
++            ...(info.device ? [`  Device: ${info.device}`] : []),
++            ...(info.android ? [`  Android: ${info.android}`] : []),
++            `  Operating system: ${info.osLine}`,
+             `  Platform: ${process.platform}`,
++            `  Architecture: ${process.arch}`,
++            ...(info.cpu ? [`  CPU: ${info.cpu}`] : []),
++            ...(info.termux ? [`  Termux: ${info.termux}`] : []),
++            ...(info.memory ? [`  Memory: ${info.memory}`] : []),
++            ...(disk ? [`  Disk: ${disk}`] : []),
++            ...(info.home ? [`  Home directory: ${info.home}`] : []),
++            ...(info.user ? [`  User: ${info.user}`] : []),
++            ...(info.shell ? [`  Shell: ${info.shell}`] : []),
++            ...(info.terminal ? [`  Terminal: ${info.terminal}`] : []),
++            ...(info.locale ? [`  Locale: ${info.locale}`] : []),
++            ...(info.timezone ? [`  Timezone: ${info.timezone}`] : []),
+             `  Today's date: ${new Date().toDateString()}`,
++            ...(info.runtime ? [`  Runtime: ${info.runtime}`] : []),
+             `</env>`,
+           ].join("\n"),
+           references.length === 0

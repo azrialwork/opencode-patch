@@ -133,6 +133,21 @@ satu-satunya prompt yang didapat semua model, Zen maupun custom.
 Teks pengingat plan-mode dan prompt agen bawaan (title, summary,
 explore, compaction) adalah permukaan terpisah dan tidak disentuh.
 
+**16. `0016-complete-env-block.patch` — blok environment bercerita
+lengkap tentang perangkatnya.** Baris "You are powered by the model
+named …" dihapus dari string environment, dan blok `<env>` tumbuh
+dari lima baris menjadi potret perangkat yang lengkap: direktori
+kerja, root workspace, repo git beserta branch-nya (dibaca dari
+`.git/HEAD`), nama perangkat, sistem operasi (nama distro di
+Linux), platform, arsitektur, model dan jumlah core CPU, RAM,
+disk bebas, home, user, shell, terminal, locale, zona waktu,
+tanggal, dan versi runtime Bun. Di Android ia menggambar varian
+Termux sebagai gantinya — nama produk dan nama pasar, baris
+`Android:` (versi, level API, build, security patch, semuanya dari
+satu dump `getprop`), dan baris `Termux:`. Fakta dikumpulkan
+sekali per proses lalu di-cache; apa pun yang tidak bisa
+ditentukan akan hilang, tidak pernah ditebak.
+
 ---
 
 Catatan untuk pembaca yang teliti: README ini bukan patch.
