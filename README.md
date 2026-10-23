@@ -131,7 +131,7 @@ the postman walks up to OpenCode's house and looks in the window. If
 a new OpenCode has been born, he hurries back and wakes the builder
 robots at GitHub, and they do the whole thing again: fetch the fresh
 robot, open the backpack, and make the tailor's cuts in the tailor's
-order, one to fifteen. If even one cut does not fit the new robot,
+order, one to sixteen. If even one cut does not fit the new robot,
 they stop at once and ship nothing — a half-cut robot is worse than
 no robot at all, and everyone in the workshop knows it.
 
@@ -203,7 +203,7 @@ call it — and the card knows exactly where it is. It brings the
 small box, checks the safety stamp, and settles the robot in, shoes
 and all.
 
-Same robot. Same cuts, all fifteen of them. Just a smaller house,
+Same robot. Same cuts, all sixteen of them. Just a smaller house,
 and clothes that fit it.
 
 One more thing was found in the backpack, at the very bottom: a
@@ -230,6 +230,31 @@ Now the robot wakes up the same way in every house on earth, with
 the same single card in his pocket, and he does not miss the others
 at all.
 
+There was one more card, of a different kind. This one the robot
+did not choose in the morning. The house wrote it for him, fresh
+every day, and slipped it into his pocket before he woke: where he
+was standing, what the house was called, what the calendar said.
+
+For years the card had begun with the name of the engine inside
+his chest, in big letters, as if that were the most important
+thing about the morning.
+
+The tailor took the card and cut the first line away. *Kres.*
+
+"You are not your engine," he said.
+
+Then he wrote the card out again, longer and truer: the name of
+the house and the street where it stood, the branch of the garden
+he was working in, how tall the roof was, how much room was left
+in the cupboards, what the floor was made of, and the language
+the house speaks at breakfast. Even the little telephone house
+got a card of its own kind, written in the telephone's own way,
+telling the names the telephone keeps for itself.
+
+Now, wherever the robot wakes, he reads his card and knows
+exactly where he is — and he never mistakes himself for his
+engine again.
+
 At your house, you will find he has lost none of the things that
 matter. He still sits with you in the terminal and helps you write
 your programs. He still reads and writes and fixes files. He still
@@ -243,7 +268,7 @@ them to him in his configuration. No configuration, no tools. He will
 not pick up strangers' toys.
 
 As for the tailor — he is still here, in this repository, keeping his
-list tidy. The list is all this house has ever held: fifteen cuts, a
+list tidy. The list is all this house has ever held: sixteen cuts, a
 postman who never forgets to check, and a promise he makes to every
 robot who leaves the workshop.
 
@@ -259,8 +284,9 @@ And every six hours, the postman knocks again.
 - **Version tracking:** no pin — a GitHub Actions cron (`0 */6 * * *` UTC) follows the newest stable upstream `v1.x.x`; already-released versions are skipped. Manual runs accept a version override and a `force` flag. New upstream releases re-apply the whole series automatically; a patch that stops applying fails the build loudly, by design.
 - **Build order:** patches in `patches/` are applied in filename order **before** `bun install`, and install runs *without* `--frozen-lockfile`, so dependencies removed by a patch are never installed.
 - **Basis:** upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801`.
-- **Result so far:** binary 214,526,128 → 159,942,832 bytes (−25.4%). TUI idle memory also fell, from ~386 MiB to ~336 MiB RSS in our measurements.
+- **Result so far:** binary 214,526,128 → 159,946,928 bytes (−25.4%). TUI idle memory also fell, from ~386 MiB to ~336 MiB RSS in our measurements.
 - **One system prompt:** patch 0015 removes the per-model system prompt selection. Upstream ships eleven prompt texts and picks one by model ID; this build deletes the ten family variants (including one file nothing ever imported) and the selection logic, and keeps `default.txt` exactly as upstream wrote it — now the one prompt every model gets, Zen or custom.
+- **A fuller environment card:** patch 0016 removes the "You are powered by the model named …" line and expands the `<env>` block into a complete device snapshot (git branch, device name, OS/distro, CPU, memory, free disk, shell, locale, timezone, runtime), with a dedicated Android/Termux variant (product names, Android version/API/build/security patch from one `getprop` dump, Termux version and prefix). Facts are collected once per process and cached; anything unknown is omitted, never guessed. Verified from the wire: the system prompt captured from a live request shows the new block verbatim.
 - **Termux build:** patch 0014 adds Bun's Android targets (`OPENCODE_LIBC=bionic`) to the upstream build script. Two extra CI jobs build `libopentui.so` from the pinned OpenTUI v0.4.5 sources (Zig + Android NDK, 16 KB page alignment) and a small `close_range` compat shim (Termux's targetSdk 28 seccomp traps that syscall, so the launcher `LD_PRELOAD`s the shim), then check the Bionic binary with `readelf` — any glibc dependency fails the build. No proot anywhere. For v1.19.4 the Termux binary measures 138,289,528 bytes, verified end-to-end on a real Android 12 Termux device (install, `opencode run`, and the TUI).
 - **The full cut list, in technical words:** see [`patches/README.md`](patches/README.md).
 - **Adding a cut:** make the change in a writable upstream clone, test it, export `git diff` as the next numbered file in `patches/`, and commit it here. The next scheduled build picks it up.
