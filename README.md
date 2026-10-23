@@ -17,6 +17,23 @@ source on GitHub Actions, publishing the result as a GitHub Release here.
 
 Each archive contains a single `opencode` binary.
 
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/azrialwork/opencode-patch/main/install.sh | bash
+```
+
+`install.sh` detects the platform (Linux glibc, x64 — with automatic
+fallback to the baseline build on CPUs without AVX2 — or arm64),
+downloads the latest release archive, **verifies its SHA256** against
+the release's `SHA256SUMS`, and installs to `/usr/local/bin` when
+writable, otherwise `~/.local/bin`. Pin a version or choose the
+target directory with:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/azrialwork/opencode-patch/main/install.sh | bash -s -- --version v1.19.4 --install-dir ~/.local/bin
+```
+
 ## Version tracking
 
 There is no static pin. The release workflow automatically follows the
