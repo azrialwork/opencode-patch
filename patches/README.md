@@ -47,6 +47,10 @@ Current series:
   login, org config injection, `/experimental/console*` endpoints,
   TUI org switcher), and the core Zen provider plugin (Console OAuth
   method + console-served catalogue merging).
+- `0012-zen-free-tier-only.patch` — narrows the built-in catalogue to
+  the Zen free tier only (zero cost on every tier, not deprecated) at
+  the build embed and the runtime models.dev loader. Paid Zen models
+  are removed from the data; custom providers/models are unaffected.
 
 This file is not a patch and is ignored by `scripts/apply-patches.sh`,
 which only reads `*.patch`.

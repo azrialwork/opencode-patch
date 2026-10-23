@@ -161,6 +161,12 @@ from view.
   and merged console-served provider config into the catalogue.
   Zen's free models keep working anonymously; there is no account,
   no billing, and no sign-in left.
+- `0012-zen-free-tier-only.patch` — narrows the built-in catalogue to
+  the Zen free tier: at both catalogue filter points (the build-time
+  embed and the runtime models.dev loader) the `opencode` provider
+  keeps only models whose cost is zero on every tier and that are not
+  deprecated. Paid Zen models no longer exist in this build at all;
+  custom providers and models are unaffected.
 
 To add a patch later:
 

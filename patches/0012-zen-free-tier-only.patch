@@ -1,0 +1,74 @@
+diff --git a/packages/core/src/models-dev.ts b/packages/core/src/models-dev.ts
+index 991ddacf06..bf84543ef9 100644
+--- a/packages/core/src/models-dev.ts
++++ b/packages/core/src/models-dev.ts
+@@ -202,8 +202,29 @@ const layer = Layer.effect(
+     // Only the built-in `opencode` (Zen) provider ships in this build. The
+     // rest of the models.dev catalogue is discarded at the data source, so
+     // no other built-in provider or model exists anywhere downstream.
+-    const onlyOpencode = (data: Record<string, Provider>): Record<string, Provider> =>
+-      data.opencode ? { opencode: data.opencode } : {}
++    // Only the Zen free tier is built in: models whose cost is zero on every
++    // tier and that are not deprecated. Everything else is discarded here so
++    // paid Zen models never enter the cache, the snapshot, or the runtime.
++    const freeTier = (model: Model): boolean => {
++      if (model.status === "deprecated") return false
++      const cost = model.cost
++      if (!cost) return false
++      if (cost.input !== 0 || cost.output !== 0) return false
++      if (cost.context_over_200k && (cost.context_over_200k.input !== 0 || cost.context_over_200k.output !== 0))
++        return false
++      if (cost.tiers?.some((tier) => tier.input !== 0 || tier.output !== 0)) return false
++      return true
++    }
++    const onlyOpencode = (data: Record<string, Provider>): Record<string, Provider> => {
++      const provider = data.opencode
++      if (!provider) return {}
++      return {
++        opencode: {
++          ...provider,
++          models: Object.fromEntries(Object.entries(provider.models).filter(([, model]) => freeTier(model))),
++        },
++      }
++    }
+ 
+     const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
+       const fetched = yield* fetchApi()
+diff --git a/packages/opencode/script/generate.ts b/packages/opencode/script/generate.ts
+index d3f0f8615f..f3015a3cc0 100644
+--- a/packages/opencode/script/generate.ts
++++ b/packages/opencode/script/generate.ts
+@@ -11,8 +11,30 @@ const modelsUrl = process.env.OPENCODE_MODELS_URL || "https://models.dev"
+ const fetched = process.env.MODELS_DEV_API_JSON
+   ? await Bun.file(process.env.MODELS_DEV_API_JSON).text()
+   : await fetch(`${modelsUrl}/api.json`).then((x) => x.text())
+-// Only the built-in `opencode` (Zen) provider is embedded in this build; the
++// Only the built-in `opencode` (Zen) provider is embedded in this build, and
++// only its free-tier models: cost zero on every tier and not deprecated. The
+ // rest of the models.dev catalogue is discarded before it reaches the binary.
+-const catalog = JSON.parse(fetched) as Record<string, unknown>
+-export const modelsData = JSON.stringify(catalog.opencode ? { opencode: catalog.opencode } : {})
++type RawCost = {
++  input?: number
++  output?: number
++  context_over_200k?: { input?: number; output?: number }
++  tiers?: Array<{ input?: number; output?: number }>
++}
++type RawModel = { cost?: RawCost; status?: string }
++const freeTier = (model: RawModel): boolean => {
++  if (model.status === "deprecated") return false
++  const cost = model.cost
++  if (!cost) return false
++  if (cost.input !== 0 || cost.output !== 0) return false
++  if (cost.context_over_200k && (cost.context_over_200k.input !== 0 || cost.context_over_200k.output !== 0))
++    return false
++  if (cost.tiers?.some((tier) => tier.input !== 0 || tier.output !== 0)) return false
++  return true
++}
++const catalog = JSON.parse(fetched) as Record<string, { models?: Record<string, RawModel> }>
++const zen = catalog.opencode
++const embedded = zen
++  ? { opencode: { ...zen, models: Object.fromEntries(Object.entries(zen.models ?? {}).filter(([, m]) => freeTier(m))) } }
++  : {}
++export const modelsData = JSON.stringify(embedded)
+ console.log("Loaded models.dev snapshot")
