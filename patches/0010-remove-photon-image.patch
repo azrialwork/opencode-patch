@@ -1,5 +1,5 @@
 diff --git a/packages/core/package.json b/packages/core/package.json
-index 7233a65606..d3dbb7fe87 100644
+index 7233a656065afd7ae9be5b7d808054008ea3d636..d3dbb7fe878c6a9a5dadc689990df767cb7aba5c 100644
 --- a/packages/core/package.json
 +++ b/packages/core/package.json
 @@ -76,7 +76,6 @@
@@ -11,7 +11,7 @@ index 7233a65606..d3dbb7fe87 100644
      "bun-pty": "0.4.8",
      "cross-spawn": "catalog:",
 diff --git a/packages/core/src/config.ts b/packages/core/src/config.ts
-index 61d9a72ede..4e76f28a7f 100644
+index 61d9a72edebb67988c944a209dd45453c919eac7..4e76f28a7fac779212a9739a3e6a6e1775b40fa4 100644
 --- a/packages/core/src/config.ts
 +++ b/packages/core/src/config.ts
 @@ -11,7 +11,6 @@ import { Location } from "./location"
@@ -34,7 +34,7 @@ index 61d9a72ede..4e76f28a7f 100644
    }),
 diff --git a/packages/core/src/config/attachments.ts b/packages/core/src/config/attachments.ts
 deleted file mode 100644
-index f14775ff3f..0000000000
+index f14775ff3f7d24cab32662498d93d9ff19582e13..0000000000000000000000000000000000000000
 --- a/packages/core/src/config/attachments.ts
 +++ /dev/null
 @@ -1,15 +0,0 @@
@@ -55,7 +55,7 @@ index f14775ff3f..0000000000
 -}) {}
 diff --git a/packages/core/src/image.ts b/packages/core/src/image.ts
 deleted file mode 100644
-index 304277669e..0000000000
+index 304277669e8df7d3fc6472309eab8bb71b8ad712..0000000000000000000000000000000000000000
 --- a/packages/core/src/image.ts
 +++ /dev/null
 @@ -1,81 +0,0 @@
@@ -142,7 +142,7 @@ index 304277669e..0000000000
 -export const node = makeLocationNode({ service: Service, layer, deps: [Config.node] })
 diff --git a/packages/core/src/image/photon.ts b/packages/core/src/image/photon.ts
 deleted file mode 100644
-index e4a00ce5fc..0000000000
+index e4a00ce5fc8ccc7c42bb20d3c39668540510f941..0000000000000000000000000000000000000000
 --- a/packages/core/src/image/photon.ts
 +++ /dev/null
 @@ -1,94 +0,0 @@
@@ -241,7 +241,7 @@ index e4a00ce5fc..0000000000
 -  })
 -})
 diff --git a/packages/core/src/location-services.ts b/packages/core/src/location-services.ts
-index 7da67673c3..0ea85ab0ff 100644
+index 7da67673c31982abafc856f34fb52a2c82891525..0ea85ab0ff645776601a0c4ae28924df9d002cfc 100644
 --- a/packages/core/src/location-services.ts
 +++ b/packages/core/src/location-services.ts
 @@ -10,7 +10,6 @@ import { FileMutation } from "./file-mutation"
@@ -261,7 +261,7 @@ index 7da67673c3..0ea85ab0ff 100644
    ReferenceGuidance.node,
    SessionTodo.node,
 diff --git a/packages/core/src/tool/read.ts b/packages/core/src/tool/read.ts
-index 6961a86091..69fa4c3083 100644
+index 6961a8609118b3ccefa994e9066e9ce9783fe895..69fa4c3083bcd6e5b82e2c7da732ea97289999e1 100644
 --- a/packages/core/src/tool/read.ts
 +++ b/packages/core/src/tool/read.ts
 @@ -4,7 +4,6 @@ import { ToolFailure } from "@opencode-ai/llm"
@@ -314,7 +314,7 @@ index 6961a86091..69fa4c3083 100644
  })
 diff --git a/packages/core/src/v1/config/attachment.ts b/packages/core/src/v1/config/attachment.ts
 deleted file mode 100644
-index f56a671ca7..0000000000
+index f56a671ca70018997a187ef9b77f33143596acef..0000000000000000000000000000000000000000
 --- a/packages/core/src/v1/config/attachment.ts
 +++ /dev/null
 @@ -1,25 +0,0 @@
@@ -344,7 +344,7 @@ index f56a671ca7..0000000000
 -}).annotate({ identifier: "AttachmentConfig" })
 -export type Info = Schema.Schema.Type<typeof Info>
 diff --git a/packages/core/src/v1/config/config.ts b/packages/core/src/v1/config/config.ts
-index 4a1e0b44af..b1a6fb6d1d 100644
+index 4a1e0b44af1bbeaecff6febe2c29085566fb3158..b1a6fb6d1d96257299360ace5f00bdbf2b5842eb 100644
 --- a/packages/core/src/v1/config/config.ts
 +++ b/packages/core/src/v1/config/config.ts
 @@ -5,7 +5,6 @@ import { NonNegativeInt, PositiveInt, type DeepMutable } from "../../schema"
@@ -366,7 +366,7 @@ index 4a1e0b44af..b1a6fb6d1d 100644
      Schema.Struct({ url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }) }),
    ),
 diff --git a/packages/core/src/v1/config/migrate.ts b/packages/core/src/v1/config/migrate.ts
-index 27fd71a6fd..712a759dc6 100644
+index 27fd71a6fd6ed0e6b14edc48995787d529420b24..712a759dc6bc5f341a9e0eec1e00a132888f5917 100644
 --- a/packages/core/src/v1/config/migrate.ts
 +++ b/packages/core/src/v1/config/migrate.ts
 @@ -22,7 +22,6 @@ const keys = new Set([
@@ -386,7 +386,7 @@ index 27fd71a6fd..712a759dc6 100644
      mcp: mcp(info),
      compaction: info.compaction && {
 diff --git a/packages/core/test/config/config.test.ts b/packages/core/test/config/config.test.ts
-index 89d2d3f467..f1a1843198 100644
+index 89d2d3f4679cc498f7445ac499084ad382ab2bcf..f1a184319871af231a38ef40f27a88311458cfcd 100644
 --- a/packages/core/test/config/config.test.ts
 +++ b/packages/core/test/config/config.test.ts
 @@ -391,9 +391,6 @@ describe("Config", () => {
@@ -408,7 +408,7 @@ index 89d2d3f467..f1a1843198 100644
                request: { body: { apiKey: "secret" } },
                models: {
 diff --git a/packages/core/test/tool-read.test.ts b/packages/core/test/tool-read.test.ts
-index 29b32bd03d..73b2e08809 100644
+index 29b32bd03dcbda9691f6f8f7be446cc26b63bb5e..73b2e0880908dafe632d463e128e83d1a834f3f0 100644
 --- a/packages/core/test/tool-read.test.ts
 +++ b/packages/core/test/tool-read.test.ts
 @@ -2,13 +2,11 @@ import { beforeEach, describe, expect } from "bun:test"
@@ -661,7 +661,7 @@ index 29b32bd03d..73b2e08809 100644
      Effect.gen(function* () {
        const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 diff --git a/packages/opencode/package.json b/packages/opencode/package.json
-index 3ce67b78bc..a5f6535e0a 100644
+index 3ce67b78bc444cf16bcd3a7aaefaa8e28d3ffc81..a5f6535e0a1f92317ef4dc596aefdd111c565d63 100644
 --- a/packages/opencode/package.json
 +++ b/packages/opencode/package.json
 @@ -72,7 +72,6 @@
@@ -673,7 +673,7 @@ index 3ce67b78bc..a5f6535e0a 100644
      "@solid-primitives/scheduled": "1.5.2",
      "@standard-schema/spec": "1.0.0",
 diff --git a/packages/opencode/src/config/v2-compat.ts b/packages/opencode/src/config/v2-compat.ts
-index 02a026fc38..cfb3063e3d 100644
+index 02a026fc380fedaa579906286413d0f94165aea4..cfb3063e3dc6d6fc87988ead0070788d0403afb5 100644
 --- a/packages/opencode/src/config/v2-compat.ts
 +++ b/packages/opencode/src/config/v2-compat.ts
 @@ -3,7 +3,6 @@ export * as ConfigV2Compat from "./v2-compat"
@@ -697,7 +697,7 @@ index 02a026fc38..cfb3063e3d 100644
  function normalizeModel(input: Record<string, unknown>, result: Record<string, unknown>, diagnostics: Diagnostic[]) {
 diff --git a/packages/opencode/src/image/image.ts b/packages/opencode/src/image/image.ts
 deleted file mode 100644
-index 744bd3fc95..0000000000
+index 744bd3fc959164e3a9328e5178b9219a9634dc4a..0000000000000000000000000000000000000000
 --- a/packages/opencode/src/image/image.ts
 +++ /dev/null
 @@ -1,172 +0,0 @@
@@ -874,7 +874,7 @@ index 744bd3fc95..0000000000
 -
 -export * as Image from "./image"
 diff --git a/packages/opencode/src/session/processor.ts b/packages/opencode/src/session/processor.ts
-index 9f8530929c..02a39a8be4 100644
+index 9f8530929c154a3718b135bd481d7e2e492cb7ff..02a39a8be45a6405fa98ad3727993d0a796e6ae8 100644
 --- a/packages/opencode/src/session/processor.ts
 +++ b/packages/opencode/src/session/processor.ts
 @@ -1,6 +1,5 @@
@@ -923,7 +923,7 @@ index 9f8530929c..02a39a8be4 100644
      Database.node,
    ],
 diff --git a/packages/opencode/src/session/prompt.ts b/packages/opencode/src/session/prompt.ts
-index c860dc67a6..35322e28bf 100644
+index c860dc67a617dc0f9e1a873e84424d7a2f84fdc0..35322e28bf4330088ecc01cdba7aa0cbee64968c 100644
 --- a/packages/opencode/src/session/prompt.ts
 +++ b/packages/opencode/src/session/prompt.ts
 @@ -38,7 +38,6 @@ import { Shell } from "@opencode-ai/core/shell"
@@ -992,11 +992,11 @@ index c860dc67a6..35322e28bf 100644
      SessionRunState.node,
 diff --git a/packages/opencode/test/image/fixtures/picture-5mb-base64.png b/packages/opencode/test/image/fixtures/picture-5mb-base64.png
 deleted file mode 100644
-index e8923b9e71..0000000000
+index e8923b9e71c752c09dcd6f0833fa2dd40981ee03..0000000000000000000000000000000000000000
 Binary files a/packages/opencode/test/image/fixtures/picture-5mb-base64.png and /dev/null differ
 diff --git a/packages/opencode/test/image/image.test.ts b/packages/opencode/test/image/image.test.ts
 deleted file mode 100644
-index 29667f6e2f..0000000000
+index 29667f6e2f6eec86d97f7f836e390a821f061f26..0000000000000000000000000000000000000000
 --- a/packages/opencode/test/image/image.test.ts
 +++ /dev/null
 @@ -1,121 +0,0 @@
@@ -1122,7 +1122,7 @@ index 29667f6e2f..0000000000
 -  )
 -})
 diff --git a/packages/opencode/test/session/prompt.test.ts b/packages/opencode/test/session/prompt.test.ts
-index 477c38a5c6..fd0b8bb60d 100644
+index 477c38a5c69e79c623ffd06aeddc103eff7ca394..fd0b8bb60dac6319f816667912b950e50cb83508 100644
 --- a/packages/opencode/test/session/prompt.test.ts
 +++ b/packages/opencode/test/session/prompt.test.ts
 @@ -20,7 +20,6 @@ import { Plugin } from "../../src/plugin"
@@ -1142,7 +1142,7 @@ index 477c38a5c6..fd0b8bb60d 100644
    SessionRevert.node,
    Instruction.node,
 diff --git a/packages/sdk/js/src/v2/gen/types.gen.ts b/packages/sdk/js/src/v2/gen/types.gen.ts
-index c1cfe5f02d..f1ccddf41a 100644
+index c1cfe5f02d6524584766195bad993b121c24bb86..f1ccddf41ac0ab2674fa2e91ffd2226c251793d7 100644
 --- a/packages/sdk/js/src/v2/gen/types.gen.ts
 +++ b/packages/sdk/js/src/v2/gen/types.gen.ts
 @@ -1863,17 +1863,6 @@ export type McpRemoteConfig = {
