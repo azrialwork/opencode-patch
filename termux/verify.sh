@@ -50,7 +50,11 @@ readelf -h "$compat" | grep -q "Machine:.*${machine}" || {
   readelf -h "$compat"
   exit 1
 }
-nm -D "$compat" | grep -Eq ' (close_range|syscall)$' || {
+# Note: capture nm output instead of piping into grep -q. With
+# pipefail, grep -q exiting on the first match SIGPIPEs nm (exit 141)
+# and the pipeline reports failure even though the symbol was found.
+compat_symbols=$(nm -D "$compat")
+grep -Eq ' (close_range|syscall)$' <<< "$compat_symbols" || {
   echo "compat shim is missing close_range/syscall" >&2
   exit 1
 }
@@ -87,7 +91,8 @@ if readelf -d "$lib" | grep -q 'libc++_shared'; then
   }
 fi
 
-nm -D "$lib" | grep -q 'createEventSink' || {
+lib_symbols=$(nm -D "$lib")
+grep -q 'createEventSink' <<< "$lib_symbols" || {
   echo "libopentui is missing createEventSink" >&2
   exit 1
 }
