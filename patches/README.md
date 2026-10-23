@@ -1,63 +1,103 @@
-# patches
+<p align="center">🇬🇧 <b>English</b> · <a href="README.id.md">🇮🇩 Bahasa Indonesia</a></p>
 
-Patch files (`*.patch`) in this directory are applied to the upstream
-OpenCode checkout, in filename order, before building. See the main
-README for how to create one.
+# ✂️📋 The Tailor's List of Cuts
 
-Current series:
+Welcome to the tailor's notebook! 📖
 
-- `0001-remove-builtin-providers.patch` — removes all built-in providers
-  and models except `opencode` (Zen); custom providers still work. See
-  the main README's *Patches* section for exactly what is deleted.
-- `0002-cli-tui-only.patch` — removes the Web UI (build embed, `web` /
-  `serve` / `attach` commands, and the server's UI route incl. its
-  `app.opencode.ai` proxy fallback) so the result is CLI + TUI only.
-- `0003-remove-github-integration.patch` — removes the `opencode github`
-  agent command, the `opencode pr` helper, and the GitHub-only
-  (`@octokit/*`, `@actions/github`) dependencies and tests.
-- `0004-remove-lsp.patch` — removes LSP entirely: the language-server
-  subsystem and downloads, the `lsp` tool, post-edit diagnostics, the
-  `lsp` config keys (V1 + V2), the `/lsp` and `/find/symbol` endpoints,
-  the TUI LSP displays, the SDK LSP client/types, and the
-  `vscode-jsonrpc` / `vscode-languageserver-types` dependencies.
-- `0005-remove-acp.patch` — removes ACP (Agent Client Protocol): the
-  `opencode acp` command, the `src/acp/` implementation, the
-  `@agentclientprotocol/sdk` dependency, and the ACP tests.
-- `0006-remove-share.patch` — removes session sharing: the
-  `SessionShare` service, the `/session/{id}/share` endpoints, the
-  session `share` field and `share_url` storage column, the `share` /
-  `autoshare` config keys, `OPENCODE_AUTO_SHARE`, the TUI share
-  keybinds/sidebar URL, and the SDK share client/types.
-- `0007-remove-upgrade-uninstall.patch` — removes the self-update /
-  self-uninstall machinery: the `upgrade` and `uninstall` commands,
-  the `Installation` service, the `/global/upgrade` endpoint, the TUI
-  `/update` flow and update notices, the `autoupdate` config keys,
-  and `OPENCODE_DISABLE_AUTOUPDATE`.
-- `0008-remove-opentelemetry.patch` — removes OpenTelemetry: the OTLP
-  exporters, the `@opentelemetry/*` / `@effect/opentelemetry`
-  dependencies, the AI SDK telemetry tracer plumbing, the
-  `experimental.openTelemetry` config key, and the `OTEL_*` flags.
-- `0009-remove-import.patch` — removes the `opencode import` command
-  (session JSON import) and its tests.
-- `0010-remove-photon-image.patch` — removes the Photon image
-  pipeline (`@silvia-odwyer/photon-node`, both image services, the
-  image attachment config keys); images pass through unmodified.
-- `0011-remove-zen-login-billing.patch` — removes Zen login/billing:
-  the `console` command, the Console account system (device-code
-  login, org config injection, `/experimental/console*` endpoints,
-  TUI org switcher), and the core Zen provider plugin (Console OAuth
-  method + console-served catalogue merging).
-- `0012-zen-free-tier-only.patch` — narrows the built-in catalogue to
-  the Zen free tier only (zero cost on every tier, not deprecated) at
-  the build embed and the runtime models.dev loader. Paid Zen models
-  are removed from the data; custom providers/models are unaffected.
-- `0013-remove-pty.patch` — removes PTY (pseudo-terminal) at the
-  root: core service + `bun-pty`/`@lydell/node-pty` adapters and
-  deps, `/pty` REST + WebSocket API and ticket auth, V2 protocol
-  group + server handlers, plugin PTY-environment bridge, schema
-  Pty types/events and ID prefix, SDK v1+v2 Pty clients/types, and
-  the PTY tests/exercise cases. The terminal panel UI lived in the
-  web/desktop app (already removed); the Bash tool never used PTY.
+Every file in this folder that ends in `.patch` is **one cut recipe**.
+When a new robot is built, the builder robots read this list
+**from number 1 to number 13**, in order, and do every cut.
 
-This file is not a patch and is ignored by `scripts/apply-patches.sh`,
-which only reads `*.patch`.
+🛑 **The golden rule:** if one recipe does not fit, *everything stops*.
+No robot is shipped. A half-cut robot is worse than no robot.
+
+Want the story version first? Read the [storybook](../README.md). 📚
+
+---
+
+## 🧵 The 13 recipes
+
+### 1. 🏪 `0001-remove-builtin-providers.patch`
+*Close the giant toy fair.*
+All built-in AI shops are deleted — their lists of models, their keys, their helper code.
+Only the little free shop (`opencode`, Zen) stays, plus any shop you build yourself.
+
+### 2. 🪟 `0002-cli-tui-only.patch`
+*Take away the windows.*
+The web pages are deleted: no more `web`, `serve`, or `attach`, and no secret tunnel
+that borrowed pages from `app.opencode.ai`. The robot lives in the terminal only.
+
+### 3. 🐙 `0003-remove-github-integration.patch`
+*Send the octopus home.*
+The `opencode github` helper and the `opencode pr` helper are deleted,
+together with their octopus-only tools (`@octokit/*`, `@actions/github`).
+Plain `git` is untouched.
+
+### 4. 🔤 `0004-remove-lsp.patch`
+*The language teacher retires.*
+The whole language-server world is deleted: the teacher's house (`src/lsp/`),
+his downloaded books, the `lsp` tool, the whisper-after-editing, the `lsp` config keys,
+the `/lsp` doors, and his little counters in the TUI.
+(The robot's *drawing* colors for code stay — those live somewhere else.)
+
+### 5. 🔌 `0005-remove-acp.patch`
+*Pull the translator plug.*
+The `opencode acp` door and its whole room (`src/acp/`) are deleted,
+plus its plug (`@agentclientprotocol/sdk`) and its tests.
+
+### 6. 📤 `0006-remove-share.patch`
+*No more postcards.*
+Session sharing is deleted: the share service, the `/session/{id}/share` doors,
+the `share` sticker on every chat, the `share`/`autoshare` config keys,
+the `OPENCODE_AUTO_SHARE` flag, and the share buttons in the TUI.
+
+### 7. 🔄 `0007-remove-upgrade-uninstall.patch`
+*The robot stops rebuilding himself.*
+The `upgrade` and `uninstall` words, the `Installation` butler, the `/global/upgrade` door,
+the TUI update bell, and the `autoupdate` config keys are deleted —
+so an outside robot can never overwrite our tailor-made one.
+
+### 8. 📡 `0008-remove-opentelemetry.patch`
+*Turn the little radio off.*
+The report-sending radios (OTLP exporters) and their batteries
+(`@opentelemetry/*`, `@effect/opentelemetry`) are deleted, plus the
+`experimental.openTelemetry` config key and the `OTEL_*` flags.
+Notes the robot writes for *himself* at home (local logging) stay.
+
+### 9. 📥 `0009-remove-import.patch`
+*Close the old-diary door.*
+The `opencode import` command — the one that brought old chats in from files —
+is deleted, with its tests.
+
+### 10. 🖼️ `0010-remove-photon-image.patch`
+*Pictures travel as they are.*
+The tiny photo-squeezing machine (`@silvia-odwyer/photon-node`) and both of
+its workers are deleted. Pictures are no longer decoded, resized, or re-cooked;
+they pass through exactly as they arrived. The picture config keys go with it.
+
+### 11. 🔑 `0011-remove-zen-login-billing.patch`
+*The cashier goes home.*
+The `opencode console` command and the whole account world are deleted:
+signing in with secret codes, account and organization storage, config sent
+from the console, the `/experimental/console*` doors, and the organization
+switcher in the TUI. Free models keep working — anonymously, with no bill.
+
+### 12. 🍬 `0012-zen-free-tier-only.patch`
+*Only the free candies stay.*
+At both places where the shop's candy list is written (when the robot is built,
+and when he fetches the list), only candies that cost **zero on every shelf**
+and are not old (`deprecated`) may stay. Paid Zen models are removed from the
+data itself. Your own shop's candies are never touched.
+
+### 13. ⌨️ `0013-remove-pty.patch`
+*Remove the empty typing room.*
+The pseudo-terminal (PTY) is deleted at the root: the core service, its
+`bun-pty`/`@lydell/node-pty` motors, the `/pty` doors and their ticket locks,
+the plugin bridge, the schema types, and the SDK clients.
+Its screen lived in the web pages (cut #2), and the Bash tool never used it.
+
+---
+
+> 🗒️ **Tiny note:** this README is *not* a patch.
+> The builders' `scripts/apply-patches.sh` only reads `*.patch` files,
+> so this page is just for human eyes. Like yours. Hello! 👀
