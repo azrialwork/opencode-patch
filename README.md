@@ -152,6 +152,15 @@ from view.
   through unmodified instead of being decoded, resized, and
   re-encoded. The `attachment` / `attachments` image config keys go
   with it.
+- `0011-remove-zen-login-billing.patch` — removes the OpenCode Zen
+  login and billing surface: the `opencode console` command and the
+  whole Console account system (device-code login, account/org
+  storage, remote org config injection into the local config, the
+  `/experimental/console*` endpoints, the TUI org switcher), and the
+  core Zen provider plugin that registered the Console OAuth method
+  and merged console-served provider config into the catalogue.
+  Zen's free models keep working anonymously; there is no account,
+  no billing, and no sign-in left.
 
 To add a patch later:
 

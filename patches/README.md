@@ -42,6 +42,11 @@ Current series:
 - `0010-remove-photon-image.patch` — removes the Photon image
   pipeline (`@silvia-odwyer/photon-node`, both image services, the
   image attachment config keys); images pass through unmodified.
+- `0011-remove-zen-login-billing.patch` — removes Zen login/billing:
+  the `console` command, the Console account system (device-code
+  login, org config injection, `/experimental/console*` endpoints,
+  TUI org switcher), and the core Zen provider plugin (Console OAuth
+  method + console-served catalogue merging).
 
 This file is not a patch and is ignored by `scripts/apply-patches.sh`,
 which only reads `*.patch`.

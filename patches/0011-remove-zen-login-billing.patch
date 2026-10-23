@@ -1,0 +1,4361 @@
+diff --git a/packages/core/src/account.ts b/packages/core/src/account.ts
+deleted file mode 100644
+index d364d6f344..0000000000
+--- a/packages/core/src/account.ts
++++ /dev/null
+@@ -1,101 +0,0 @@
+-export * as AccountV2 from "./account"
+-
+-import { Schema } from "effect"
+-import type * as HttpClientError from "effect/unstable/http/HttpClientError"
+-
+-export const ID = Schema.String.pipe(Schema.brand("AccountID"))
+-export type ID = Schema.Schema.Type<typeof ID>
+-
+-export const OrgID = Schema.String.pipe(Schema.brand("OrgID"))
+-export type OrgID = Schema.Schema.Type<typeof OrgID>
+-
+-export const AccessToken = Schema.String.pipe(Schema.brand("AccessToken"))
+-export type AccessToken = Schema.Schema.Type<typeof AccessToken>
+-
+-export const RefreshToken = Schema.String.pipe(Schema.brand("RefreshToken"))
+-export type RefreshToken = Schema.Schema.Type<typeof RefreshToken>
+-
+-export const DeviceCode = Schema.String.pipe(Schema.brand("DeviceCode"))
+-export type DeviceCode = Schema.Schema.Type<typeof DeviceCode>
+-
+-export const UserCode = Schema.String.pipe(Schema.brand("UserCode"))
+-export type UserCode = Schema.Schema.Type<typeof UserCode>
+-
+-export class Info extends Schema.Class<Info>("Account")({
+-  id: ID,
+-  email: Schema.String,
+-  url: Schema.String,
+-  active_org_id: Schema.NullOr(OrgID),
+-}) {}
+-
+-export class Org extends Schema.Class<Org>("Org")({
+-  id: OrgID,
+-  name: Schema.String,
+-}) {}
+-
+-export class AccountRepoError extends Schema.TaggedErrorClass<AccountRepoError>()("AccountRepoError", {
+-  message: Schema.String,
+-  cause: Schema.optional(Schema.Defect()),
+-}) {}
+-
+-export class AccountServiceError extends Schema.TaggedErrorClass<AccountServiceError>()("AccountServiceError", {
+-  message: Schema.String,
+-  cause: Schema.optional(Schema.Defect()),
+-}) {}
+-
+-export class AccountTransportError extends Schema.TaggedErrorClass<AccountTransportError>()("AccountTransportError", {
+-  method: Schema.String,
+-  url: Schema.String,
+-  description: Schema.optional(Schema.String),
+-  cause: Schema.optional(Schema.Defect()),
+-}) {
+-  static fromHttpClientError(error: HttpClientError.TransportError): AccountTransportError {
+-    return new AccountTransportError({
+-      method: error.request.method,
+-      url: error.request.url,
+-      description: error.description,
+-      cause: error.cause,
+-    })
+-  }
+-
+-  override get message(): string {
+-    return [
+-      `Could not reach ${this.method} ${this.url}.`,
+-      `This failed before the server returned an HTTP response.`,
+-      this.description,
+-      `Check your network, proxy, or VPN configuration and try again.`,
+-    ]
+-      .filter(Boolean)
+-      .join("\n")
+-  }
+-}
+-
+-export type AccountError = AccountRepoError | AccountServiceError | AccountTransportError
+-
+-export class Login extends Schema.Class<Login>("Login")({
+-  code: DeviceCode,
+-  user: UserCode,
+-  url: Schema.String,
+-  server: Schema.String,
+-  expiry: Schema.Duration,
+-  interval: Schema.Duration,
+-}) {}
+-
+-export class PollSuccess extends Schema.TaggedClass<PollSuccess>()("PollSuccess", {
+-  email: Schema.String,
+-}) {}
+-
+-export class PollPending extends Schema.TaggedClass<PollPending>()("PollPending", {}) {}
+-
+-export class PollSlow extends Schema.TaggedClass<PollSlow>()("PollSlow", {}) {}
+-
+-export class PollExpired extends Schema.TaggedClass<PollExpired>()("PollExpired", {}) {}
+-
+-export class PollDenied extends Schema.TaggedClass<PollDenied>()("PollDenied", {}) {}
+-
+-export class PollError extends Schema.TaggedClass<PollError>()("PollError", {
+-  cause: Schema.Defect(),
+-}) {}
+-
+-export const PollResult = Schema.Union([PollSuccess, PollPending, PollSlow, PollExpired, PollDenied, PollError])
+-export type PollResult = Schema.Schema.Type<typeof PollResult>
+diff --git a/packages/core/src/account/sql.ts b/packages/core/src/account/sql.ts
+deleted file mode 100644
+index 4f45651d78..0000000000
+--- a/packages/core/src/account/sql.ts
++++ /dev/null
+@@ -1,39 +0,0 @@
+-import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core"
+-
+-import { AccountV2 } from "../account"
+-import { Timestamps } from "../database/schema.sql"
+-
+-export const AccountTable = sqliteTable("account", {
+-  id: text().$type<AccountV2.ID>().primaryKey(),
+-  email: text().notNull(),
+-  url: text().notNull(),
+-  access_token: text().$type<AccountV2.AccessToken>().notNull(),
+-  refresh_token: text().$type<AccountV2.RefreshToken>().notNull(),
+-  token_expiry: integer(),
+-  ...Timestamps,
+-})
+-
+-export const AccountStateTable = sqliteTable("account_state", {
+-  id: integer().primaryKey(),
+-  active_account_id: text()
+-    .$type<AccountV2.ID>()
+-    .references(() => AccountTable.id, { onDelete: "set null" }),
+-  active_org_id: text().$type<AccountV2.OrgID>(),
+-})
+-
+-// LEGACY
+-export const ControlAccountTable = sqliteTable(
+-  "control_account",
+-  {
+-    email: text().notNull(),
+-    url: text().notNull(),
+-    access_token: text().$type<AccountV2.AccessToken>().notNull(),
+-    refresh_token: text().$type<AccountV2.RefreshToken>().notNull(),
+-    token_expiry: integer(),
+-    active: integer({ mode: "boolean" })
+-      .notNull()
+-      .$default(() => false),
+-    ...Timestamps,
+-  },
+-  (table) => [primaryKey({ columns: [table.email, table.url] })],
+-)
+diff --git a/packages/core/src/plugin/provider.ts b/packages/core/src/plugin/provider.ts
+index ea8d5012f0..f2d5e18258 100644
+--- a/packages/core/src/plugin/provider.ts
++++ b/packages/core/src/plugin/provider.ts
+@@ -1,11 +1,9 @@
+ import { DynamicProviderPlugin } from "./provider/dynamic"
+ import { OpenAICompatiblePlugin } from "./provider/openai-compatible"
+-import { OpencodePlugin } from "./provider/opencode"
+ import type { PluginInternal } from "./internal"
+ import type { Scope } from "effect"
+ 
+ export const ProviderPlugins: PluginInternal.Plugin<PluginInternal.Requirements | Scope.Scope>[] = [
+-  OpencodePlugin,
+   OpenAICompatiblePlugin,
+   DynamicProviderPlugin,
+ ]
+diff --git a/packages/core/src/plugin/provider/opencode.ts b/packages/core/src/plugin/provider/opencode.ts
+deleted file mode 100644
+index 7bd78cae41..0000000000
+--- a/packages/core/src/plugin/provider/opencode.ts
++++ /dev/null
+@@ -1,320 +0,0 @@
+-import { Duration, Effect, Schema, Semaphore, Stream } from "effect"
+-import type { Scope } from "effect"
+-import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect/integration"
+-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+-import type { CredentialValue } from "@opencode-ai/sdk/v2/types"
+-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+-import { EventV2 } from "../../event"
+-import { Credential } from "../../credential"
+-import { Integration } from "../../integration"
+-import { ModelV2 } from "../../model"
+-import { ProviderV2 } from "../../provider"
+-import { ConfigProviderV1 } from "../../v1/config/provider"
+-import { ConfigProviderOptionsV1 } from "../../v1/config/provider-options"
+-import { ConfigV1 } from "../../v1/config/config"
+-
+-const defaultServer = "https://opencode.ai/console"
+-const clientID = "opencode-cli"
+-const methodID = Integration.MethodID.make("device")
+-const RemoteResponse = Schema.Struct({ config: ConfigV1.Info })
+-const Device = Schema.Struct({
+-  device_code: Schema.String,
+-  user_code: Schema.String,
+-  verification_uri_complete: Schema.String,
+-  expires_in: Schema.Number,
+-  interval: Schema.Number,
+-})
+-const Token = Schema.Struct({
+-  access_token: Schema.String,
+-  refresh_token: Schema.String,
+-  expires_in: Schema.Number,
+-})
+-const TokenPending = Schema.Struct({ error: Schema.String })
+-const DeviceToken = Schema.Union([Token, TokenPending])
+-const User = Schema.Struct({ id: Schema.String, email: Schema.String })
+-const Org = Schema.Struct({ id: Schema.String, name: Schema.String })
+-
+-function oauth(http: HttpClient.HttpClient) {
+-  return {
+-    integrationID: Integration.ID.make("opencode"),
+-    method: {
+-      id: methodID,
+-      type: "oauth",
+-      label: "OpenCode Console account",
+-    },
+-    authorize: () =>
+-      Effect.gen(function* () {
+-        const device = yield* post(http, `${defaultServer}/auth/device/code`, { client_id: clientID }, Device)
+-        const verification = yield* Effect.try({
+-          try: () => {
+-            const url = new URL(device.verification_uri_complete, `${defaultServer}/`)
+-            if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("expected HTTP(S)")
+-            return url
+-          },
+-          catch: (cause) =>
+-            new Error(`Invalid device verification URL: ${cause instanceof Error ? cause.message : String(cause)}`),
+-        })
+-        return {
+-          mode: "auto" as const,
+-          url: verification.href,
+-          instructions: `Enter code: ${device.user_code}`,
+-          callback: poll(http, defaultServer, device.device_code, Duration.seconds(device.interval)),
+-        }
+-      }),
+-    refresh: (credential) =>
+-      Effect.gen(function* () {
+-        const server = typeof credential.metadata?.server === "string" ? credential.metadata.server : defaultServer
+-        const token = yield* post(
+-          http,
+-          `${server}/auth/device/token`,
+-          { grant_type: "refresh_token", refresh_token: credential.refresh, client_id: clientID },
+-          Token,
+-        )
+-        return {
+-          ...credential,
+-          access: token.access_token,
+-          refresh: token.refresh_token,
+-          expires: Date.now() + token.expires_in * 1000,
+-        }
+-      }),
+-    label: (credential) => {
+-      return typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined
+-    },
+-  } satisfies IntegrationOAuthMethodRegistration
+-}
+-
+-export const OpencodePlugin = define<HttpClient.HttpClient | EventV2.Service | Scope.Scope>({
+-  id: "opencode",
+-  effect: Effect.fn(function* (ctx) {
+-    const events = yield* EventV2.Service
+-    const http = yield* HttpClient.HttpClient
+-    const loading = Semaphore.makeUnsafe(1)
+-    let connected = false
+-    let providers: typeof ConfigV1.Info.Type.provider | undefined
+-
+-    const load = Effect.fn("OpencodePlugin.load")(function* () {
+-      const connection = yield* ctx.integration.connection.active("opencode")
+-      const credential = connection
+-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.catch(() => Effect.succeed(undefined)))
+-        : undefined
+-      connected = connection !== undefined
+-      providers = credential
+-        ? yield* fetchProviders(http, credential).pipe(
+-            Effect.catch((cause) =>
+-              Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(Effect.as(undefined)),
+-            ),
+-          )
+-        : undefined
+-    })
+-
+-    yield* ctx.integration.transform((draft) => {
+-      draft.update("opencode", (integration) => {
+-        integration.name = "OpenCode"
+-      })
+-      draft.method.update(oauth(http))
+-      draft.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
+-    })
+-
+-    connected = (yield* ctx.integration.connection.active("opencode")) !== undefined
+-    yield* ctx.catalog.transform((catalog) => {
+-      for (const [providerID, item] of Object.entries(providers ?? {})) {
+-        catalog.provider.update(providerID, (provider) => {
+-          provider.integrationID = Integration.ID.make("opencode")
+-          if (item.name !== undefined) provider.name = item.name
+-          provider.api = item.npm
+-            ? { type: "aisdk", package: item.npm, url: item.api }
+-            : { type: "native", url: item.api, settings: {} }
+-          Object.assign(provider.request.headers, item.options?.headers)
+-          Object.assign(provider.request.body, withoutCredentials(item.options))
+-        })
+-
+-        for (const [modelID, config] of Object.entries(item.models ?? {})) {
+-          catalog.model.update(providerID, modelID, (model) => {
+-            if (config.family !== undefined) model.family = config.family
+-            if (config.name !== undefined) model.name = config.name
+-            if (config.id !== undefined) model.api.id = config.id
+-            if (config.provider !== undefined) {
+-              model.api = config.provider.npm
+-                ? {
+-                    id: model.api.id,
+-                    type: "aisdk",
+-                    package: config.provider.npm,
+-                    url: config.provider.api,
+-                  }
+-                : { id: model.api.id, type: "native", url: config.provider.api, settings: {} }
+-            }
+-            if (config.tool_call !== undefined) model.capabilities.tools = config.tool_call
+-            if (config.modalities?.input !== undefined) model.capabilities.input = [...config.modalities.input]
+-            if (config.modalities?.output !== undefined) model.capabilities.output = [...config.modalities.output]
+-            const packageName = config.provider?.npm ?? item.npm
+-            const lowerer = ConfigProviderOptionsV1.get(packageName)
+-            Object.assign(model.request.headers, config.headers)
+-            Object.assign(model.request.body, lowerer.request(withoutCredentials(config.options)))
+-            if (config.variants !== undefined) {
+-              model.variants = Object.entries(config.variants).map(([id, options]) => ({
+-                id: ModelV2.VariantID.make(id),
+-                headers: { ...(options.headers ?? {}) },
+-                body: lowerer.request(withoutCredentials(options)),
+-              }))
+-            }
+-            if (config.release_date !== undefined) {
+-              const released = Date.parse(config.release_date)
+-              model.time.released = Number.isFinite(released) ? released : 0
+-            }
+-            if (config.cost !== undefined) {
+-              model.cost = remoteCost(config.cost)
+-            }
+-            model.status = config.status ?? "active"
+-            model.enabled = config.status !== "deprecated"
+-            if (config.limit !== undefined) model.limit = { ...config.limit }
+-          })
+-        }
+-      }
+-
+-      const item = catalog.provider.get(ProviderV2.ID.opencode)
+-      if (!item) return
+-      const hasKey = Boolean(process.env.OPENCODE_API_KEY || connected || item.provider.request.body.apiKey)
+-      catalog.provider.update(item.provider.id, (provider) => {
+-        if (!hasKey) provider.request.body.apiKey = "public"
+-      })
+-      if (hasKey) return
+-      for (const model of item.models.values()) {
+-        if (!model.cost.some((cost) => cost.input > 0)) continue
+-        catalog.model.update(item.provider.id, model.id, (draft) => {
+-          draft.enabled = false
+-        })
+-      }
+-    })
+-
+-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
+-    yield* events.subscribe(Integration.Event.ConnectionUpdated).pipe(
+-      Stream.filter((event) => event.data.integrationID === Integration.ID.make("opencode")),
+-      Stream.runForEach(refresh),
+-      Effect.forkScoped({ startImmediately: true }),
+-    )
+-    yield* refresh().pipe(Effect.forkScoped)
+-  }),
+-})
+-
+-function fetchProviders(http: HttpClient.HttpClient, value: CredentialValue) {
+-  const metadata = value.metadata
+-  const server = typeof metadata?.server === "string" ? metadata.server : defaultServer
+-  const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
+-  const token = value.type === "oauth" ? value.access : value.key
+-  return http
+-    .execute(
+-      HttpClientRequest.get(`${server}/api/config`).pipe(
+-        HttpClientRequest.acceptJson,
+-        HttpClientRequest.bearerToken(token),
+-        HttpClientRequest.setHeaders(orgID ? { "x-org-id": orgID } : {}),
+-      ),
+-    )
+-    .pipe(
+-      Effect.flatMap((response) => {
+-        if (response.status === 404) return Effect.succeed(undefined)
+-        return HttpClientResponse.filterStatusOk(response).pipe(
+-          Effect.flatMap(HttpClientResponse.schemaBodyJson(RemoteResponse)),
+-          Effect.map((remote) => remote.config.provider),
+-        )
+-      }),
+-    )
+-}
+-
+-function withoutCredentials(body: Readonly<Record<string, unknown>> | undefined) {
+-  return Object.fromEntries(Object.entries(body ?? {}).filter(([key]) => key !== "apiKey" && key !== "headers"))
+-}
+-
+-function remoteCost(input: NonNullable<(typeof ConfigProviderV1.Model.Type)["cost"]>) {
+-  const base = {
+-    input: input.input,
+-    output: input.output,
+-    cache: { read: input.cache_read ?? 0, write: input.cache_write ?? 0 },
+-  }
+-  if (!input.context_over_200k) return [base]
+-  return [
+-    base,
+-    {
+-      tier: { type: "context" as const, size: 200_000 },
+-      input: input.context_over_200k.input,
+-      output: input.context_over_200k.output,
+-      cache: {
+-        read: input.context_over_200k.cache_read ?? 0,
+-        write: input.context_over_200k.cache_write ?? 0,
+-      },
+-    },
+-  ]
+-}
+-
+-function poll(http: HttpClient.HttpClient, server: string, deviceCode: string, interval: Duration.Duration) {
+-  const loop = (wait: Duration.Duration): Effect.Effect<Credential.OAuth, unknown> =>
+-    Effect.gen(function* () {
+-      yield* Effect.sleep(wait)
+-      const result = yield* post(
+-        http,
+-        `${server}/auth/device/token`,
+-        {
+-          grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+-          device_code: deviceCode,
+-          client_id: clientID,
+-        },
+-        DeviceToken,
+-        false,
+-      )
+-      if ("access_token" in result) return yield* credential(http, server, result)
+-      if (result.error === "authorization_pending") return yield* loop(wait)
+-      if (result.error === "slow_down") {
+-        return yield* loop(Duration.sum(wait, Duration.seconds(5)))
+-      }
+-      return yield* Effect.fail(new Error(`Device authorization failed: ${result.error}`))
+-    })
+-  return loop(interval)
+-}
+-
+-function credential(http: HttpClient.HttpClient, server: string, token: typeof Token.Type) {
+-  return Effect.gen(function* () {
+-    const [user, orgs] = yield* Effect.all(
+-      [
+-        get(http, `${server}/api/user`, token.access_token, User),
+-        get(http, `${server}/api/orgs`, token.access_token, Schema.Array(Org)),
+-      ],
+-      { concurrency: 2 },
+-    )
+-    const org = orgs.toSorted((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))[0]
+-    return Credential.OAuth.make({
+-      type: "oauth" as const,
+-      methodID,
+-      access: token.access_token,
+-      refresh: token.refresh_token,
+-      expires: Date.now() + token.expires_in * 1000,
+-      metadata: {
+-        server,
+-        accountID: user.id,
+-        email: user.email,
+-        orgID: org?.id,
+-        orgName: org?.name,
+-      },
+-    })
+-  })
+-}
+-
+-function get<S extends Schema.Top>(http: HttpClient.HttpClient, url: string, token: string, schema: S) {
+-  return HttpClient.filterStatusOk(http)
+-    .execute(HttpClientRequest.get(url).pipe(HttpClientRequest.acceptJson, HttpClientRequest.bearerToken(token)))
+-    .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)))
+-}
+-
+-function post<S extends Schema.Top>(
+-  http: HttpClient.HttpClient,
+-  url: string,
+-  body: Record<string, string>,
+-  schema: S,
+-  statusOk = true,
+-) {
+-  return HttpClientRequest.post(url).pipe(
+-    HttpClientRequest.acceptJson,
+-    HttpClientRequest.schemaBodyJson(Schema.Record(Schema.String, Schema.String))(body),
+-    Effect.flatMap((request) => http.execute(request)),
+-    Effect.flatMap((response) => (statusOk ? HttpClientResponse.filterStatusOk(response) : Effect.succeed(response))),
+-    Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)),
+-  )
+-}
+diff --git a/packages/core/src/v1/config/console-state.ts b/packages/core/src/v1/config/console-state.ts
+deleted file mode 100644
+index 95af1f653d..0000000000
+--- a/packages/core/src/v1/config/console-state.ts
++++ /dev/null
+@@ -1,16 +0,0 @@
+-export * as ConfigConsoleStateV1 from "./console-state"
+-
+-import { Schema } from "effect"
+-import { NonNegativeInt } from "../../schema"
+-
+-export class ConsoleState extends Schema.Class<ConsoleState>("ConsoleState")({
+-  consoleManagedProviders: Schema.mutable(Schema.Array(Schema.String)),
+-  activeOrgName: Schema.optional(Schema.String),
+-  switchableOrgCount: NonNegativeInt,
+-}) {}
+-
+-export const emptyConsoleState: ConsoleState = ConsoleState.make({
+-  consoleManagedProviders: [],
+-  activeOrgName: undefined,
+-  switchableOrgCount: 0,
+-})
+diff --git a/packages/core/test/plugin/provider-opencode.test.ts b/packages/core/test/plugin/provider-opencode.test.ts
+deleted file mode 100644
+index e1f8bdd6ec..0000000000
+--- a/packages/core/test/plugin/provider-opencode.test.ts
++++ /dev/null
+@@ -1,483 +0,0 @@
+-import { describe, expect } from "bun:test"
+-import { Effect } from "effect"
+-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+-import { Catalog } from "@opencode-ai/core/catalog"
+-import { Credential } from "@opencode-ai/core/credential"
+-import { EventV2 } from "@opencode-ai/core/event"
+-import { Integration } from "@opencode-ai/core/integration"
+-import { ModelV2 } from "@opencode-ai/core/model"
+-import { PluginV2 } from "@opencode-ai/core/plugin"
+-import { PluginHost } from "@opencode-ai/core/plugin/host"
+-import { OpencodePlugin } from "@opencode-ai/core/plugin/provider/opencode"
+-import { ProviderV2 } from "@opencode-ai/core/provider"
+-import { testEffect } from "../lib/effect"
+-import { PluginTestLayer } from "./fixture"
+-
+-const it = testEffect(PluginTestLayer)
+-
+-const addPlugin = Effect.fn(function* (http?: HttpClient.HttpClient) {
+-  const plugin = yield* PluginV2.Service
+-  const host = yield* PluginHost.make(plugin)
+-  const events = yield* EventV2.Service
+-  const integration = yield* Integration.Service
+-  const client = yield* HttpClient.HttpClient
+-  yield* OpencodePlugin.effect(host).pipe(
+-    Effect.provideService(EventV2.Service, events),
+-    Effect.provideService(Integration.Service, integration),
+-    Effect.provideService(HttpClient.HttpClient, http ?? client),
+-  )
+-})
+-
+-function required<T>(value: T | undefined): T {
+-  if (value === undefined) throw new Error("Expected value")
+-  return value
+-}
+-
+-function eventually<A>(
+-  effect: Effect.Effect<A>,
+-  predicate: (value: A) => boolean,
+-  remaining = 1000,
+-): Effect.Effect<A, Error> {
+-  return Effect.gen(function* () {
+-    const value = yield* effect
+-    if (predicate(value)) return value
+-    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
+-    yield* Effect.promise(() => Bun.sleep(1))
+-    return yield* eventually(effect, predicate, remaining - 1)
+-  })
+-}
+-
+-function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
+-  return Effect.acquireUseRelease(
+-    Effect.sync(() => {
+-      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
+-      Object.entries(vars).forEach(([key, value]) => {
+-        if (value === undefined) delete process.env[key]
+-        else process.env[key] = value
+-      })
+-      return previous
+-    }),
+-    effect,
+-    (previous) =>
+-      Effect.sync(() =>
+-        Object.entries(previous).forEach(([key, value]) => {
+-          if (value === undefined) delete process.env[key]
+-          else process.env[key] = value
+-        }),
+-      ),
+-  )
+-}
+-
+-const cost = (input: number, output = 0) => [{ input, output, cache: { read: 0, write: 0 } }]
+-
+-describe("OpencodePlugin", () => {
+-  it.effect("registers account and service account methods", () =>
+-    Effect.gen(function* () {
+-      yield* addPlugin()
+-      expect((yield* (yield* Integration.Service).get(Integration.ID.make("opencode")))?.methods).toEqual([
+-        {
+-          id: Integration.MethodID.make("device"),
+-          type: "oauth",
+-          label: "OpenCode Console account",
+-        },
+-        { type: "key", label: "API key (service account)" },
+-      ])
+-    }),
+-  )
+-
+-  it.effect("resolves origin-rooted device verification URLs", () =>
+-    Effect.gen(function* () {
+-      const http = HttpClient.make((request) =>
+-        Effect.succeed(
+-          HttpClientResponse.fromWeb(
+-            request,
+-            Response.json({
+-              device_code: "device",
+-              user_code: "user",
+-              verification_uri_complete: "/console/device?user_code=user&client_id=opencode-cli",
+-              expires_in: 60,
+-              interval: 60,
+-            }),
+-          ),
+-        ),
+-      )
+-      yield* addPlugin(http)
+-      const integration = yield* Integration.Service
+-      const attempt = yield* integration.connection.oauth({
+-        integrationID: Integration.ID.make("opencode"),
+-        methodID: Integration.MethodID.make("device"),
+-        inputs: {},
+-      })
+-      expect(attempt.url).toBe("https://opencode.ai/console/device?user_code=user&client_id=opencode-cli")
+-    }),
+-  )
+-
+-  it.effect("rejects malformed device verification URLs", () =>
+-    Effect.gen(function* () {
+-      const http = HttpClient.make((request) =>
+-        Effect.succeed(
+-          HttpClientResponse.fromWeb(
+-            request,
+-            Response.json({
+-              device_code: "device",
+-              user_code: "user",
+-              verification_uri_complete: "http://[::1",
+-              expires_in: 60,
+-              interval: 60,
+-            }),
+-          ),
+-        ),
+-      )
+-      yield* addPlugin(http)
+-      const integration = yield* Integration.Service
+-      const error = yield* integration.connection
+-        .oauth({
+-          integrationID: Integration.ID.make("opencode"),
+-          methodID: Integration.MethodID.make("device"),
+-          inputs: {},
+-        })
+-        .pipe(Effect.flip)
+-      expect(error).toBeInstanceOf(Integration.AuthorizationError)
+-      expect(String(error.cause)).toContain("Invalid device verification URL")
+-    }),
+-  )
+-
+-  it.live("loads providers and models from the connected OpenCode server", () =>
+-    Effect.acquireUseRelease(
+-      Effect.sync(() => {
+-        const authorization: Array<string | null> = []
+-        const gate = Promise.withResolvers<void>()
+-        return {
+-          authorization,
+-          release: gate.resolve,
+-          server: Bun.serve({
+-            port: 0,
+-            fetch: async (request) => {
+-              await gate.promise
+-              authorization.push(request.headers.get("authorization"))
+-              const origin = new URL(request.url).origin
+-              return Response.json({
+-                config: {
+-                  enterprise: { url: origin },
+-                  provider: {
+-                    remote: {
+-                      name: "Remote",
+-                      npm: "@ai-sdk/openai-compatible",
+-                      api: `${origin}/v1`,
+-                      env: ["REMOTE_API_KEY"],
+-                      options: {
+-                        apiKey: "{env:REMOTE_API_KEY}",
+-                        headers: { "x-org-id": "org" },
+-                        custom: "value",
+-                      },
+-                      models: {
+-                        model: {
+-                          name: "Remote Model",
+-                          family: "remote",
+-                          release_date: "2026-01-02",
+-                          tool_call: true,
+-                          modalities: { input: ["text", "image"], output: ["text"] },
+-                          options: { apiKey: "model-secret", temperature: 0.5 },
+-                          variants: { high: { apiKey: "variant-secret", temperature: 0.2 } },
+-                          cost: { input: 1, output: 2, cache_read: 0.1 },
+-                          limit: { context: 1000, output: 100 },
+-                        },
+-                        disabled: { name: "Disabled", status: "deprecated" },
+-                      },
+-                    },
+-                  },
+-                },
+-              })
+-            },
+-          }),
+-        }
+-      }),
+-      ({ authorization, release, server }) =>
+-        Effect.gen(function* () {
+-          const credentials = yield* Credential.Service
+-          const catalog = yield* Catalog.Service
+-          yield* catalog.transform((draft) => {
+-            draft.provider.update(ProviderV2.ID.make("remote"), () => {})
+-            draft.model.update(ProviderV2.ID.make("remote"), ModelV2.ID.make("stale"), () => {})
+-          })
+-          yield* credentials.create({
+-            integrationID: Integration.ID.make("opencode"),
+-            value: Credential.Key.make({
+-              type: "key",
+-              key: "secret",
+-              metadata: { server: server.url.origin },
+-            }),
+-          })
+-
+-          yield* addPlugin()
+-          expect(authorization).toEqual([])
+-          release()
+-
+-          const provider = required(
+-            yield* eventually(
+-              catalog.provider.get(ProviderV2.ID.make("remote")),
+-              (item) => item?.integrationID === Integration.ID.make("opencode"),
+-            ),
+-          )
+-          expect(provider).toMatchObject({
+-            name: "Remote",
+-            integrationID: "opencode",
+-            api: {
+-              type: "aisdk",
+-              package: "@ai-sdk/openai-compatible",
+-              url: `${server.url.origin}/v1`,
+-            },
+-          })
+-          expect(provider.request).toEqual({ headers: { "x-org-id": "org" }, body: { custom: "value" } })
+-          expect(yield* (yield* Integration.Service).get(Integration.ID.make("remote"))).toBeUndefined()
+-
+-          const model = required(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("model")))
+-          expect(model).toMatchObject({
+-            name: "Remote Model",
+-            family: "remote",
+-            capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+-            cost: [{ input: 1, output: 2, cache: { read: 0.1, write: 0 } }],
+-            limit: { context: 1000, output: 100 },
+-          })
+-          expect(model.request.body).toEqual({ custom: "value", temperature: 0.5 })
+-          expect(model.variants).toEqual([
+-            {
+-              id: ModelV2.VariantID.make("high"),
+-              headers: {},
+-              body: { temperature: 0.2 },
+-            },
+-          ])
+-          expect(
+-            required(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("disabled"))).enabled,
+-          ).toBe(false)
+-          expect(yield* catalog.model.get(ProviderV2.ID.make("remote"), ModelV2.ID.make("stale"))).toBeDefined()
+-          expect(authorization).toContain("Bearer secret")
+-        }),
+-      ({ server }) => Effect.promise(() => server.stop(true)),
+-    ),
+-  )
+-
+-  it.effect("uses a public key and disables paid models without credentials", () =>
+-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+-      Effect.gen(function* () {
+-        const catalog = yield* Catalog.Service
+-        yield* catalog.transform((catalog) => {
+-          const provider = ProviderV2.Info.make({
+-            ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
+-            api: { type: "aisdk", package: "test-provider" },
+-          })
+-          const model = ModelV2.Info.make({
+-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
+-            api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
+-            cost: cost(1),
+-          })
+-          catalog.provider.update(provider.id, () => {})
+-          catalog.model.update(provider.id, model.id, (draft) => {
+-            draft.cost = [...model.cost]
+-          })
+-        })
+-        yield* addPlugin()
+-        expect(required(yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBe("public")
+-        expect(required(yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(false)
+-      }),
+-    ),
+-  )
+-
+-  it.effect("keeps free models without credentials", () =>
+-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+-      Effect.gen(function* () {
+-        const catalog = yield* Catalog.Service
+-        yield* catalog.transform((catalog) => {
+-          const provider = ProviderV2.Info.make({
+-            ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
+-            api: { type: "aisdk", package: "test-provider" },
+-          })
+-          const model = ModelV2.Info.make({
+-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("free")),
+-            api: { id: ModelV2.ID.make("free"), type: "aisdk", package: "test-provider" },
+-            cost: cost(0),
+-          })
+-          catalog.provider.update(provider.id, () => {})
+-          catalog.model.update(provider.id, model.id, (draft) => {
+-            draft.cost = [...model.cost]
+-          })
+-        })
+-        yield* addPlugin()
+-        expect(required(yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBe("public")
+-        expect(required(yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("free"))).enabled).toBe(true)
+-      }),
+-    ),
+-  )
+-
+-  it.effect("treats output-only cost as free without credentials", () =>
+-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+-      Effect.gen(function* () {
+-        const catalog = yield* Catalog.Service
+-        yield* catalog.transform((catalog) => {
+-          const provider = ProviderV2.Info.make({
+-            ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
+-            api: { type: "aisdk", package: "test-provider" },
+-          })
+-          const model = ModelV2.Info.make({
+-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("output-only")),
+-            api: { id: ModelV2.ID.make("output-only"), type: "aisdk", package: "test-provider" },
+-            cost: cost(0, 1),
+-          })
+-          catalog.provider.update(provider.id, () => {})
+-          catalog.model.update(provider.id, model.id, (draft) => {
+-            draft.cost = [...model.cost]
+-          })
+-        })
+-        yield* addPlugin()
+-        expect(required(yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBe("public")
+-        expect(required(yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("output-only"))).enabled).toBe(
+-          true,
+-        )
+-      }),
+-    ),
+-  )
+-
+-  it.effect("uses OPENCODE_API_KEY as credentials", () =>
+-    withEnv({ OPENCODE_API_KEY: "secret" }, () =>
+-      Effect.gen(function* () {
+-        const catalog = yield* Catalog.Service
+-        yield* catalog.transform((catalog) => {
+-          const provider = ProviderV2.Info.make({
+-            ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
+-            api: { type: "aisdk", package: "test-provider" },
+-          })
+-          const model = ModelV2.Info.make({
+-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
+-            api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
+-            cost: cost(1),
+-          })
+-          catalog.provider.update(provider.id, () => {})
+-          catalog.model.update(provider.id, model.id, (draft) => {
+-            draft.cost = [...model.cost]
+-          })
+-        })
+-        yield* addPlugin()
+-        expect(required(yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBeUndefined()
+-        expect(required(yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(true)
+-      }),
+-    ),
+-  )
+-
+-  it.effect("uses configured provider env vars as credentials", () =>
+-    withEnv({ OPENCODE_API_KEY: undefined, CUSTOM_OPENCODE_API_KEY: "secret" }, () =>
+-      Effect.gen(function* () {
+-        const catalog = yield* Catalog.Service
+-        const integrations = yield* Integration.Service
+-        yield* integrations.transform((editor) => {
+-          editor.method.update({
+-            integrationID: Integration.ID.make("opencode"),
+-            method: { type: "env", names: ["CUSTOM_OPENCODE_API_KEY"] },
+-          })
+-        })
+-        yield* catalog.transform((catalog) => {
+-          const provider = ProviderV2.Info.make({
+-            ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
+-            api: { type: "aisdk", package: "test-provider" },
+-          })
+-          const model = ModelV2.Info.make({
+-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
+-            api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
+-            cost: cost(1),
+-          })
+-          catalog.provider.update(provider.id, () => {})
+-          catalog.model.update(provider.id, model.id, (draft) => {
+-            draft.cost = [...model.cost]
+-          })
+-        })
+-        yield* addPlugin()
+-        expect(required(yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBeUndefined()
+-        expect(required(yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(true)
+-      }),
+-    ),
+-  )
+-
+-  it.effect("uses configured apiKey as credentials", () =>
+-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+-      Effect.gen(function* () {
+-        const catalog = yield* Catalog.Service
+-        yield* catalog.transform((catalog) => {
+-          const provider = ProviderV2.Info.make({
+-            ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
+-            api: { type: "aisdk", package: "test-provider" },
+-            request: {
+-              headers: {},
+-              body: { apiKey: "configured" },
+-            },
+-          })
+-          const model = ModelV2.Info.make({
+-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
+-            api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
+-            cost: cost(1),
+-          })
+-          catalog.provider.update(provider.id, (draft) => {
+-            draft.request = provider.request
+-          })
+-          catalog.model.update(provider.id, model.id, (draft) => {
+-            draft.cost = [...model.cost]
+-          })
+-        })
+-        yield* addPlugin()
+-        expect(required(yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBe("configured")
+-        expect(required(yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(true)
+-      }),
+-    ),
+-  )
+-
+-  it.effect("ignores non-opencode providers and models", () =>
+-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+-      Effect.gen(function* () {
+-        const catalog = yield* Catalog.Service
+-        yield* catalog.transform((catalog) => {
+-          const provider = ProviderV2.Info.make({
+-            ...ProviderV2.Info.empty(ProviderV2.ID.openai),
+-            api: { type: "aisdk", package: "test-provider" },
+-          })
+-          const model = ModelV2.Info.make({
+-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
+-            api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
+-            cost: cost(1),
+-          })
+-          catalog.provider.update(provider.id, () => {})
+-          catalog.model.update(provider.id, model.id, (draft) => {
+-            draft.cost = [...model.cost]
+-          })
+-        })
+-        yield* addPlugin()
+-        expect(required(yield* catalog.provider.get(ProviderV2.ID.openai)).request.body.apiKey).toBeUndefined()
+-        expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("paid"))).enabled).toBe(true)
+-      }),
+-    ),
+-  )
+-
+-  it.effect("prefers gpt-5-nano as the opencode small model", () =>
+-    Effect.gen(function* () {
+-      const catalog = yield* Catalog.Service
+-      const providerID = ProviderV2.ID.opencode
+-
+-      yield* catalog.transform((catalog) => {
+-        catalog.provider.update(providerID, () => {})
+-        catalog.model.update(providerID, ModelV2.ID.make("cheap-mini"), (model) => {
+-          model.capabilities.input = ["text"]
+-          model.capabilities.output = ["text"]
+-          model.cost = [...cost(1, 1)]
+-          model.time.released = Date.now()
+-        })
+-        catalog.model.update(providerID, ModelV2.ID.make("gpt-5-nano"), (model) => {
+-          model.capabilities.input = ["text"]
+-          model.capabilities.output = ["text"]
+-          model.cost = [...cost(10, 10)]
+-          model.time.released = Date.now()
+-        })
+-      })
+-
+-      const selected = yield* catalog.model.small(providerID)
+-
+-      expect(selected?.id).toBe(ModelV2.ID.make("gpt-5-nano"))
+-    }),
+-  )
+-})
+diff --git a/packages/opencode/src/account/account.ts b/packages/opencode/src/account/account.ts
+deleted file mode 100644
+index fb21f878f8..0000000000
+--- a/packages/opencode/src/account/account.ts
++++ /dev/null
+@@ -1,481 +0,0 @@
+-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+-import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
+-import { Cache, Clock, Duration, Effect, Layer, Option, Schema, SchemaGetter, Context } from "effect"
+-import { serviceUse } from "@opencode-ai/core/effect/service-use"
+-import {
+-  FetchHttpClient,
+-  HttpClient,
+-  HttpClientError,
+-  HttpClientRequest,
+-  HttpClientResponse,
+-} from "effect/unstable/http"
+-
+-import { withTransientReadRetry } from "@/util/effect-http-client"
+-import { AccountRepo, type AccountRow } from "./repo"
+-import { normalizeServerUrl } from "./url"
+-import {
+-  type AccountError,
+-  AccessToken,
+-  AccountID,
+-  DeviceCode,
+-  Info,
+-  RefreshToken,
+-  AccountServiceError,
+-  AccountTransportError,
+-  Login,
+-  Org,
+-  OrgID,
+-  PollDenied,
+-  PollError,
+-  PollExpired,
+-  PollPending,
+-  type PollResult,
+-  PollSlow,
+-  PollSuccess,
+-  UserCode,
+-} from "./schema"
+-
+-export {
+-  AccountID,
+-  type AccountError,
+-  AccountRepoError,
+-  AccountServiceError,
+-  AccountTransportError,
+-  AccessToken,
+-  RefreshToken,
+-  DeviceCode,
+-  UserCode,
+-  Info,
+-  Org,
+-  OrgID,
+-  Login,
+-  PollSuccess,
+-  PollPending,
+-  PollSlow,
+-  PollExpired,
+-  PollDenied,
+-  PollError,
+-  PollResult,
+-} from "./schema"
+-
+-export type AccountOrgs = {
+-  account: Info
+-  orgs: readonly Org[]
+-}
+-
+-export type ActiveOrg = {
+-  account: Info
+-  org: Org
+-}
+-
+-class RemoteConfig extends Schema.Class<RemoteConfig>("RemoteConfig")({
+-  config: Schema.Record(Schema.String, Schema.Json),
+-}) {}
+-
+-const DurationFromSeconds = Schema.Number.pipe(
+-  Schema.decodeTo(Schema.Duration, {
+-    decode: SchemaGetter.transform((n) => Duration.seconds(n)),
+-    encode: SchemaGetter.transform((d) => Duration.toSeconds(d)),
+-  }),
+-)
+-
+-class TokenRefresh extends Schema.Class<TokenRefresh>("TokenRefresh")({
+-  access_token: AccessToken,
+-  refresh_token: RefreshToken,
+-  expires_in: DurationFromSeconds,
+-}) {}
+-
+-class DeviceAuth extends Schema.Class<DeviceAuth>("DeviceAuth")({
+-  device_code: DeviceCode,
+-  user_code: UserCode,
+-  verification_uri_complete: Schema.String,
+-  expires_in: DurationFromSeconds,
+-  interval: DurationFromSeconds,
+-}) {}
+-
+-class DeviceTokenSuccess extends Schema.Class<DeviceTokenSuccess>("DeviceTokenSuccess")({
+-  access_token: AccessToken,
+-  refresh_token: RefreshToken,
+-  token_type: Schema.Literal("Bearer"),
+-  expires_in: DurationFromSeconds,
+-}) {}
+-
+-class DeviceTokenError extends Schema.Class<DeviceTokenError>("DeviceTokenError")({
+-  error: Schema.String,
+-  error_description: Schema.String,
+-}) {
+-  toPollResult(): PollResult {
+-    if (this.error === "authorization_pending") return new PollPending()
+-    if (this.error === "slow_down") return new PollSlow()
+-    if (this.error === "expired_token") return new PollExpired()
+-    if (this.error === "access_denied") return new PollDenied()
+-    return new PollError({ cause: this.error })
+-  }
+-}
+-
+-const DeviceToken = Schema.Union([DeviceTokenSuccess, DeviceTokenError])
+-
+-class User extends Schema.Class<User>("User")({
+-  id: AccountID,
+-  email: Schema.String,
+-}) {}
+-
+-class ClientId extends Schema.Class<ClientId>("ClientId")({ client_id: Schema.String }) {}
+-
+-class DeviceTokenRequest extends Schema.Class<DeviceTokenRequest>("DeviceTokenRequest")({
+-  grant_type: Schema.String,
+-  device_code: DeviceCode,
+-  client_id: Schema.String,
+-}) {}
+-
+-class TokenRefreshRequest extends Schema.Class<TokenRefreshRequest>("TokenRefreshRequest")({
+-  grant_type: Schema.String,
+-  refresh_token: RefreshToken,
+-  client_id: Schema.String,
+-}) {}
+-
+-const clientId = "opencode-cli"
+-const eagerRefreshThreshold = Duration.minutes(5)
+-const eagerRefreshThresholdMs = Duration.toMillis(eagerRefreshThreshold)
+-
+-const isTokenFresh = (tokenExpiry: number | null, now: number) =>
+-  tokenExpiry != null && tokenExpiry > now + eagerRefreshThresholdMs
+-
+-const mapAccountServiceError =
+-  (message = "Account service operation failed") =>
+-  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, AccountError, R> =>
+-    effect.pipe(Effect.mapError((cause) => accountErrorFromCause(cause, message)))
+-
+-const accountErrorFromCause = (cause: unknown, message: string): AccountError => {
+-  if (cause instanceof AccountServiceError || cause instanceof AccountTransportError) {
+-    return cause
+-  }
+-
+-  if (HttpClientError.isHttpClientError(cause)) {
+-    switch (cause.reason._tag) {
+-      case "TransportError": {
+-        return AccountTransportError.fromHttpClientError(cause.reason)
+-      }
+-      default: {
+-        return new AccountServiceError({ message, cause })
+-      }
+-    }
+-  }
+-
+-  return new AccountServiceError({ message, cause })
+-}
+-
+-export interface Interface {
+-  readonly active: () => Effect.Effect<Option.Option<Info>, AccountError>
+-  readonly activeOrg: () => Effect.Effect<Option.Option<ActiveOrg>, AccountError>
+-  readonly list: () => Effect.Effect<Info[], AccountError>
+-  readonly orgsByAccount: () => Effect.Effect<readonly AccountOrgs[], AccountError>
+-  readonly remove: (accountID: AccountID) => Effect.Effect<void, AccountError>
+-  readonly use: (accountID: AccountID, orgID: Option.Option<OrgID>) => Effect.Effect<void, AccountError>
+-  readonly orgs: (accountID: AccountID) => Effect.Effect<readonly Org[], AccountError>
+-  readonly config: (
+-    accountID: AccountID,
+-    orgID: OrgID,
+-  ) => Effect.Effect<Option.Option<Record<string, unknown>>, AccountError>
+-  readonly token: (accountID: AccountID) => Effect.Effect<Option.Option<AccessToken>, AccountError>
+-  readonly login: (url: string) => Effect.Effect<Login, AccountError>
+-  readonly poll: (input: Login) => Effect.Effect<PollResult, AccountError>
+-}
+-
+-export class Service extends Context.Service<Service, Interface>()("@opencode/Account") {}
+-
+-export const use = serviceUse(Service)
+-
+-const layer: Layer.Layer<Service, never, AccountRepo.Service | HttpClient.HttpClient> = Layer.effect(
+-  Service,
+-  Effect.gen(function* () {
+-    const repo = yield* AccountRepo.Service
+-    const http = yield* HttpClient.HttpClient
+-    const httpRead = withTransientReadRetry(http)
+-    const httpOk = HttpClient.filterStatusOk(http)
+-    const httpReadOk = HttpClient.filterStatusOk(httpRead)
+-
+-    const executeRead = (request: HttpClientRequest.HttpClientRequest) =>
+-      httpRead.execute(request).pipe(mapAccountServiceError("HTTP request failed"))
+-
+-    const executeReadOk = (request: HttpClientRequest.HttpClientRequest) =>
+-      httpReadOk.execute(request).pipe(mapAccountServiceError("HTTP request failed"))
+-
+-    const executeEffectOk = <E>(request: Effect.Effect<HttpClientRequest.HttpClientRequest, E>) =>
+-      request.pipe(
+-        Effect.flatMap((req) => httpOk.execute(req)),
+-        mapAccountServiceError("HTTP request failed"),
+-      )
+-
+-    const executeEffect = <E>(request: Effect.Effect<HttpClientRequest.HttpClientRequest, E>) =>
+-      request.pipe(
+-        Effect.flatMap((req) => http.execute(req)),
+-        mapAccountServiceError("HTTP request failed"),
+-      )
+-
+-    const refreshToken = Effect.fnUntraced(function* (row: AccountRow) {
+-      const now = yield* Clock.currentTimeMillis
+-
+-      const response = yield* executeEffectOk(
+-        HttpClientRequest.post(`${row.url}/auth/device/token`).pipe(
+-          HttpClientRequest.acceptJson,
+-          HttpClientRequest.schemaBodyJson(TokenRefreshRequest)(
+-            new TokenRefreshRequest({
+-              grant_type: "refresh_token",
+-              refresh_token: row.refresh_token,
+-              client_id: clientId,
+-            }),
+-          ),
+-        ),
+-      )
+-
+-      const parsed = yield* HttpClientResponse.schemaBodyJson(TokenRefresh)(response).pipe(
+-        mapAccountServiceError("Failed to decode response"),
+-      )
+-
+-      const expiry = Option.some(now + Duration.toMillis(parsed.expires_in))
+-
+-      yield* repo.persistToken({
+-        accountID: row.id,
+-        accessToken: parsed.access_token,
+-        refreshToken: parsed.refresh_token,
+-        expiry,
+-      })
+-
+-      return parsed.access_token
+-    })
+-
+-    const refreshTokenCache = yield* Cache.make<AccountID, AccessToken, AccountError>({
+-      capacity: Number.POSITIVE_INFINITY,
+-      timeToLive: Duration.zero,
+-      lookup: Effect.fnUntraced(function* (accountID) {
+-        const maybeAccount = yield* repo.getRow(accountID)
+-        if (Option.isNone(maybeAccount)) {
+-          return yield* Effect.fail(new AccountServiceError({ message: "Account not found during token refresh" }))
+-        }
+-
+-        const account = maybeAccount.value
+-        const now = yield* Clock.currentTimeMillis
+-        if (isTokenFresh(account.token_expiry, now)) {
+-          return account.access_token
+-        }
+-
+-        return yield* refreshToken(account)
+-      }),
+-    })
+-
+-    const resolveToken = Effect.fnUntraced(function* (row: AccountRow) {
+-      const now = yield* Clock.currentTimeMillis
+-      if (isTokenFresh(row.token_expiry, now)) {
+-        return row.access_token
+-      }
+-
+-      return yield* Cache.get(refreshTokenCache, row.id)
+-    })
+-
+-    const resolveAccess = Effect.fnUntraced(function* (accountID: AccountID) {
+-      const maybeAccount = yield* repo.getRow(accountID)
+-      if (Option.isNone(maybeAccount)) return Option.none()
+-
+-      const account = maybeAccount.value
+-      const accessToken = yield* resolveToken(account)
+-      return Option.some({ account, accessToken })
+-    })
+-
+-    const fetchOrgs = Effect.fnUntraced(function* (url: string, accessToken: AccessToken) {
+-      const response = yield* executeReadOk(
+-        HttpClientRequest.get(`${url}/api/orgs`).pipe(
+-          HttpClientRequest.acceptJson,
+-          HttpClientRequest.bearerToken(accessToken),
+-        ),
+-      )
+-
+-      return yield* HttpClientResponse.schemaBodyJson(Schema.Array(Org))(response).pipe(
+-        mapAccountServiceError("Failed to decode response"),
+-      )
+-    })
+-
+-    const fetchUser = Effect.fnUntraced(function* (url: string, accessToken: AccessToken) {
+-      const response = yield* executeReadOk(
+-        HttpClientRequest.get(`${url}/api/user`).pipe(
+-          HttpClientRequest.acceptJson,
+-          HttpClientRequest.bearerToken(accessToken),
+-        ),
+-      )
+-
+-      return yield* HttpClientResponse.schemaBodyJson(User)(response).pipe(
+-        mapAccountServiceError("Failed to decode response"),
+-      )
+-    })
+-
+-    const token = Effect.fn("Account.token")((accountID: AccountID) =>
+-      resolveAccess(accountID).pipe(Effect.map(Option.map((r) => r.accessToken))),
+-    )
+-
+-    const activeOrg = Effect.fn("Account.activeOrg")(function* () {
+-      const activeAccount = yield* repo.active()
+-      if (Option.isNone(activeAccount)) return Option.none<ActiveOrg>()
+-
+-      const account = activeAccount.value
+-      if (!account.active_org_id) return Option.none<ActiveOrg>()
+-
+-      const accountOrgs = yield* orgs(account.id)
+-      const org = accountOrgs.find((item) => item.id === account.active_org_id)
+-      if (!org) return Option.none<ActiveOrg>()
+-
+-      return Option.some({ account, org })
+-    })
+-
+-    const orgsByAccount = Effect.fn("Account.orgsByAccount")(function* () {
+-      const accounts = yield* repo.list()
+-      return yield* Effect.forEach(
+-        accounts,
+-        (account) =>
+-          orgs(account.id).pipe(
+-            Effect.catch(() => Effect.succeed([] as readonly Org[])),
+-            Effect.map((orgs) => ({ account, orgs })),
+-          ),
+-        { concurrency: 3 },
+-      )
+-    })
+-
+-    const orgs = Effect.fn("Account.orgs")(function* (accountID: AccountID) {
+-      const resolved = yield* resolveAccess(accountID)
+-      if (Option.isNone(resolved)) return []
+-
+-      const { account, accessToken } = resolved.value
+-
+-      return yield* fetchOrgs(account.url, accessToken)
+-    })
+-
+-    const remove = Effect.fn("Account.remove")(function* (accountID: AccountID) {
+-      const active = yield* repo.active()
+-      yield* repo.remove(accountID)
+-      if (Option.isNone(active) || active.value.id !== accountID) return
+-
+-      const next = (yield* orgsByAccount()).flatMap((group) =>
+-        group.orgs.map((org) => ({ accountID: group.account.id, orgID: org.id })),
+-      )[0]
+-      if (!next) return
+-      yield* repo.use(next.accountID, Option.some(next.orgID))
+-    })
+-
+-    const config = Effect.fn("Account.config")(function* (accountID: AccountID, orgID: OrgID) {
+-      const resolved = yield* resolveAccess(accountID)
+-      if (Option.isNone(resolved)) return Option.none()
+-
+-      const { account, accessToken } = resolved.value
+-
+-      const response = yield* executeRead(
+-        HttpClientRequest.get(`${account.url}/api/config`).pipe(
+-          HttpClientRequest.acceptJson,
+-          HttpClientRequest.bearerToken(accessToken),
+-          HttpClientRequest.setHeaders({ "x-org-id": orgID }),
+-        ),
+-      )
+-
+-      if (response.status === 404) return Option.none()
+-
+-      const ok = yield* HttpClientResponse.filterStatusOk(response).pipe(mapAccountServiceError())
+-
+-      const parsed = yield* HttpClientResponse.schemaBodyJson(RemoteConfig)(ok).pipe(
+-        mapAccountServiceError("Failed to decode response"),
+-      )
+-      return Option.some(parsed.config)
+-    })
+-
+-    const login = Effect.fn("Account.login")(function* (server: string) {
+-      const normalizedServer = normalizeServerUrl(server)
+-      const response = yield* executeEffectOk(
+-        HttpClientRequest.post(`${normalizedServer}/auth/device/code`).pipe(
+-          HttpClientRequest.acceptJson,
+-          HttpClientRequest.schemaBodyJson(ClientId)(new ClientId({ client_id: clientId })),
+-        ),
+-      )
+-
+-      const parsed = yield* HttpClientResponse.schemaBodyJson(DeviceAuth)(response).pipe(
+-        mapAccountServiceError("Failed to decode response"),
+-      )
+-      const verification = yield* Effect.try({
+-        try: () => {
+-          const url = new URL(parsed.verification_uri_complete, `${normalizedServer}/`)
+-          if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("expected HTTP(S)")
+-          return url.href
+-        },
+-        catch: (cause) => new AccountServiceError({ message: "Invalid device verification URL", cause }),
+-      })
+-      return new Login({
+-        code: parsed.device_code,
+-        user: parsed.user_code,
+-        url: verification,
+-        server: normalizedServer,
+-        expiry: parsed.expires_in,
+-        interval: parsed.interval,
+-      })
+-    })
+-
+-    const poll = Effect.fn("Account.poll")(function* (input: Login) {
+-      const response = yield* executeEffect(
+-        HttpClientRequest.post(`${input.server}/auth/device/token`).pipe(
+-          HttpClientRequest.acceptJson,
+-          HttpClientRequest.schemaBodyJson(DeviceTokenRequest)(
+-            new DeviceTokenRequest({
+-              grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+-              device_code: input.code,
+-              client_id: clientId,
+-            }),
+-          ),
+-        ),
+-      )
+-
+-      const parsed = yield* HttpClientResponse.schemaBodyJson(DeviceToken)(response).pipe(
+-        mapAccountServiceError("Failed to decode response"),
+-      )
+-
+-      if (parsed instanceof DeviceTokenError) return parsed.toPollResult()
+-      const accessToken = parsed.access_token
+-
+-      const user = fetchUser(input.server, accessToken)
+-      const orgs = fetchOrgs(input.server, accessToken)
+-
+-      const [account, remoteOrgs] = yield* Effect.all([user, orgs], { concurrency: 2 })
+-
+-      // TODO: When there are multiple orgs, let the user choose
+-      const firstOrgID = remoteOrgs.length > 0 ? Option.some(remoteOrgs[0].id) : Option.none<OrgID>()
+-
+-      const now = yield* Clock.currentTimeMillis
+-      const expiry = now + Duration.toMillis(parsed.expires_in)
+-      const refreshToken = parsed.refresh_token
+-
+-      yield* repo.persistAccount({
+-        id: account.id,
+-        email: account.email,
+-        url: input.server,
+-        accessToken,
+-        refreshToken,
+-        expiry,
+-        orgID: firstOrgID,
+-      })
+-
+-      return new PollSuccess({ email: account.email })
+-    })
+-
+-    return Service.of({
+-      active: repo.active,
+-      activeOrg,
+-      list: repo.list,
+-      orgsByAccount,
+-      remove,
+-      use: repo.use,
+-      orgs,
+-      config,
+-      token,
+-      login,
+-      poll,
+-    })
+-  }),
+-)
+-
+-export const node = LayerNode.make({ service: Service, layer: layer, deps: [AccountRepo.node, httpClient] })
+-
+-export * as Account from "./account"
+diff --git a/packages/opencode/src/account/repo.ts b/packages/opencode/src/account/repo.ts
+deleted file mode 100644
+index 62fac1e618..0000000000
+--- a/packages/opencode/src/account/repo.ts
++++ /dev/null
+@@ -1,171 +0,0 @@
+-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+-import { eq } from "drizzle-orm"
+-import { serviceUse } from "@opencode-ai/core/effect/service-use"
+-import { Effect, Layer, Option, Schema, Context } from "effect"
+-
+-import { Database } from "@opencode-ai/core/database/database"
+-import { AccountStateTable, AccountTable } from "@opencode-ai/core/account/sql"
+-import { AccessToken, AccountID, AccountRepoError, Info, OrgID, RefreshToken } from "./schema"
+-import { normalizeServerUrl } from "./url"
+-
+-export type AccountRow = (typeof AccountTable)["$inferSelect"]
+-
+-const ACCOUNT_STATE_ID = 1
+-
+-export interface Interface {
+-  readonly active: () => Effect.Effect<Option.Option<Info>, AccountRepoError>
+-  readonly list: () => Effect.Effect<Info[], AccountRepoError>
+-  readonly remove: (accountID: AccountID) => Effect.Effect<void, AccountRepoError>
+-  readonly use: (accountID: AccountID, orgID: Option.Option<OrgID>) => Effect.Effect<void, AccountRepoError>
+-  readonly getRow: (accountID: AccountID) => Effect.Effect<Option.Option<AccountRow>, AccountRepoError>
+-  readonly persistToken: (input: {
+-    accountID: AccountID
+-    accessToken: AccessToken
+-    refreshToken: RefreshToken
+-    expiry: Option.Option<number>
+-  }) => Effect.Effect<void, AccountRepoError>
+-  readonly persistAccount: (input: {
+-    id: AccountID
+-    email: string
+-    url: string
+-    accessToken: AccessToken
+-    refreshToken: RefreshToken
+-    expiry: number
+-    orgID: Option.Option<OrgID>
+-  }) => Effect.Effect<void, AccountRepoError>
+-}
+-
+-export class Service extends Context.Service<Service, Interface>()("@opencode/AccountRepo") {}
+-
+-export const use = serviceUse(Service)
+-
+-const layer = Layer.effect(
+-  Service,
+-  Effect.gen(function* () {
+-    const { db } = yield* Database.Service
+-    const decode = Schema.decodeUnknownSync(Info)
+-
+-    const query = <A, E>(effect: Effect.Effect<A, E>) =>
+-      effect.pipe(Effect.mapError((cause) => new AccountRepoError({ message: "Database operation failed", cause })))
+-
+-    const current = Effect.fnUntraced(function* () {
+-      const state = yield* db.select().from(AccountStateTable).where(eq(AccountStateTable.id, ACCOUNT_STATE_ID)).get()
+-      if (!state?.active_account_id) return
+-      const account = yield* db.select().from(AccountTable).where(eq(AccountTable.id, state.active_account_id)).get()
+-      if (!account) return
+-      return { ...account, active_org_id: state.active_org_id ?? null }
+-    })
+-
+-    const state = (accountID: AccountID, orgID: Option.Option<OrgID>) => {
+-      const id = Option.getOrNull(orgID)
+-      return db
+-        .insert(AccountStateTable)
+-        .values({ id: ACCOUNT_STATE_ID, active_account_id: accountID, active_org_id: id })
+-        .onConflictDoUpdate({
+-          target: AccountStateTable.id,
+-          set: { active_account_id: accountID, active_org_id: id },
+-        })
+-        .run()
+-    }
+-
+-    const active = Effect.fn("AccountRepo.active")(() =>
+-      query(current()).pipe(Effect.map((row) => (row ? Option.some(decode(row)) : Option.none()))),
+-    )
+-
+-    const list = Effect.fn("AccountRepo.list")(() =>
+-      query(
+-        db
+-          .select()
+-          .from(AccountTable)
+-          .all()
+-          .pipe(Effect.map((rows) => rows.map((row: AccountRow) => decode({ ...row, active_org_id: null })))),
+-      ),
+-    )
+-
+-    const remove = Effect.fn("AccountRepo.remove")((accountID: AccountID) =>
+-      query(
+-        db.transaction((tx) =>
+-          Effect.gen(function* () {
+-            yield* tx
+-              .update(AccountStateTable)
+-              .set({ active_account_id: null, active_org_id: null })
+-              .where(eq(AccountStateTable.active_account_id, accountID))
+-              .run()
+-            yield* tx.delete(AccountTable).where(eq(AccountTable.id, accountID)).run()
+-          }),
+-        ),
+-      ).pipe(Effect.asVoid),
+-    )
+-
+-    const use = Effect.fn("AccountRepo.use")((accountID: AccountID, orgID: Option.Option<OrgID>) =>
+-      query(state(accountID, orgID)).pipe(Effect.asVoid),
+-    )
+-
+-    const getRow = Effect.fn("AccountRepo.getRow")((accountID: AccountID) =>
+-      query(db.select().from(AccountTable).where(eq(AccountTable.id, accountID)).get()).pipe(
+-        Effect.map(Option.fromNullishOr),
+-      ),
+-    )
+-
+-    const persistToken = Effect.fn("AccountRepo.persistToken")((input) =>
+-      query(
+-        db
+-          .update(AccountTable)
+-          .set({
+-            access_token: input.accessToken,
+-            refresh_token: input.refreshToken,
+-            token_expiry: Option.getOrNull(input.expiry),
+-          })
+-          .where(eq(AccountTable.id, input.accountID))
+-          .run(),
+-      ).pipe(Effect.asVoid),
+-    )
+-
+-    const persistAccount = Effect.fn("AccountRepo.persistAccount")((input) =>
+-      query(
+-        db.transaction((tx) =>
+-          Effect.gen(function* () {
+-            const url = normalizeServerUrl(input.url)
+-
+-            yield* tx
+-              .insert(AccountTable)
+-              .values({
+-                id: input.id,
+-                email: input.email,
+-                url,
+-                access_token: input.accessToken,
+-                refresh_token: input.refreshToken,
+-                token_expiry: input.expiry,
+-              })
+-              .onConflictDoUpdate({
+-                target: AccountTable.id,
+-                set: {
+-                  email: input.email,
+-                  url,
+-                  access_token: input.accessToken,
+-                  refresh_token: input.refreshToken,
+-                  token_expiry: input.expiry,
+-                },
+-              })
+-              .run()
+-            yield* state(input.id, input.orgID)
+-          }),
+-        ),
+-      ).pipe(Effect.asVoid),
+-    )
+-
+-    return Service.of({
+-      active,
+-      list,
+-      remove,
+-      use,
+-      getRow,
+-      persistToken,
+-      persistAccount,
+-    })
+-  }),
+-)
+-
+-export const node = LayerNode.make({ service: Service, layer: layer, deps: [Database.node] })
+-
+-export * as AccountRepo from "./repo"
+diff --git a/packages/opencode/src/account/schema.ts b/packages/opencode/src/account/schema.ts
+deleted file mode 100644
+index 8c008435ab..0000000000
+--- a/packages/opencode/src/account/schema.ts
++++ /dev/null
+@@ -1,99 +0,0 @@
+-import { Schema } from "effect"
+-import type * as HttpClientError from "effect/unstable/http/HttpClientError"
+-
+-export const AccountID = Schema.String.pipe(Schema.brand("AccountID"))
+-export type AccountID = Schema.Schema.Type<typeof AccountID>
+-
+-export const OrgID = Schema.String.pipe(Schema.brand("OrgID"))
+-export type OrgID = Schema.Schema.Type<typeof OrgID>
+-
+-export const AccessToken = Schema.String.pipe(Schema.brand("AccessToken"))
+-export type AccessToken = Schema.Schema.Type<typeof AccessToken>
+-
+-export const RefreshToken = Schema.String.pipe(Schema.brand("RefreshToken"))
+-export type RefreshToken = Schema.Schema.Type<typeof RefreshToken>
+-
+-export const DeviceCode = Schema.String.pipe(Schema.brand("DeviceCode"))
+-export type DeviceCode = Schema.Schema.Type<typeof DeviceCode>
+-
+-export const UserCode = Schema.String.pipe(Schema.brand("UserCode"))
+-export type UserCode = Schema.Schema.Type<typeof UserCode>
+-
+-export class Info extends Schema.Class<Info>("Account")({
+-  id: AccountID,
+-  email: Schema.String,
+-  url: Schema.String,
+-  active_org_id: Schema.NullOr(OrgID),
+-}) {}
+-
+-export class Org extends Schema.Class<Org>("Org")({
+-  id: OrgID,
+-  name: Schema.String,
+-}) {}
+-
+-export class AccountRepoError extends Schema.TaggedErrorClass<AccountRepoError>()("AccountRepoError", {
+-  message: Schema.String,
+-  cause: Schema.optional(Schema.Defect()),
+-}) {}
+-
+-export class AccountServiceError extends Schema.TaggedErrorClass<AccountServiceError>()("AccountServiceError", {
+-  message: Schema.String,
+-  cause: Schema.optional(Schema.Defect()),
+-}) {}
+-
+-export class AccountTransportError extends Schema.TaggedErrorClass<AccountTransportError>()("AccountTransportError", {
+-  method: Schema.String,
+-  url: Schema.String,
+-  description: Schema.optional(Schema.String),
+-  cause: Schema.optional(Schema.Defect()),
+-}) {
+-  static fromHttpClientError(error: HttpClientError.TransportError): AccountTransportError {
+-    return new AccountTransportError({
+-      method: error.request.method,
+-      url: error.request.url,
+-      description: error.description,
+-      cause: error.cause,
+-    })
+-  }
+-
+-  override get message(): string {
+-    return [
+-      `Could not reach ${this.method} ${this.url}.`,
+-      `This failed before the server returned an HTTP response.`,
+-      this.description,
+-      `Check your network, proxy, or VPN configuration and try again.`,
+-    ]
+-      .filter(Boolean)
+-      .join("\n")
+-  }
+-}
+-
+-export type AccountError = AccountRepoError | AccountServiceError | AccountTransportError
+-
+-export class Login extends Schema.Class<Login>("Login")({
+-  code: DeviceCode,
+-  user: UserCode,
+-  url: Schema.String,
+-  server: Schema.String,
+-  expiry: Schema.Duration,
+-  interval: Schema.Duration,
+-}) {}
+-
+-export class PollSuccess extends Schema.TaggedClass<PollSuccess>()("PollSuccess", {
+-  email: Schema.String,
+-}) {}
+-
+-export class PollPending extends Schema.TaggedClass<PollPending>()("PollPending", {}) {}
+-
+-export class PollSlow extends Schema.TaggedClass<PollSlow>()("PollSlow", {}) {}
+-
+-export class PollExpired extends Schema.TaggedClass<PollExpired>()("PollExpired", {}) {}
+-
+-export class PollDenied extends Schema.TaggedClass<PollDenied>()("PollDenied", {}) {}
+-
+-export class PollError extends Schema.TaggedClass<PollError>()("PollError", {
+-  cause: Schema.Defect(),
+-}) {}
+-
+-export const PollResult = Schema.Union([PollSuccess, PollPending, PollSlow, PollExpired, PollDenied, PollError])
+-export type PollResult = Schema.Schema.Type<typeof PollResult>
+diff --git a/packages/opencode/src/account/url.ts b/packages/opencode/src/account/url.ts
+deleted file mode 100644
+index 36afd6d8e9..0000000000
+--- a/packages/opencode/src/account/url.ts
++++ /dev/null
+@@ -1,8 +0,0 @@
+-export const normalizeServerUrl = (input: string): string => {
+-  const url = new URL(input)
+-  url.search = ""
+-  url.hash = ""
+-
+-  const pathname = url.pathname.replace(/\/+$/, "")
+-  return pathname.length === 0 ? url.origin : `${url.origin}${pathname}`
+-}
+diff --git a/packages/opencode/src/cli/cmd/account.ts b/packages/opencode/src/cli/cmd/account.ts
+deleted file mode 100644
+index d15bb1d017..0000000000
+--- a/packages/opencode/src/cli/cmd/account.ts
++++ /dev/null
+@@ -1,264 +0,0 @@
+-import { cmd } from "./cmd"
+-import { Duration, Effect, Match, Option } from "effect"
+-import { UI } from "../ui"
+-import { Account } from "@/account/account"
+-import { AccountID, OrgID, PollExpired, type PollResult, type AccountError } from "@/account/schema"
+-import { effectCmd } from "../effect-cmd"
+-import * as Prompt from "../effect/prompt"
+-import { openUrl } from "@opencode-ai/core/open"
+-
+-const openBrowser = (url: string) => Effect.promise(() => openUrl(url).catch(() => undefined))
+-
+-const println = (msg: string) => Effect.sync(() => UI.println(msg))
+-
+-const dim = (value: string) => UI.Style.TEXT_DIM + value + UI.Style.TEXT_NORMAL
+-
+-const activeSuffix = (isActive: boolean) => (isActive ? dim(" (active)") : "")
+-
+-export const defaultConsoleUrl = "https://opencode.ai/console"
+-
+-export const formatAccountLabel = (account: { email: string; url: string }, isActive: boolean) =>
+-  `${account.email} ${dim(account.url)}${activeSuffix(isActive)}`
+-
+-const formatOrgChoiceLabel = (account: { email: string }, org: { name: string }, isActive: boolean) =>
+-  `${org.name} (${account.email})${activeSuffix(isActive)}`
+-
+-export const formatOrgLine = (
+-  account: { email: string; url: string },
+-  org: { id: string; name: string },
+-  isActive: boolean,
+-) => {
+-  const dot = isActive ? UI.Style.TEXT_SUCCESS + "●" + UI.Style.TEXT_NORMAL : " "
+-  const name = isActive ? UI.Style.TEXT_HIGHLIGHT_BOLD + org.name + UI.Style.TEXT_NORMAL : org.name
+-  return `  ${dot} ${name}  ${dim(account.email)}  ${dim(account.url)}  ${dim(org.id)}`
+-}
+-
+-const isActiveOrgChoice = (
+-  active: Option.Option<{ id: AccountID; active_org_id: OrgID | null }>,
+-  choice: { accountID: AccountID; orgID: OrgID },
+-) => Option.isSome(active) && active.value.id === choice.accountID && active.value.active_org_id === choice.orgID
+-
+-const loginEffect = Effect.fn("login")(function* (url: string) {
+-  const service = yield* Account.Service
+-
+-  yield* Prompt.intro("Log in")
+-  const login = yield* service.login(url)
+-
+-  yield* Prompt.log.info("Go to: " + login.url)
+-  yield* Prompt.log.info("Enter code: " + login.user)
+-  yield* openBrowser(login.url)
+-
+-  const s = Prompt.spinner()
+-  yield* s.start("Waiting for authorization...")
+-
+-  const poll = (wait: Duration.Duration): Effect.Effect<PollResult, AccountError> =>
+-    Effect.gen(function* () {
+-      yield* Effect.sleep(wait)
+-      const result = yield* service.poll(login)
+-      if (result._tag === "PollPending") return yield* poll(wait)
+-      if (result._tag === "PollSlow") return yield* poll(Duration.sum(wait, Duration.seconds(5)))
+-      return result
+-    })
+-
+-  const result = yield* poll(login.interval).pipe(
+-    Effect.timeout(login.expiry),
+-    Effect.catchTag("TimeoutError", () => Effect.succeed(new PollExpired())),
+-  )
+-
+-  yield* Match.valueTags(result, {
+-    PollSuccess: (r) =>
+-      Effect.gen(function* () {
+-        yield* s.stop("Logged in as " + r.email)
+-        yield* Prompt.outro("Done")
+-      }),
+-    PollExpired: () => s.stop("Device code expired", 1),
+-    PollDenied: () => s.stop("Authorization denied", 1),
+-    PollError: (r) => s.stop("Error: " + String(r.cause), 1),
+-    PollPending: () => s.stop("Unexpected state", 1),
+-    PollSlow: () => s.stop("Unexpected state", 1),
+-  })
+-})
+-
+-const logoutEffect = Effect.fn("logout")(function* (email?: string) {
+-  const service = yield* Account.Service
+-  const accounts = yield* service.list()
+-  if (accounts.length === 0) return yield* println("Not logged in")
+-
+-  if (email) {
+-    const match = accounts.find((a) => a.email === email)
+-    if (!match) return yield* println("Account not found: " + email)
+-    yield* service.remove(match.id)
+-    yield* Prompt.outro("Logged out from " + email)
+-    return
+-  }
+-
+-  const active = yield* service.active()
+-  const activeID = Option.map(active, (a) => a.id)
+-
+-  yield* Prompt.intro("Log out")
+-
+-  const opts = accounts.map((a) => {
+-    const isActive = Option.isSome(activeID) && activeID.value === a.id
+-    return {
+-      value: a,
+-      label: formatAccountLabel(a, isActive),
+-    }
+-  })
+-
+-  const selected = yield* Prompt.select({ message: "Select account to log out", options: opts })
+-  if (Option.isNone(selected)) return
+-
+-  yield* service.remove(selected.value.id)
+-  yield* Prompt.outro("Logged out from " + selected.value.email)
+-})
+-
+-interface OrgChoice {
+-  orgID: OrgID
+-  accountID: AccountID
+-  label: string
+-}
+-
+-const switchEffect = Effect.fn("switch")(function* () {
+-  const service = yield* Account.Service
+-
+-  const groups = yield* service.orgsByAccount()
+-  if (groups.length === 0) return yield* println("Not logged in")
+-
+-  const active = yield* service.active()
+-
+-  const opts = groups.flatMap((group) =>
+-    group.orgs.map((org) => {
+-      const isActive = isActiveOrgChoice(active, { accountID: group.account.id, orgID: org.id })
+-      return {
+-        value: { orgID: org.id, accountID: group.account.id, label: org.name },
+-        label: formatOrgChoiceLabel(group.account, org, isActive),
+-      }
+-    }),
+-  )
+-  if (opts.length === 0) return yield* println("No orgs found")
+-
+-  yield* Prompt.intro("Switch org")
+-
+-  const selected = yield* Prompt.select<OrgChoice>({ message: "Select org", options: opts })
+-  if (Option.isNone(selected)) return
+-
+-  const choice = selected.value
+-  yield* service.use(choice.accountID, Option.some(choice.orgID))
+-  yield* Prompt.outro("Switched to " + choice.label)
+-})
+-
+-const orgsEffect = Effect.fn("orgs")(function* () {
+-  const service = yield* Account.Service
+-
+-  const groups = yield* service.orgsByAccount()
+-  if (groups.length === 0) return yield* println("No accounts found")
+-  if (!groups.some((group) => group.orgs.length > 0)) return yield* println("No orgs found")
+-
+-  const active = yield* service.active()
+-
+-  for (const group of groups) {
+-    for (const org of group.orgs) {
+-      const isActive = isActiveOrgChoice(active, { accountID: group.account.id, orgID: org.id })
+-      yield* println(formatOrgLine(group.account, org, isActive))
+-    }
+-  }
+-})
+-
+-const openEffect = Effect.fn("open")(function* () {
+-  const service = yield* Account.Service
+-  const active = yield* service.active()
+-  if (Option.isNone(active)) return yield* println("No active account")
+-
+-  const url = active.value.url
+-  yield* openBrowser(url)
+-  yield* Prompt.outro("Opened " + url)
+-})
+-
+-export const LoginCommand = effectCmd({
+-  command: "login [url]",
+-  describe: false,
+-  instance: false,
+-  builder: (yargs) =>
+-    yargs.positional("url", {
+-      describe: "server URL",
+-      type: "string",
+-    }),
+-  handler: Effect.fn("Cli.account.login")(function* (args) {
+-    UI.empty()
+-    yield* Effect.orDie(loginEffect(args.url ?? defaultConsoleUrl))
+-  }),
+-})
+-
+-export const LogoutCommand = effectCmd({
+-  command: "logout [email]",
+-  describe: false,
+-  instance: false,
+-  builder: (yargs) =>
+-    yargs.positional("email", {
+-      describe: "account email to log out from",
+-      type: "string",
+-    }),
+-  handler: Effect.fn("Cli.account.logout")(function* (args) {
+-    UI.empty()
+-    yield* Effect.orDie(logoutEffect(args.email))
+-  }),
+-})
+-
+-export const SwitchCommand = effectCmd({
+-  command: "switch",
+-  describe: false,
+-  instance: false,
+-  handler: Effect.fn("Cli.account.switch")(function* () {
+-    UI.empty()
+-    yield* Effect.orDie(switchEffect())
+-  }),
+-})
+-
+-export const OrgsCommand = effectCmd({
+-  command: "orgs",
+-  describe: false,
+-  instance: false,
+-  handler: Effect.fn("Cli.account.orgs")(function* () {
+-    UI.empty()
+-    yield* Effect.orDie(orgsEffect())
+-  }),
+-})
+-
+-export const OpenCommand = effectCmd({
+-  command: "open",
+-  describe: false,
+-  instance: false,
+-  handler: Effect.fn("Cli.account.open")(function* () {
+-    UI.empty()
+-    yield* Effect.orDie(openEffect())
+-  }),
+-})
+-
+-export const ConsoleCommand = cmd({
+-  command: "console",
+-  describe: false,
+-  builder: (yargs) =>
+-    yargs
+-      .command({
+-        ...LoginCommand,
+-        describe: "log in to console",
+-      })
+-      .command({
+-        ...LogoutCommand,
+-        describe: "log out from console",
+-      })
+-      .command({
+-        ...SwitchCommand,
+-        describe: "switch active org",
+-      })
+-      .command({
+-        ...OrgsCommand,
+-        describe: "list orgs",
+-      })
+-      .command({
+-        ...OpenCommand,
+-        describe: "open active console account",
+-      })
+-      .demandCommand(),
+-  async handler() {},
+-})
+diff --git a/packages/opencode/src/cli/cmd/providers.ts b/packages/opencode/src/cli/cmd/providers.ts
+index 7a583fd79c..fb2a02ffb4 100644
+--- a/packages/opencode/src/cli/cmd/providers.ts
++++ b/packages/opencode/src/cli/cmd/providers.ts
+@@ -446,10 +446,6 @@ export const ProvidersLoginCommand = effectCmd({
+       )
+     }
+ 
+-    if (provider === "opencode") {
+-      yield* Prompt.log.info("Create an api key at https://opencode.ai/auth")
+-    }
+-
+     const key = yield* Prompt.password({
+       message: "Enter your API key",
+       validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+diff --git a/packages/opencode/src/cli/error.ts b/packages/opencode/src/cli/error.ts
+index 407547e4e5..9ca6ca0f0f 100644
+--- a/packages/opencode/src/cli/error.ts
++++ b/packages/opencode/src/cli/error.ts
+@@ -50,11 +50,6 @@ export function FormatError(input: unknown): string | undefined {
+     return `MCP server "${data}" failed. Note, opencode does not support MCP authentication yet.`
+   }
+ 
+-  // AccountServiceError, AccountTransportError: TaggedErrorClass
+-  if (isTaggedError(input, "AccountServiceError") || isTaggedError(input, "AccountTransportError")) {
+-    return stringField(input, "message") ?? ""
+-  }
+-
+   // ProviderModelNotFoundError: { providerID: string, modelID: string, suggestions?: string[] }
+   const providerModelNotFound = configData(input, "ProviderModelNotFoundError")
+   if (providerModelNotFound) {
+diff --git a/packages/opencode/src/config/config.ts b/packages/opencode/src/config/config.ts
+index cfbc73c417..ad0f7ecbc7 100644
+--- a/packages/opencode/src/config/config.ts
++++ b/packages/opencode/src/config/config.ts
+@@ -13,9 +13,7 @@ import { Env } from "../env"
+ import { applyEdits, modify } from "jsonc-parser"
+ import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
+ import { existsSync } from "fs"
+-import { Account } from "@/account/account"
+ import { isRecord } from "@/util/record"
+-import type { ConsoleState } from "@opencode-ai/core/v1/config/console-state"
+ import { FSUtil } from "@opencode-ai/core/fs-util"
+ import { InstanceState } from "@/effect/instance-state"
+ import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
+@@ -119,13 +117,11 @@ type State = {
+   config: Info
+   directories: string[]
+   deps: Fiber.Fiber<void>[]
+-  consoleState: ConsoleState
+ }
+ 
+ export interface Interface {
+   readonly get: () => Effect.Effect<Info>
+   readonly getGlobal: () => Effect.Effect<Info>
+-  readonly getConsoleState: () => Effect.Effect<ConsoleState>
+   readonly update: (config: Info) => Effect.Effect<void>
+   readonly updateGlobal: (config: Info) => Effect.Effect<{ info: Info; changed: boolean }>
+   readonly invalidate: () => Effect.Effect<void>
+@@ -178,7 +174,6 @@ const layer = Layer.effect(
+   Effect.gen(function* () {
+     const fs = yield* FSUtil.Service
+     const authSvc = yield* Auth.Service
+-    const accountSvc = yield* Account.Service
+     const env = yield* Env.Service
+     const npmSvc = yield* Npm.Service
+     const http = yield* HttpClient.HttpClient
+@@ -331,8 +326,6 @@ const layer = Layer.effect(
+ 
+         let result: Info = {}
+         const authEnv: Record<string, string> = {}
+-        const consoleManagedProviders = new Set<string>()
+-        let activeOrgName: string | undefined
+ 
+         const pluginScopeForSource = Effect.fnUntraced(function* (source: string) {
+           if (source.startsWith("http://") || source.startsWith("https://")) return "global"
+@@ -489,44 +482,6 @@ const layer = Layer.effect(
+           yield* Effect.logDebug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+         }
+ 
+-        const activeAccount = Option.getOrUndefined(
+-          yield* accountSvc.active().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
+-        )
+-        if (activeAccount?.active_org_id) {
+-          const accountID = activeAccount.id
+-          const orgID = activeAccount.active_org_id
+-          const url = activeAccount.url
+-          yield* Effect.gen(function* () {
+-            const [configOpt, tokenOpt] = yield* Effect.all(
+-              [accountSvc.config(accountID, orgID), accountSvc.token(accountID)],
+-              { concurrency: 2 },
+-            )
+-            if (Option.isSome(tokenOpt)) {
+-              process.env["OPENCODE_CONSOLE_TOKEN"] = tokenOpt.value
+-              yield* env.set("OPENCODE_CONSOLE_TOKEN", tokenOpt.value)
+-            }
+-
+-            if (Option.isSome(configOpt)) {
+-              const source = `${url}/api/config`
+-              const next = yield* loadConfig(JSON.stringify(configOpt.value), {
+-                dir: path.dirname(source),
+-                source,
+-              })
+-              for (const providerID of Object.keys(next.provider ?? {})) {
+-                consoleManagedProviders.add(providerID)
+-              }
+-              yield* merge(source, next, "global")
+-            }
+-          }).pipe(
+-            Effect.withSpan("Config.loadActiveOrgConfig"),
+-            Effect.catch((err) =>
+-              Effect.logDebug("failed to fetch remote account config", {
+-                error: err instanceof Error ? err.message : String(err),
+-              }),
+-            ),
+-          )
+-        }
+-
+         const managedDir = ConfigManaged.managedConfigDir()
+         if (existsSync(managedDir)) {
+           for (const file of ["opencode.json", "opencode.jsonc"]) {
+@@ -597,11 +552,6 @@ const layer = Layer.effect(
+           config: result,
+           directories,
+           deps,
+-          consoleState: {
+-            consoleManagedProviders: Array.from(consoleManagedProviders),
+-            activeOrgName,
+-            switchableOrgCount: 0,
+-          },
+         }
+       },
+       Effect.provideService(FSUtil.Service, fs),
+@@ -621,10 +571,6 @@ const layer = Layer.effect(
+       return yield* InstanceState.use(state, (s) => s.directories)
+     })
+ 
+-    const getConsoleState = Effect.fn("Config.getConsoleState")(function* () {
+-      return yield* InstanceState.use(state, (s) => s.consoleState)
+-    })
+-
+     const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
+       yield* InstanceState.useEffect(state, (s) =>
+         Effect.forEach(s.deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
+@@ -678,7 +624,6 @@ const layer = Layer.effect(
+     return Service.of({
+       get,
+       getGlobal,
+-      getConsoleState,
+       update,
+       updateGlobal,
+       invalidate,
+@@ -691,7 +636,7 @@ const layer = Layer.effect(
+ export const node = LayerNode.make({
+   service: Service,
+   layer: layer,
+-  deps: [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient],
++  deps: [FSUtil.node, Auth.node, Env.node, Npm.node, httpClient],
+ })
+ 
+ export * as Config from "./config"
+diff --git a/packages/opencode/src/effect/app-runtime.ts b/packages/opencode/src/effect/app-runtime.ts
+index 9043cb10f2..69606acc1a 100644
+--- a/packages/opencode/src/effect/app-runtime.ts
++++ b/packages/opencode/src/effect/app-runtime.ts
+@@ -5,7 +5,6 @@ import * as Observability from "@opencode-ai/core/observability"
+ import { FSUtil } from "@opencode-ai/core/fs-util"
+ import { Database } from "@opencode-ai/core/database/database"
+ import { Auth } from "@/auth"
+-import { Account } from "@/account/account"
+ import { Config } from "@/config/config"
+ import { Git } from "@/git"
+ import { Ripgrep } from "@opencode-ai/core/ripgrep"
+@@ -57,7 +56,6 @@ export const AppLayer = AppNodeBuilderV1.build(
+     FSUtil.node,
+     Database.node,
+     Auth.node,
+-    Account.node,
+     Config.node,
+     Git.node,
+     Storage.node,
+diff --git a/packages/opencode/src/index.ts b/packages/opencode/src/index.ts
+index 894c6f85a8..31a048bf32 100644
+--- a/packages/opencode/src/index.ts
++++ b/packages/opencode/src/index.ts
+@@ -2,7 +2,6 @@ import yargs from "yargs"
+ import { hideBin } from "yargs/helpers"
+ import { RunCommand } from "./cli/cmd/run"
+ import { GenerateCommand } from "./cli/cmd/generate"
+-import { ConsoleCommand } from "./cli/cmd/account"
+ import { ProvidersCommand } from "./cli/cmd/providers"
+ import { AgentCommand } from "./cli/cmd/agent"
+ import { ModelsCommand } from "./cli/cmd/models"
+@@ -74,7 +73,6 @@ const cli = yargs(args)
+   .command(RunCommand)
+   .command(GenerateCommand)
+   .command(DebugCommand)
+-  .command(ConsoleCommand)
+   .command(ProvidersCommand)
+   .command(AgentCommand)
+   .command(ModelsCommand)
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/groups/experimental.ts b/packages/opencode/src/server/routes/instance/httpapi/groups/experimental.ts
+index 52c714a5ae..8e6a1cade8 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/groups/experimental.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/groups/experimental.ts
+@@ -1,4 +1,3 @@
+-import { AccountID, OrgID } from "@/account/schema"
+ import { MCP } from "@/mcp"
+ 
+ import { Session } from "@/session/session"
+@@ -19,34 +18,10 @@ import { QueryBoolean } from "./query"
+ import { ProviderV2 } from "@opencode-ai/core/provider"
+ import { ModelV2 } from "@opencode-ai/core/model"
+ 
+-const ConsoleStateResponse = Schema.Struct({
+-  consoleManagedProviders: Schema.mutable(Schema.Array(Schema.String)),
+-  activeOrgName: Schema.optionalKey(Schema.String),
+-  switchableOrgCount: NonNegativeInt,
+-}).annotate({ identifier: "ConsoleState" })
+-
+ const CapabilitiesResponse = Schema.Struct({
+   backgroundSubagents: Schema.Boolean,
+ }).annotate({ identifier: "ExperimentalCapabilities" })
+ 
+-const ConsoleOrgOption = Schema.Struct({
+-  accountID: Schema.String,
+-  accountEmail: Schema.String,
+-  accountUrl: Schema.String,
+-  orgID: Schema.String,
+-  orgName: Schema.String,
+-  active: Schema.Boolean,
+-})
+-
+-const ConsoleOrgList = Schema.Struct({
+-  orgs: Schema.Array(ConsoleOrgOption),
+-})
+-
+-export const ConsoleSwitchPayload = Schema.Struct({
+-  accountID: AccountID,
+-  orgID: OrgID,
+-})
+-
+ const ToolIDs = Schema.Array(Schema.String).annotate({ identifier: "ToolIDs" })
+ const ToolListItem = Schema.Struct({
+   id: Schema.String,
+@@ -89,9 +64,6 @@ export const SessionListQuery = Schema.Struct({
+ 
+ export const ExperimentalPaths = {
+   capabilities: "/experimental/capabilities",
+-  console: "/experimental/console",
+-  consoleOrgs: "/experimental/console/orgs",
+-  consoleSwitch: "/experimental/console/switch",
+   tool: "/experimental/tool",
+   toolIDs: "/experimental/tool/ids",
+   worktree: "/experimental/worktree",
+@@ -115,40 +87,6 @@ export const ExperimentalApi = HttpApi.make("experimental")
+             description: "Get experimental features enabled on the OpenCode server.",
+           }),
+         ),
+-        HttpApiEndpoint.get("console", ExperimentalPaths.console, {
+-          query: WorkspaceRoutingQuery,
+-          success: described(ConsoleStateResponse, "Active Console provider metadata"),
+-          error: HttpApiError.InternalServerError,
+-        }).annotateMerge(
+-          OpenApi.annotations({
+-            identifier: "experimental.console.get",
+-            summary: "Get active Console provider metadata",
+-            description: "Get the active Console org name and the set of provider IDs managed by that Console org.",
+-          }),
+-        ),
+-        HttpApiEndpoint.get("consoleOrgs", ExperimentalPaths.consoleOrgs, {
+-          query: WorkspaceRoutingQuery,
+-          success: described(ConsoleOrgList, "Switchable Console orgs"),
+-          error: HttpApiError.InternalServerError,
+-        }).annotateMerge(
+-          OpenApi.annotations({
+-            identifier: "experimental.console.listOrgs",
+-            summary: "List switchable Console orgs",
+-            description: "Get the available Console orgs across logged-in accounts, including the current active org.",
+-          }),
+-        ),
+-        HttpApiEndpoint.post("consoleSwitch", ExperimentalPaths.consoleSwitch, {
+-          query: WorkspaceRoutingQuery,
+-          payload: ConsoleSwitchPayload,
+-          success: described(Schema.Boolean, "Switch success"),
+-          error: HttpApiError.BadRequest,
+-        }).annotateMerge(
+-          OpenApi.annotations({
+-            identifier: "experimental.console.switchOrg",
+-            summary: "Switch active Console org",
+-            description: "Persist a new active Console account/org selection for the current local OpenCode state.",
+-          }),
+-        ),
+         HttpApiEndpoint.get("tool", ExperimentalPaths.tool, {
+           query: ToolListQuery,
+           success: described(ToolList, "Tools"),
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/groups/global.ts b/packages/opencode/src/server/routes/instance/httpapi/groups/global.ts
+index e9be362c3b..54fdf74a6d 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/groups/global.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/groups/global.ts
+@@ -2,7 +2,6 @@ import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+ import { EventV2 } from "@opencode-ai/core/event"
+ import { EventManifest } from "@/event-manifest"
+ import { InstanceDisposed } from "@/server/event"
+-import "@opencode-ai/core/account"
+ import "@/server/event"
+ import { Schema } from "effect"
+ import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/handlers/experimental.ts b/packages/opencode/src/server/routes/instance/httpapi/handlers/experimental.ts
+index b218c6040d..c730126ce2 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/handlers/experimental.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/handlers/experimental.ts
+@@ -1,4 +1,3 @@
+-import { Account } from "@/account/account"
+ import { Agent } from "@/agent/agent"
+ import { BackgroundJob } from "@/background/job"
+ import { Config } from "@/config/config"
+@@ -15,7 +14,7 @@ import { Effect, Option } from "effect"
+ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse"
+ import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
+ import { InstanceHttpApi } from "../api"
+-import { ConsoleSwitchPayload, SessionListQuery, ToolListQuery, WorktreeApiError } from "../groups/experimental"
++import { SessionListQuery, ToolListQuery, WorktreeApiError } from "../groups/experimental"
+ 
+ function mapWorktreeError<A, R>(self: Effect.Effect<A, Worktree.Error, R>) {
+   return self.pipe(
+@@ -25,7 +24,6 @@ function mapWorktreeError<A, R>(self: Effect.Effect<A, Worktree.Error, R>) {
+ 
+ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "experimental", (handlers) =>
+   Effect.gen(function* () {
+-    const account = yield* Account.Service
+     const agents = yield* Agent.Service
+     const config = yield* Config.Service
+     const mcp = yield* MCP.Service
+@@ -40,57 +38,6 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
+       return { backgroundSubagents: flags.experimentalBackgroundSubagents }
+     })
+ 
+-    const getConsole = Effect.fn("ExperimentalHttpApi.console")(function* () {
+-      const [state, groups] = yield* Effect.all(
+-        [
+-          config.getConsoleState(),
+-          account.orgsByAccount().pipe(Effect.catch(() => Effect.fail(new HttpApiError.InternalServerError({})))),
+-        ],
+-        {
+-          concurrency: "unbounded",
+-        },
+-      )
+-      return {
+-        consoleManagedProviders: state.consoleManagedProviders,
+-        ...(state.activeOrgName ? { activeOrgName: state.activeOrgName } : {}),
+-        switchableOrgCount: groups.reduce((count, group) => count + group.orgs.length, 0),
+-      }
+-    })
+-
+-    const listConsoleOrgs = Effect.fn("ExperimentalHttpApi.consoleOrgs")(function* () {
+-      const [groups, active] = yield* Effect.all(
+-        [
+-          account.orgsByAccount().pipe(Effect.catch(() => Effect.fail(new HttpApiError.InternalServerError({})))),
+-          account.active().pipe(Effect.catch(() => Effect.fail(new HttpApiError.InternalServerError({})))),
+-        ],
+-        {
+-          concurrency: "unbounded",
+-        },
+-      )
+-      const info = Option.getOrUndefined(active)
+-      return {
+-        orgs: groups.flatMap((group) =>
+-          group.orgs.map((org) => ({
+-            accountID: group.account.id,
+-            accountEmail: group.account.email,
+-            accountUrl: group.account.url,
+-            orgID: org.id,
+-            orgName: org.name,
+-            active: !!info && info.id === group.account.id && info.active_org_id === org.id,
+-          })),
+-        ),
+-      }
+-    })
+-
+-    const switchConsole = Effect.fn("ExperimentalHttpApi.consoleSwitch")(function* (ctx: {
+-      payload: typeof ConsoleSwitchPayload.Type
+-    }) {
+-      yield* account
+-        .use(ctx.payload.accountID, Option.some(ctx.payload.orgID))
+-        .pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))
+-      return true
+-    })
+-
+     const tool = Effect.fn("ExperimentalHttpApi.tool")(function* (ctx: { query: typeof ToolListQuery.Type }) {
+       const list = yield* registry.tools({
+         providerID: ctx.query.provider,
+@@ -177,9 +124,6 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
+ 
+     return handlers
+       .handle("capabilities", capabilities)
+-      .handle("console", getConsole)
+-      .handle("consoleOrgs", listConsoleOrgs)
+-      .handle("consoleSwitch", switchConsole)
+       .handle("tool", tool)
+       .handle("toolIDs", toolIDs)
+       .handle("worktree", worktree)
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/server.ts b/packages/opencode/src/server/routes/instance/httpapi/server.ts
+index f76af90860..419bebd830 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/server.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/server.ts
+@@ -4,7 +4,6 @@ import { HttpClient, HttpMiddleware, HttpRouter, HttpServer, HttpServerResponse
+ import * as Socket from "effect/unstable/socket/Socket"
+ import { FSUtil } from "@opencode-ai/core/fs-util"
+ import * as Observability from "@opencode-ai/core/observability"
+-import { Account } from "@/account/account"
+ import { Agent } from "@/agent/agent"
+ import { Auth } from "@/auth"
+ import { BackgroundJob } from "@/background/job"
+@@ -197,7 +196,6 @@ const app = LayerNode.group([
+   FSUtil.node,
+   Database.node,
+   Auth.node,
+-  Account.node,
+   Config.node,
+   Env.node,
+   Git.node,
+diff --git a/packages/opencode/src/storage/schema.ts b/packages/opencode/src/storage/schema.ts
+index b79513b096..dcbf385885 100644
+--- a/packages/opencode/src/storage/schema.ts
++++ b/packages/opencode/src/storage/schema.ts
+@@ -1,4 +1,3 @@
+-export { AccountTable, AccountStateTable, ControlAccountTable } from "@opencode-ai/core/account/sql"
+ export { ProjectTable } from "@opencode-ai/core/project/sql"
+ export { SessionTable, MessageTable, PartTable, TodoTable } from "@opencode-ai/core/session/sql"
+ export { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
+diff --git a/packages/opencode/test/account/repo.test.ts b/packages/opencode/test/account/repo.test.ts
+deleted file mode 100644
+index 756d873f9c..0000000000
+--- a/packages/opencode/test/account/repo.test.ts
++++ /dev/null
+@@ -1,355 +0,0 @@
+-import { expect } from "bun:test"
+-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+-import { Effect, Layer, Option } from "effect"
+-import { sql } from "drizzle-orm"
+-
+-import { AccountRepo } from "../../src/account/repo"
+-import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account/schema"
+-import { Database } from "@opencode-ai/core/database/database"
+-import { testEffect } from "../lib/effect"
+-
+-const truncate = Layer.effectDiscard(
+-  Effect.gen(function* () {
+-    const { db } = yield* Database.Service
+-    yield* db.run(sql`DELETE FROM account_state`)
+-    yield* db.run(sql`DELETE FROM account`)
+-  }),
+-)
+-const truncateNode = LayerNode.make({ name: "truncate-account", layer: truncate, deps: [Database.node] })
+-
+-const it = testEffect(LayerNode.compile(LayerNode.group([AccountRepo.node, truncateNode])))
+-
+-it.live("list returns empty when no accounts exist", () =>
+-  Effect.gen(function* () {
+-    const accounts = yield* AccountRepo.use.list()
+-    expect(accounts).toEqual([])
+-  }),
+-)
+-
+-it.live("active returns none when no accounts exist", () =>
+-  Effect.gen(function* () {
+-    const active = yield* AccountRepo.use.active()
+-    expect(Option.isNone(active)).toBe(true)
+-  }),
+-)
+-
+-it.live("persistAccount inserts and getRow retrieves", () =>
+-  Effect.gen(function* () {
+-    const id = AccountID.make("user-1")
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id,
+-        email: "test@example.com",
+-        url: "https://control.example.com",
+-        accessToken: AccessToken.make("at_123"),
+-        refreshToken: RefreshToken.make("rt_456"),
+-        expiry: Date.now() + 3600_000,
+-        orgID: Option.some(OrgID.make("org-1")),
+-      }),
+-    )
+-
+-    const row = yield* AccountRepo.use.getRow(id)
+-    expect(Option.isSome(row)).toBe(true)
+-    const value = Option.getOrThrow(row)
+-    expect(value.id).toBe(AccountID.make("user-1"))
+-    expect(value.email).toBe("test@example.com")
+-
+-    const active = yield* AccountRepo.use.active()
+-    expect(Option.getOrThrow(active).active_org_id).toBe(OrgID.make("org-1"))
+-  }),
+-)
+-
+-it.live("persistAccount normalizes trailing slashes in stored server URLs", () =>
+-  Effect.gen(function* () {
+-    const id = AccountID.make("user-1")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id,
+-        email: "test@example.com",
+-        url: "https://control.example.com/",
+-        accessToken: AccessToken.make("at_123"),
+-        refreshToken: RefreshToken.make("rt_456"),
+-        expiry: Date.now() + 3600_000,
+-        orgID: Option.none(),
+-      }),
+-    )
+-
+-    const row = yield* AccountRepo.use.getRow(id)
+-    const active = yield* AccountRepo.use.active()
+-    const list = yield* AccountRepo.use.list()
+-
+-    expect(Option.getOrThrow(row).url).toBe("https://control.example.com")
+-    expect(Option.getOrThrow(active).url).toBe("https://control.example.com")
+-    expect(list[0]?.url).toBe("https://control.example.com")
+-  }),
+-)
+-
+-it.live("persistAccount sets the active account and org", () =>
+-  Effect.gen(function* () {
+-    const id1 = AccountID.make("user-1")
+-    const id2 = AccountID.make("user-2")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id: id1,
+-        email: "first@example.com",
+-        url: "https://control.example.com",
+-        accessToken: AccessToken.make("at_1"),
+-        refreshToken: RefreshToken.make("rt_1"),
+-        expiry: Date.now() + 3600_000,
+-        orgID: Option.some(OrgID.make("org-1")),
+-      }),
+-    )
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id: id2,
+-        email: "second@example.com",
+-        url: "https://control.example.com",
+-        accessToken: AccessToken.make("at_2"),
+-        refreshToken: RefreshToken.make("rt_2"),
+-        expiry: Date.now() + 3600_000,
+-        orgID: Option.some(OrgID.make("org-2")),
+-      }),
+-    )
+-
+-    // Last persisted account is active with its org
+-    const active = yield* AccountRepo.use.active()
+-    expect(Option.isSome(active)).toBe(true)
+-    expect(Option.getOrThrow(active).id).toBe(AccountID.make("user-2"))
+-    expect(Option.getOrThrow(active).active_org_id).toBe(OrgID.make("org-2"))
+-  }),
+-)
+-
+-it.live("list returns all accounts", () =>
+-  Effect.gen(function* () {
+-    const id1 = AccountID.make("user-1")
+-    const id2 = AccountID.make("user-2")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id: id1,
+-        email: "a@example.com",
+-        url: "https://control.example.com",
+-        accessToken: AccessToken.make("at_1"),
+-        refreshToken: RefreshToken.make("rt_1"),
+-        expiry: Date.now() + 3600_000,
+-        orgID: Option.none(),
+-      }),
+-    )
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id: id2,
+-        email: "b@example.com",
+-        url: "https://control.example.com",
+-        accessToken: AccessToken.make("at_2"),
+-        refreshToken: RefreshToken.make("rt_2"),
+-        expiry: Date.now() + 3600_000,
+-        orgID: Option.some(OrgID.make("org-1")),
+-      }),
+-    )
+-
+-    const accounts = yield* AccountRepo.use.list()
+-    expect(accounts.length).toBe(2)
+-    expect(accounts.map((a) => a.email).sort()).toEqual(["a@example.com", "b@example.com"])
+-  }),
+-)
+-
+-it.live("remove deletes an account", () =>
+-  Effect.gen(function* () {
+-    const id = AccountID.make("user-1")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id,
+-        email: "test@example.com",
+-        url: "https://control.example.com",
+-        accessToken: AccessToken.make("at_1"),
+-        refreshToken: RefreshToken.make("rt_1"),
+-        expiry: Date.now() + 3600_000,
+-        orgID: Option.none(),
+-      }),
+-    )
+-
+-    yield* AccountRepo.use.remove(id)
+-
+-    const row = yield* AccountRepo.use.getRow(id)
+-    expect(Option.isNone(row)).toBe(true)
+-  }),
+-)
+-
+-it.live("use stores the selected org and marks the account active", () =>
+-  Effect.gen(function* () {
+-    const id1 = AccountID.make("user-1")
+-    const id2 = AccountID.make("user-2")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id: id1,
+-        email: "first@example.com",
+-        url: "https://control.example.com",
+-        accessToken: AccessToken.make("at_1"),
+-        refreshToken: RefreshToken.make("rt_1"),
+-        expiry: Date.now() + 3600_000,
+-        orgID: Option.none(),
+-      }),
+-    )
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id: id2,
+-        email: "second@example.com",
+-        url: "https://control.example.com",
+-        accessToken: AccessToken.make("at_2"),
+-        refreshToken: RefreshToken.make("rt_2"),
+-        expiry: Date.now() + 3600_000,
+-        orgID: Option.none(),
+-      }),
+-    )
+-
+-    yield* AccountRepo.Service.use((r) => r.use(id1, Option.some(OrgID.make("org-99"))))
+-    const active1 = yield* AccountRepo.use.active()
+-    expect(Option.getOrThrow(active1).id).toBe(id1)
+-    expect(Option.getOrThrow(active1).active_org_id).toBe(OrgID.make("org-99"))
+-
+-    yield* AccountRepo.Service.use((r) => r.use(id1, Option.none()))
+-    const active2 = yield* AccountRepo.use.active()
+-    expect(Option.getOrThrow(active2).active_org_id).toBeNull()
+-  }),
+-)
+-
+-it.live("persistToken updates token fields", () =>
+-  Effect.gen(function* () {
+-    const id = AccountID.make("user-1")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id,
+-        email: "test@example.com",
+-        url: "https://control.example.com",
+-        accessToken: AccessToken.make("old_token"),
+-        refreshToken: RefreshToken.make("old_refresh"),
+-        expiry: 1000,
+-        orgID: Option.none(),
+-      }),
+-    )
+-
+-    const expiry = Date.now() + 7200_000
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistToken({
+-        accountID: id,
+-        accessToken: AccessToken.make("new_token"),
+-        refreshToken: RefreshToken.make("new_refresh"),
+-        expiry: Option.some(expiry),
+-      }),
+-    )
+-
+-    const row = yield* AccountRepo.use.getRow(id)
+-    const value = Option.getOrThrow(row)
+-    expect(value.access_token).toBe(AccessToken.make("new_token"))
+-    expect(value.refresh_token).toBe(RefreshToken.make("new_refresh"))
+-    expect(value.token_expiry).toBe(expiry)
+-  }),
+-)
+-
+-it.live("persistToken with no expiry sets token_expiry to null", () =>
+-  Effect.gen(function* () {
+-    const id = AccountID.make("user-1")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id,
+-        email: "test@example.com",
+-        url: "https://control.example.com",
+-        accessToken: AccessToken.make("old_token"),
+-        refreshToken: RefreshToken.make("old_refresh"),
+-        expiry: 1000,
+-        orgID: Option.none(),
+-      }),
+-    )
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistToken({
+-        accountID: id,
+-        accessToken: AccessToken.make("new_token"),
+-        refreshToken: RefreshToken.make("new_refresh"),
+-        expiry: Option.none(),
+-      }),
+-    )
+-
+-    const row = yield* AccountRepo.use.getRow(id)
+-    expect(Option.getOrThrow(row).token_expiry).toBeNull()
+-  }),
+-)
+-
+-it.live("persistAccount upserts on conflict", () =>
+-  Effect.gen(function* () {
+-    const id = AccountID.make("user-1")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id,
+-        email: "test@example.com",
+-        url: "https://control.example.com",
+-        accessToken: AccessToken.make("at_v1"),
+-        refreshToken: RefreshToken.make("rt_v1"),
+-        expiry: 1000,
+-        orgID: Option.some(OrgID.make("org-1")),
+-      }),
+-    )
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id,
+-        email: "test@example.com",
+-        url: "https://control.example.com",
+-        accessToken: AccessToken.make("at_v2"),
+-        refreshToken: RefreshToken.make("rt_v2"),
+-        expiry: 2000,
+-        orgID: Option.some(OrgID.make("org-2")),
+-      }),
+-    )
+-
+-    const accounts = yield* AccountRepo.use.list()
+-    expect(accounts.length).toBe(1)
+-
+-    const row = yield* AccountRepo.use.getRow(id)
+-    const value = Option.getOrThrow(row)
+-    expect(value.access_token).toBe(AccessToken.make("at_v2"))
+-
+-    const active = yield* AccountRepo.use.active()
+-    expect(Option.getOrThrow(active).active_org_id).toBe(OrgID.make("org-2"))
+-  }),
+-)
+-
+-it.live("remove clears active state when deleting the active account", () =>
+-  Effect.gen(function* () {
+-    const id = AccountID.make("user-1")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id,
+-        email: "test@example.com",
+-        url: "https://control.example.com",
+-        accessToken: AccessToken.make("at_1"),
+-        refreshToken: RefreshToken.make("rt_1"),
+-        expiry: Date.now() + 3600_000,
+-        orgID: Option.some(OrgID.make("org-1")),
+-      }),
+-    )
+-
+-    yield* AccountRepo.use.remove(id)
+-
+-    const active = yield* AccountRepo.use.active()
+-    expect(Option.isNone(active)).toBe(true)
+-  }),
+-)
+-
+-it.live("getRow returns none for nonexistent account", () =>
+-  Effect.gen(function* () {
+-    const row = yield* AccountRepo.Service.use((r) => r.getRow(AccountID.make("nope")))
+-    expect(Option.isNone(row)).toBe(true)
+-  }),
+-)
+diff --git a/packages/opencode/test/account/service.test.ts b/packages/opencode/test/account/service.test.ts
+deleted file mode 100644
+index 802e91233a..0000000000
+--- a/packages/opencode/test/account/service.test.ts
++++ /dev/null
+@@ -1,524 +0,0 @@
+-import { expect } from "bun:test"
+-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+-import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
+-import { Duration, Effect, Layer, Option, Schema } from "effect"
+-import { sql } from "drizzle-orm"
+-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http"
+-
+-import { AccountRepo } from "../../src/account/repo"
+-import { Account } from "../../src/account/account"
+-import {
+-  AccessToken,
+-  AccountID,
+-  AccountServiceError,
+-  AccountTransportError,
+-  DeviceCode,
+-  Login,
+-  Org,
+-  OrgID,
+-  RefreshToken,
+-  UserCode,
+-} from "../../src/account/schema"
+-import { Database } from "@opencode-ai/core/database/database"
+-import { testEffect } from "../lib/effect"
+-
+-const truncate = Layer.effectDiscard(
+-  Effect.gen(function* () {
+-    const { db } = yield* Database.Service
+-    yield* db.run(sql`DELETE FROM account_state`)
+-    yield* db.run(sql`DELETE FROM account`)
+-  }),
+-)
+-const truncateNode = LayerNode.make({ name: "truncate-account", layer: truncate, deps: [Database.node] })
+-
+-const it = testEffect(LayerNode.compile(LayerNode.group([AccountRepo.node, truncateNode])))
+-
+-const insideEagerRefreshWindow = Duration.toMillis(Duration.minutes(1))
+-const outsideEagerRefreshWindow = Duration.toMillis(Duration.minutes(10))
+-
+-const live = (client: HttpClient.HttpClient) =>
+-  LayerNode.compile(Account.node, [[httpClient, Layer.succeed(HttpClient.HttpClient, client)]])
+-
+-const json = (req: Parameters<typeof HttpClientResponse.fromWeb>[0], body: unknown, status = 200) =>
+-  HttpClientResponse.fromWeb(
+-    req,
+-    new Response(JSON.stringify(body), {
+-      status,
+-      headers: { "content-type": "application/json" },
+-    }),
+-  )
+-
+-const encodeOrg = Schema.encodeSync(Org)
+-
+-const org = (id: string, name: string) => encodeOrg(new Org({ id: OrgID.make(id), name }))
+-
+-const login = () =>
+-  new Login({
+-    code: DeviceCode.make("device-code"),
+-    user: UserCode.make("user-code"),
+-    url: "https://one.example.com/verify",
+-    server: "https://one.example.com",
+-    expiry: Duration.seconds(600),
+-    interval: Duration.seconds(5),
+-  })
+-
+-const deviceTokenClient = (body: unknown, status = 400) =>
+-  HttpClient.make((req) =>
+-    Effect.succeed(
+-      req.url === "https://one.example.com/auth/device/token" ? json(req, body, status) : json(req, {}, 404),
+-    ),
+-  )
+-
+-const poll = (body: unknown, status = 400) =>
+-  Account.Service.use((s) => s.poll(login())).pipe(Effect.provide(live(deviceTokenClient(body, status))))
+-
+-it.live("login resolves origin-rooted verification URLs from servers with base paths", () =>
+-  Effect.gen(function* () {
+-    const seen: Array<string> = []
+-    const client = HttpClient.make((req) =>
+-      Effect.gen(function* () {
+-        seen.push(`${req.method} ${req.url}`)
+-
+-        if (req.url === "https://one.example.com/console/auth/device/code") {
+-          return json(req, {
+-            device_code: "device-code",
+-            user_code: "user-code",
+-            verification_uri_complete: "/console/device?user_code=user-code",
+-            expires_in: 600,
+-            interval: 5,
+-          })
+-        }
+-
+-        return json(req, {}, 404)
+-      }),
+-    )
+-
+-    const result = yield* Account.use.login("https://one.example.com/console/").pipe(Effect.provide(live(client)))
+-
+-    expect(seen).toEqual(["POST https://one.example.com/console/auth/device/code"])
+-    expect(result.server).toBe("https://one.example.com/console")
+-    expect(result.url).toBe("https://one.example.com/console/device?user_code=user-code")
+-  }),
+-)
+-
+-it.live("login rejects malformed device verification URLs", () =>
+-  Effect.gen(function* () {
+-    const client = HttpClient.make((req) =>
+-      Effect.succeed(
+-        json(req, {
+-          device_code: "device-code",
+-          user_code: "user-code",
+-          verification_uri_complete: "http://[::1",
+-          expires_in: 600,
+-          interval: 5,
+-        }),
+-      ),
+-    )
+-
+-    const error = yield* Effect.flip(Account.use.login("https://one.example.com").pipe(Effect.provide(live(client))))
+-    expect(error).toBeInstanceOf(AccountServiceError)
+-    if (error instanceof AccountServiceError) expect(error.message).toBe("Invalid device verification URL")
+-  }),
+-)
+-
+-it.live("login maps transport failures to account transport errors", () =>
+-  Effect.gen(function* () {
+-    const client = HttpClient.make((req) =>
+-      Effect.fail(
+-        new HttpClientError.HttpClientError({
+-          reason: new HttpClientError.TransportError({ request: req }),
+-        }),
+-      ),
+-    )
+-
+-    const error = yield* Effect.flip(Account.use.login("https://one.example.com").pipe(Effect.provide(live(client))))
+-
+-    expect(error).toBeInstanceOf(AccountTransportError)
+-    if (error instanceof AccountTransportError) {
+-      expect(error.method).toBe("POST")
+-      expect(error.url).toBe("https://one.example.com/auth/device/code")
+-    }
+-  }),
+-)
+-
+-it.live("orgsByAccount groups orgs per account", () =>
+-  Effect.gen(function* () {
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id: AccountID.make("user-1"),
+-        email: "one@example.com",
+-        url: "https://one.example.com",
+-        accessToken: AccessToken.make("at_1"),
+-        refreshToken: RefreshToken.make("rt_1"),
+-        expiry: Date.now() + outsideEagerRefreshWindow,
+-        orgID: Option.none(),
+-      }),
+-    )
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id: AccountID.make("user-2"),
+-        email: "two@example.com",
+-        url: "https://two.example.com",
+-        accessToken: AccessToken.make("at_2"),
+-        refreshToken: RefreshToken.make("rt_2"),
+-        expiry: Date.now() + outsideEagerRefreshWindow,
+-        orgID: Option.none(),
+-      }),
+-    )
+-
+-    const seen: Array<string> = []
+-    const client = HttpClient.make((req) =>
+-      Effect.gen(function* () {
+-        seen.push(`${req.method} ${req.url}`)
+-
+-        if (req.url === "https://one.example.com/api/orgs") {
+-          return json(req, [org("org-1", "One")])
+-        }
+-
+-        if (req.url === "https://two.example.com/api/orgs") {
+-          return json(req, [org("org-2", "Two A"), org("org-3", "Two B")])
+-        }
+-
+-        return json(req, [], 404)
+-      }),
+-    )
+-
+-    const rows = yield* Account.use.orgsByAccount().pipe(Effect.provide(live(client)))
+-
+-    expect(rows.map((row) => [row.account.id, row.orgs.map((org) => org.id)]).map(([id, orgs]) => [id, orgs])).toEqual([
+-      [AccountID.make("user-1"), [OrgID.make("org-1")]],
+-      [AccountID.make("user-2"), [OrgID.make("org-2"), OrgID.make("org-3")]],
+-    ])
+-    expect(seen).toEqual(["GET https://one.example.com/api/orgs", "GET https://two.example.com/api/orgs"])
+-  }),
+-)
+-
+-it.live("remove switches to another org when the active account is removed", () =>
+-  Effect.gen(function* () {
+-    const first = AccountID.make("user-1")
+-    const second = AccountID.make("user-2")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id: first,
+-        email: "one@example.com",
+-        url: "https://one.example.com",
+-        accessToken: AccessToken.make("at_1"),
+-        refreshToken: RefreshToken.make("rt_1"),
+-        expiry: Date.now() + outsideEagerRefreshWindow,
+-        orgID: Option.some(OrgID.make("org-1")),
+-      }),
+-    )
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id: second,
+-        email: "two@example.com",
+-        url: "https://two.example.com",
+-        accessToken: AccessToken.make("at_2"),
+-        refreshToken: RefreshToken.make("rt_2"),
+-        expiry: Date.now() + outsideEagerRefreshWindow,
+-        orgID: Option.some(OrgID.make("org-2")),
+-      }),
+-    )
+-
+-    const client = HttpClient.make((req) =>
+-      Effect.succeed(
+-        req.url === "https://one.example.com/api/orgs" ? json(req, [org("org-1", "One")]) : json(req, [], 404),
+-      ),
+-    )
+-
+-    yield* Account.use.remove(second).pipe(Effect.provide(live(client)))
+-
+-    const active = yield* AccountRepo.use.active()
+-    expect(Option.getOrThrow(active)).toEqual(
+-      expect.objectContaining({
+-        id: first,
+-        active_org_id: OrgID.make("org-1"),
+-      }),
+-    )
+-  }),
+-)
+-
+-it.live("token refresh persists the new token", () =>
+-  Effect.gen(function* () {
+-    const id = AccountID.make("user-1")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id,
+-        email: "user@example.com",
+-        url: "https://one.example.com",
+-        accessToken: AccessToken.make("at_old"),
+-        refreshToken: RefreshToken.make("rt_old"),
+-        expiry: Date.now() - 1_000,
+-        orgID: Option.none(),
+-      }),
+-    )
+-
+-    const client = HttpClient.make((req) =>
+-      Effect.succeed(
+-        req.url === "https://one.example.com/auth/device/token"
+-          ? json(req, {
+-              access_token: "at_new",
+-              refresh_token: "rt_new",
+-              expires_in: 60,
+-            })
+-          : json(req, {}, 404),
+-      ),
+-    )
+-
+-    const token = yield* Account.use.token(id).pipe(Effect.provide(live(client)))
+-
+-    expect(Option.getOrThrow(token)).toBeDefined()
+-    expect(String(Option.getOrThrow(token))).toBe("at_new")
+-
+-    const row = yield* AccountRepo.use.getRow(id)
+-    const value = Option.getOrThrow(row)
+-    expect(value.access_token).toBe(AccessToken.make("at_new"))
+-    expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
+-    expect(value.token_expiry).toBeGreaterThan(Date.now())
+-  }),
+-)
+-
+-it.live("token refreshes before expiry when inside the eager refresh window", () =>
+-  Effect.gen(function* () {
+-    const id = AccountID.make("user-1")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id,
+-        email: "user@example.com",
+-        url: "https://one.example.com",
+-        accessToken: AccessToken.make("at_old"),
+-        refreshToken: RefreshToken.make("rt_old"),
+-        expiry: Date.now() + insideEagerRefreshWindow,
+-        orgID: Option.none(),
+-      }),
+-    )
+-
+-    let refreshCalls = 0
+-    const client = HttpClient.make((req) =>
+-      Effect.promise(async () => {
+-        if (req.url === "https://one.example.com/auth/device/token") {
+-          refreshCalls += 1
+-          return json(req, {
+-            access_token: "at_new",
+-            refresh_token: "rt_new",
+-            expires_in: 60,
+-          })
+-        }
+-
+-        return json(req, {}, 404)
+-      }),
+-    )
+-
+-    const token = yield* Account.use.token(id).pipe(Effect.provide(live(client)))
+-
+-    expect(String(Option.getOrThrow(token))).toBe("at_new")
+-    expect(refreshCalls).toBe(1)
+-
+-    const row = yield* AccountRepo.use.getRow(id)
+-    const value = Option.getOrThrow(row)
+-    expect(value.access_token).toBe(AccessToken.make("at_new"))
+-    expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
+-  }),
+-)
+-
+-it.live("concurrent config and token requests coalesce token refresh", () =>
+-  Effect.gen(function* () {
+-    const id = AccountID.make("user-1")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id,
+-        email: "user@example.com",
+-        url: "https://one.example.com",
+-        accessToken: AccessToken.make("at_old"),
+-        refreshToken: RefreshToken.make("rt_old"),
+-        expiry: Date.now() - 1_000,
+-        orgID: Option.some(OrgID.make("org-9")),
+-      }),
+-    )
+-
+-    let refreshCalls = 0
+-    const client = HttpClient.make((req) =>
+-      Effect.promise(async () => {
+-        if (req.url === "https://one.example.com/auth/device/token") {
+-          refreshCalls += 1
+-
+-          if (refreshCalls === 1) {
+-            await new Promise((resolve) => setTimeout(resolve, 25))
+-            return json(req, {
+-              access_token: "at_new",
+-              refresh_token: "rt_new",
+-              expires_in: 60,
+-            })
+-          }
+-
+-          return json(
+-            req,
+-            {
+-              error: "invalid_grant",
+-              error_description: "refresh token already used",
+-            },
+-            400,
+-          )
+-        }
+-
+-        if (req.url === "https://one.example.com/api/config") {
+-          return json(req, { config: { theme: "light", seats: 5 } })
+-        }
+-
+-        return json(req, {}, 404)
+-      }),
+-    )
+-
+-    const [cfg, token] = yield* Account.Service.use((s) =>
+-      Effect.all([s.config(id, OrgID.make("org-9")), s.token(id)], { concurrency: 2 }),
+-    ).pipe(Effect.provide(live(client)))
+-
+-    expect(Option.getOrThrow(cfg)).toEqual({ theme: "light", seats: 5 })
+-    expect(String(Option.getOrThrow(token))).toBe("at_new")
+-    expect(refreshCalls).toBe(1)
+-
+-    const row = yield* AccountRepo.use.getRow(id)
+-    const value = Option.getOrThrow(row)
+-    expect(value.access_token).toBe(AccessToken.make("at_new"))
+-    expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
+-  }),
+-)
+-
+-it.live("config sends the selected org header", () =>
+-  Effect.gen(function* () {
+-    const id = AccountID.make("user-1")
+-
+-    yield* AccountRepo.Service.use((r) =>
+-      r.persistAccount({
+-        id,
+-        email: "user@example.com",
+-        url: "https://one.example.com",
+-        accessToken: AccessToken.make("at_1"),
+-        refreshToken: RefreshToken.make("rt_1"),
+-        expiry: Date.now() + outsideEagerRefreshWindow,
+-        orgID: Option.none(),
+-      }),
+-    )
+-
+-    const seen: { auth?: string; org?: string } = {}
+-    const client = HttpClient.make((req) =>
+-      Effect.gen(function* () {
+-        seen.auth = req.headers.authorization
+-        seen.org = req.headers["x-org-id"]
+-
+-        if (req.url === "https://one.example.com/api/config") {
+-          return json(req, { config: { theme: "light", seats: 5 } })
+-        }
+-
+-        return json(req, {}, 404)
+-      }),
+-    )
+-
+-    const cfg = yield* Account.Service.use((s) => s.config(id, OrgID.make("org-9"))).pipe(Effect.provide(live(client)))
+-
+-    expect(Option.getOrThrow(cfg)).toEqual({ theme: "light", seats: 5 })
+-    expect(seen).toEqual({
+-      auth: "Bearer at_1",
+-      org: "org-9",
+-    })
+-  }),
+-)
+-
+-it.live("poll stores the account and first org on success", () =>
+-  Effect.gen(function* () {
+-    const client = HttpClient.make((req) =>
+-      Effect.succeed(
+-        req.url === "https://one.example.com/auth/device/token"
+-          ? json(req, {
+-              access_token: "at_1",
+-              refresh_token: "rt_1",
+-              token_type: "Bearer",
+-              expires_in: 60,
+-            })
+-          : req.url === "https://one.example.com/api/user"
+-            ? json(req, { id: "user-1", email: "user@example.com" })
+-            : req.url === "https://one.example.com/api/orgs"
+-              ? json(req, [org("org-1", "One")])
+-              : json(req, {}, 404),
+-      ),
+-    )
+-
+-    const res = yield* Account.Service.use((s) => s.poll(login())).pipe(Effect.provide(live(client)))
+-
+-    expect(res._tag).toBe("PollSuccess")
+-    if (res._tag === "PollSuccess") {
+-      expect(res.email).toBe("user@example.com")
+-    }
+-
+-    const active = yield* AccountRepo.use.active()
+-    expect(Option.getOrThrow(active)).toEqual(
+-      expect.objectContaining({
+-        id: "user-1",
+-        email: "user@example.com",
+-        active_org_id: "org-1",
+-      }),
+-    )
+-  }),
+-)
+-
+-for (const [name, body, expectedTag] of [
+-  [
+-    "pending",
+-    {
+-      error: "authorization_pending",
+-      error_description: "The authorization request is still pending",
+-    },
+-    "PollPending",
+-  ],
+-  [
+-    "slow",
+-    {
+-      error: "slow_down",
+-      error_description: "Polling too frequently, please slow down",
+-    },
+-    "PollSlow",
+-  ],
+-  [
+-    "denied",
+-    {
+-      error: "access_denied",
+-      error_description: "The authorization request was denied",
+-    },
+-    "PollDenied",
+-  ],
+-  [
+-    "expired",
+-    {
+-      error: "expired_token",
+-      error_description: "The device code has expired",
+-    },
+-    "PollExpired",
+-  ],
+-] as const) {
+-  it.live(`poll returns ${name} for ${body.error}`, () =>
+-    Effect.gen(function* () {
+-      const result = yield* poll(body)
+-      expect(result._tag).toBe(expectedTag)
+-    }),
+-  )
+-}
+-
+-it.live("poll returns poll error for other OAuth errors", () =>
+-  Effect.gen(function* () {
+-    const result = yield* poll({
+-      error: "server_error",
+-      error_description: "An unexpected error occurred",
+-    })
+-
+-    expect(result._tag).toBe("PollError")
+-    if (result._tag === "PollError") {
+-      expect(String(result.cause)).toContain("server_error")
+-    }
+-  }),
+-)
+diff --git a/packages/opencode/test/agent/plugin-agent-regression.test.ts b/packages/opencode/test/agent/plugin-agent-regression.test.ts
+index 0249aaeb84..979fc11c4b 100644
+--- a/packages/opencode/test/agent/plugin-agent-regression.test.ts
++++ b/packages/opencode/test/agent/plugin-agent-regression.test.ts
+@@ -4,13 +4,11 @@ import { Effect } from "effect"
+ import path from "path"
+ import { pathToFileURL } from "url"
+ import { Agent } from "../../src/agent/agent"
+-import { Account } from "../../src/account/account"
+ import { Auth } from "../../src/auth"
+ import { RuntimeFlags } from "../../src/effect/runtime-flags"
+ import { Plugin } from "../../src/plugin"
+ import { Provider } from "../../src/provider/provider"
+ import { Skill } from "../../src/skill"
+-import { AccountTest } from "../fake/account"
+ import { AuthTest } from "../fake/auth"
+ import { NpmTest } from "../fake/npm"
+ import { ProviderTest } from "../fake/provider"
+@@ -29,7 +27,6 @@ const provider = ProviderTest.fake()
+ const it = testEffect(
+   AppNodeBuilder.build(LayerNode.group([Agent.node, Plugin.node]), [
+     [Auth.node, AuthTest.empty],
+-    [Account.node, AccountTest.empty],
+     [Npm.node, NpmTest.noop],
+     [Provider.node, provider.layer],
+     [Skill.node, SkillTest.empty],
+diff --git a/packages/opencode/test/cli/account.test.ts b/packages/opencode/test/cli/account.test.ts
+deleted file mode 100644
+index dfce3bffe6..0000000000
+--- a/packages/opencode/test/cli/account.test.ts
++++ /dev/null
+@@ -1,30 +0,0 @@
+-import { describe, expect, test } from "bun:test"
+-import stripAnsi from "strip-ansi"
+-
+-import { defaultConsoleUrl, formatAccountLabel, formatOrgLine } from "../../src/cli/cmd/account"
+-
+-describe("console account display", () => {
+-  test("uses opencode.ai/console as the default login URL", () => {
+-    expect(defaultConsoleUrl).toBe("https://opencode.ai/console")
+-  })
+-
+-  test("includes the account url in account labels", () => {
+-    expect(stripAnsi(formatAccountLabel({ email: "one@example.com", url: "https://one.example.com" }, false))).toBe(
+-      "one@example.com https://one.example.com",
+-    )
+-  })
+-
+-  test("includes the active marker in account labels", () => {
+-    expect(stripAnsi(formatAccountLabel({ email: "one@example.com", url: "https://one.example.com" }, true))).toBe(
+-      "one@example.com https://one.example.com (active)",
+-    )
+-  })
+-
+-  test("includes the account url in org rows", () => {
+-    expect(
+-      stripAnsi(
+-        formatOrgLine({ email: "one@example.com", url: "https://one.example.com" }, { id: "org-1", name: "One" }, true),
+-      ),
+-    ).toBe("  ● One  one@example.com  https://one.example.com  org-1")
+-  })
+-})
+diff --git a/packages/opencode/test/cli/error.test.ts b/packages/opencode/test/cli/error.test.ts
+index b29ca2b3ba..7541602c67 100644
+--- a/packages/opencode/test/cli/error.test.ts
++++ b/packages/opencode/test/cli/error.test.ts
+@@ -1,5 +1,4 @@
+ import { describe, expect, test } from "bun:test"
+-import { AccountTransportError } from "../../src/account/schema"
+ import { FormatError } from "../../src/cli/error"
+ import { UI } from "../../src/cli/ui"
+ 
+@@ -51,19 +50,6 @@ describe("cli.error", () => {
+     expect(FormatError({ _tag: "ConfigJsonError", ...data })).toBe(expected)
+   })
+ 
+-  test("formats account transport errors clearly", () => {
+-    const error = new AccountTransportError({
+-      method: "POST",
+-      url: "https://console.opencode.ai/auth/device/code",
+-    })
+-
+-    const formatted = FormatError(error)
+-
+-    expect(formatted).toContain("Could not reach POST https://console.opencode.ai/auth/device/code.")
+-    expect(formatted).toContain("This failed before the server returned an HTTP response.")
+-    expect(formatted).toContain("Check your network, proxy, or VPN configuration and try again.")
+-  })
+-
+   test("formats legacy and tagged provider model errors the same way", () => {
+     const data = {
+       providerID: "anthropic",
+diff --git a/packages/opencode/test/config/config.test.ts b/packages/opencode/test/config/config.test.ts
+index b01608ecbf..ff6b7c0387 100644
+--- a/packages/opencode/test/config/config.test.ts
++++ b/packages/opencode/test/config/config.test.ts
+@@ -15,8 +15,6 @@ import { Npm } from "@opencode-ai/core/npm"
+ import { InstanceRef } from "../../src/effect/instance-ref"
+ import type { InstanceContext } from "../../src/project/instance-context"
+ import { Auth } from "../../src/auth"
+-import { Account } from "../../src/account/account"
+-import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
+ import { FSUtil } from "@opencode-ai/core/fs-util"
+ import { Env } from "../../src/env"
+ import {
+@@ -40,7 +38,6 @@ import { ProjectV2 } from "@opencode-ai/core/project"
+ import { Filesystem } from "@/util/filesystem"
+ import { ConfigPlugin } from "@/config/plugin"
+ import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
+-import { AccountTest } from "../fake/account"
+ import { AuthTest } from "../fake/auth"
+ import { NpmTest } from "../fake/npm"
+ 
+@@ -96,13 +93,11 @@ function remoteConfigClient(input: {
+ const configLayer = (
+   options: {
+     auth?: Layer.Layer<Auth.Service>
+-    account?: Layer.Layer<Account.Service>
+     client?: HttpClient.HttpClient
+   } = {},
+ ) =>
+   LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
+     [Auth.node, options.auth ?? AuthTest.empty],
+-    [Account.node, options.account ?? AccountTest.empty],
+     [Npm.node, NpmTest.noop],
+     [httpClient, Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)],
+   ])
+@@ -732,49 +727,6 @@ it.instance("handles file inclusion with replacement tokens", () =>
+   }),
+ )
+ 
+-const accountTokenIt = configIt({
+-  account: Layer.mock(Account.Service)({
+-    active: () =>
+-      Effect.succeed(
+-        Option.some({
+-          id: AccountID.make("account-1"),
+-          email: "user@example.com",
+-          url: "https://control.example.com",
+-          active_org_id: OrgID.make("org-1"),
+-        }),
+-      ),
+-    activeOrg: () =>
+-      Effect.succeed(
+-        Option.some({
+-          account: {
+-            id: AccountID.make("account-1"),
+-            email: "user@example.com",
+-            url: "https://control.example.com",
+-            active_org_id: OrgID.make("org-1"),
+-          },
+-          org: {
+-            id: OrgID.make("org-1"),
+-            name: "Example Org",
+-          },
+-        }),
+-      ),
+-    config: () =>
+-      Effect.succeed(
+-        Option.some({
+-          provider: { opencode: { options: { apiKey: "{env:OPENCODE_CONSOLE_TOKEN}" } } },
+-        }),
+-      ),
+-    token: () => Effect.succeed(Option.some(AccessToken.make("st_test_token"))),
+-  }),
+-})
+-
+-accountTokenIt.instance("resolves env templates in account config with account token", () =>
+-  Effect.gen(function* () {
+-    const config = yield* Config.use.get()
+-    expect(config.provider?.["opencode"]?.options?.apiKey).toBe("st_test_token")
+-  }),
+-)
+-
+ it.instance("validates config schema and throws on invalid values", () =>
+   Effect.gen(function* () {
+     const test = yield* TestInstance
+@@ -1707,7 +1659,6 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
+         Layer.mergeAll(
+           LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
+             [Auth.node, wellKnownAuth(server.url.origin)],
+-            [Account.node, AccountTest.empty],
+             [Npm.node, NpmTest.noop],
+             [httpClient, FetchHttpClient.layer],
+           ]),
+diff --git a/packages/opencode/test/config/v2-compat.test.ts b/packages/opencode/test/config/v2-compat.test.ts
+index 81a240cd72..ecf2a053f6 100644
+--- a/packages/opencode/test/config/v2-compat.test.ts
++++ b/packages/opencode/test/config/v2-compat.test.ts
+@@ -8,13 +8,11 @@ import { Npm } from "@opencode-ai/core/npm"
+ import { Effect, Layer, Logger } from "effect"
+ import { HttpClient } from "effect/unstable/http"
+ import path from "path"
+-import { Account } from "../../src/account/account"
+ import { Auth } from "../../src/auth"
+ import { Config } from "../../src/config/config"
+ import { ConfigParse } from "../../src/config/parse"
+ import { ConfigV2Compat } from "../../src/config/v2-compat"
+ import { Env } from "../../src/env"
+-import { AccountTest } from "../fake/account"
+ import { AuthTest } from "../fake/auth"
+ import { NpmTest } from "../fake/npm"
+ import { TestInstance } from "../fixture/fixture"
+@@ -27,7 +25,6 @@ const lower = (input: unknown) => ConfigParse.schema(ConfigV1.Info, ConfigV2Comp
+ const it = testEffect(
+   LayerNode.compile(LayerNode.group([Config.node, FSUtil.node, Env.node, CrossSpawnSpawner.node]), [
+     [Auth.node, AuthTest.empty],
+-    [Account.node, AccountTest.empty],
+     [Npm.node, NpmTest.noop],
+     [
+       httpClient,
+diff --git a/packages/opencode/test/fake/account.ts b/packages/opencode/test/fake/account.ts
+deleted file mode 100644
+index aeaa0735bc..0000000000
+--- a/packages/opencode/test/fake/account.ts
++++ /dev/null
+@@ -1,9 +0,0 @@
+-import { Effect, Layer, Option } from "effect"
+-import { Account } from "../../src/account/account"
+-
+-export const empty = Layer.mock(Account.Service)({
+-  active: () => Effect.succeed(Option.none()),
+-  activeOrg: () => Effect.succeed(Option.none()),
+-})
+-
+-export * as AccountTest from "./account"
+diff --git a/packages/opencode/test/fixture/config.ts b/packages/opencode/test/fixture/config.ts
+index 7113352138..cff4839bcc 100644
+--- a/packages/opencode/test/fixture/config.ts
++++ b/packages/opencode/test/fixture/config.ts
+@@ -1,12 +1,10 @@
+ import { Config } from "@/config/config"
+-import { emptyConsoleState } from "@opencode-ai/core/v1/config/console-state"
+ import { Effect, Layer } from "effect"
+ 
+ export function make(overrides: Partial<Config.Interface> = {}) {
+   return Config.Service.of({
+     get: () => Effect.succeed({}),
+     getGlobal: () => Effect.succeed({}),
+-    getConsoleState: () => Effect.succeed(emptyConsoleState),
+     update: () => Effect.void,
+     updateGlobal: (config) => Effect.succeed({ info: config, changed: false }),
+     invalidate: () => Effect.void,
+diff --git a/packages/opencode/test/plugin/trigger.test.ts b/packages/opencode/test/plugin/trigger.test.ts
+index 07fd8e2f21..72e706c8f2 100644
+--- a/packages/opencode/test/plugin/trigger.test.ts
++++ b/packages/opencode/test/plugin/trigger.test.ts
+@@ -4,14 +4,12 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+ import { Npm } from "@opencode-ai/core/npm"
+ import path from "path"
+ import { pathToFileURL } from "url"
+-import { Account } from "../../src/account/account"
+ import { Auth } from "../../src/auth"
+ import { RuntimeFlags } from "../../src/effect/runtime-flags"
+ import { Plugin } from "../../src/plugin/index"
+ 
+ import { TestInstance } from "../fixture/fixture"
+ import { testEffect } from "../lib/effect"
+-import { AccountTest } from "../fake/account"
+ import { AuthTest } from "../fake/auth"
+ import { NpmTest } from "../fake/npm"
+ import { ProviderV2 } from "@opencode-ai/core/provider"
+@@ -22,7 +20,6 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+ const it = testEffect(
+   AppNodeBuilder.build(LayerNode.group([Plugin.node, CrossSpawnSpawner.node]), [
+     [Auth.node, AuthTest.empty],
+-    [Account.node, AccountTest.empty],
+     [Npm.node, NpmTest.noop],
+     [RuntimeFlags.node, RuntimeFlags.layer({ disableDefaultPlugins: true })],
+   ]),
+diff --git a/packages/opencode/test/plugin/workspace-adapter.test.ts b/packages/opencode/test/plugin/workspace-adapter.test.ts
+index a8dd172521..918077cfca 100644
+--- a/packages/opencode/test/plugin/workspace-adapter.test.ts
++++ b/packages/opencode/test/plugin/workspace-adapter.test.ts
+@@ -5,7 +5,6 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
+ import path from "path"
+ import { pathToFileURL } from "url"
+ import { Auth } from "../../src/auth"
+-import { Account } from "../../src/account/account"
+ import { RuntimeFlags } from "../../src/effect/runtime-flags"
+ import { Workspace } from "../../src/control-plane/workspace"
+ import { Plugin } from "../../src/plugin/index"
+@@ -14,7 +13,6 @@ import { InstanceStore } from "../../src/project/instance-store"
+ import { InstanceState } from "../../src/effect/instance-state"
+ import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+ import { testEffect } from "../lib/effect"
+-import { AccountTest } from "../fake/account"
+ import { AuthTest } from "../fake/auth"
+ import { NpmTest } from "../fake/npm"
+ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+@@ -24,7 +22,6 @@ const noopBootstrapLayer = Layer.succeed(InstanceBootstrap.Service, InstanceBoot
+ const it = testEffect(
+   AppNodeBuilder.build(LayerNode.group([Plugin.node, Workspace.node, InstanceStore.node, Ripgrep.node]), [
+     [Auth.node, AuthTest.empty],
+-    [Account.node, AccountTest.empty],
+     [Npm.node, NpmTest.noop],
+     [InstanceStore.bootstrapNode, noopBootstrapLayer],
+     [RuntimeFlags.node, RuntimeFlags.layer({ disableDefaultPlugins: true, experimentalWorkspaces: true })],
+diff --git a/packages/opencode/test/server/httpapi-experimental.test.ts b/packages/opencode/test/server/httpapi-experimental.test.ts
+index 7185157338..0678099fc4 100644
+--- a/packages/opencode/test/server/httpapi-experimental.test.ts
++++ b/packages/opencode/test/server/httpapi-experimental.test.ts
+@@ -8,8 +8,6 @@ import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/grou
+ import { Session } from "@/session/session"
+ import { SessionTable } from "@opencode-ai/core/session/sql"
+ import { Database } from "@opencode-ai/core/database/database"
+-import { AccountV2 } from "@opencode-ai/core/account"
+-import { AccountTable } from "@opencode-ai/core/account/sql"
+ import { Worktree } from "../../src/worktree"
+ import { resetDatabase } from "../fixture/db"
+ import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+@@ -53,36 +51,6 @@ function waitReady(input: { directory?: string; name?: string }) {
+   })
+ }
+ 
+-function insertAccount() {
+-  return Effect.acquireRelease(
+-    Effect.gen(function* () {
+-      const { db } = yield* Database.Service
+-      yield* db
+-        .insert(AccountTable)
+-        .values({
+-          id: AccountV2.ID.make("account-test"),
+-          email: "test@example.com",
+-          url: "https://console.example.com",
+-          access_token: AccountV2.AccessToken.make("access"),
+-          refresh_token: AccountV2.RefreshToken.make("refresh"),
+-          time_created: Date.now(),
+-          time_updated: Date.now(),
+-        })
+-        .run()
+-        .pipe(Effect.orDie)
+-      return "account-test"
+-    }),
+-    (id) =>
+-      Database.Service.use(({ db }) =>
+-        db
+-          .delete(AccountTable)
+-          .where(eq(AccountTable.id, AccountV2.ID.make(id)))
+-          .run()
+-          .pipe(Effect.orDie),
+-      ),
+-  )
+-}
+-
+ function setSessionUpdated(session: Session.Info, updated: number) {
+   return Effect.gen(function* () {
+     const { db } = yield* Database.Service
+@@ -143,10 +111,8 @@ describe("experimental HttpApi", () => {
+       Effect.gen(function* () {
+         const tmp = yield* TestInstance
+         const directory = tmp.directory
+-        const [consoleState, consoleOrgs, toolList, toolIDs, worktrees, resources] = yield* Effect.all(
++        const [toolList, toolIDs, worktrees, resources] = yield* Effect.all(
+           [
+-            request(ExperimentalPaths.console, directory),
+-            request(ExperimentalPaths.consoleOrgs, directory),
+             request(`${ExperimentalPaths.tool}?provider=opencode&model=gpt-5`, directory),
+             request(ExperimentalPaths.toolIDs, directory),
+             request(ExperimentalPaths.worktree, directory),
+@@ -155,15 +121,6 @@ describe("experimental HttpApi", () => {
+           { concurrency: "unbounded" },
+         )
+ 
+-        expect(consoleState.status).toBe(200)
+-        expect(yield* json(consoleState)).toEqual({
+-          consoleManagedProviders: [],
+-          switchableOrgCount: 0,
+-        })
+-
+-        expect(consoleOrgs.status).toBe(200)
+-        expect(yield* json(consoleOrgs)).toEqual({ orgs: [] })
+-
+         expect(toolList.status).toBe(200)
+         expect(yield* json<unknown[]>(toolList)).toContainEqual(
+           expect.objectContaining({
+@@ -213,24 +170,6 @@ describe("experimental HttpApi", () => {
+     }),
+   )
+ 
+-  it.instance(
+-    "serves Console org switch through the default server app",
+-    () =>
+-      Effect.gen(function* () {
+-        const tmp = yield* TestInstance
+-        const accountID = yield* insertAccount()
+-        const switched = yield* request(ExperimentalPaths.consoleSwitch, tmp.directory, {
+-          method: "POST",
+-          headers: { "content-type": "application/json" },
+-          body: JSON.stringify({ accountID, orgID: "org-test" }),
+-        })
+-
+-        expect(switched.status).toBe(200)
+-        expect(yield* json(switched)).toBe(true)
+-      }),
+-    { config: { formatter: false } },
+-  )
+-
+   it.instance(
+     "serves global session list through the default server app",
+     () =>
+diff --git a/packages/sdk/js/src/v2/gen/sdk.gen.ts b/packages/sdk/js/src/v2/gen/sdk.gen.ts
+index b9f01ddd81..d6e7df5342 100644
+--- a/packages/sdk/js/src/v2/gen/sdk.gen.ts
++++ b/packages/sdk/js/src/v2/gen/sdk.gen.ts
+@@ -31,11 +31,6 @@ import type {
+   EventTuiToastShow,
+   ExperimentalCapabilitiesGetErrors,
+   ExperimentalCapabilitiesGetResponses,
+-  ExperimentalConsoleGetErrors,
+-  ExperimentalConsoleGetResponses,
+-  ExperimentalConsoleListOrgsErrors,
+-  ExperimentalConsoleListOrgsResponses,
+-  ExperimentalConsoleSwitchOrgResponses,
+   ExperimentalControlPlaneMoveSessionErrors,
+   ExperimentalControlPlaneMoveSessionResponses,
+   ExperimentalProjectCopyGenerateNameErrors,
+@@ -683,115 +678,6 @@ export class Capabilities extends HeyApiClient {
+   }
+ }
+ 
+-export class Console extends HeyApiClient {
+-  /**
+-   * Get active Console provider metadata
+-   *
+-   * Get the active Console org name and the set of provider IDs managed by that Console org.
+-   */
+-  public get<ThrowOnError extends boolean = false>(
+-    parameters?: {
+-      directory?: string
+-      workspace?: string
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "query", key: "directory" },
+-            { in: "query", key: "workspace" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).get<
+-      ExperimentalConsoleGetResponses,
+-      ExperimentalConsoleGetErrors,
+-      ThrowOnError
+-    >({
+-      url: "/experimental/console",
+-      ...options,
+-      ...params,
+-    })
+-  }
+-
+-  /**
+-   * List switchable Console orgs
+-   *
+-   * Get the available Console orgs across logged-in accounts, including the current active org.
+-   */
+-  public listOrgs<ThrowOnError extends boolean = false>(
+-    parameters?: {
+-      directory?: string
+-      workspace?: string
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "query", key: "directory" },
+-            { in: "query", key: "workspace" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).get<
+-      ExperimentalConsoleListOrgsResponses,
+-      ExperimentalConsoleListOrgsErrors,
+-      ThrowOnError
+-    >({
+-      url: "/experimental/console/orgs",
+-      ...options,
+-      ...params,
+-    })
+-  }
+-
+-  /**
+-   * Switch active Console org
+-   *
+-   * Persist a new active Console account/org selection for the current local OpenCode state.
+-   */
+-  public switchOrg<ThrowOnError extends boolean = false>(
+-    parameters?: {
+-      directory?: string
+-      workspace?: string
+-      accountID?: string
+-      orgID?: string
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "query", key: "directory" },
+-            { in: "query", key: "workspace" },
+-            { in: "body", key: "accountID" },
+-            { in: "body", key: "orgID" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).post<ExperimentalConsoleSwitchOrgResponses, unknown, ThrowOnError>({
+-      url: "/experimental/console/switch",
+-      ...options,
+-      ...params,
+-      headers: {
+-        "Content-Type": "application/json",
+-        ...options?.headers,
+-        ...params.headers,
+-      },
+-    })
+-  }
+-}
+-
+ export class Session extends HeyApiClient {
+   /**
+    * List sessions
+@@ -1241,11 +1127,6 @@ export class Experimental extends HeyApiClient {
+     return (this._capabilities ??= new Capabilities({ client: this.client }))
+   }
+ 
+-  private _console?: Console
+-  get console(): Console {
+-    return (this._console ??= new Console({ client: this.client }))
+-  }
+-
+   private _session?: Session
+   get session(): Session {
+     return (this._session ??= new Session({ client: this.client }))
+diff --git a/packages/sdk/js/src/v2/gen/types.gen.ts b/packages/sdk/js/src/v2/gen/types.gen.ts
+index f1ccddf41a..385987c710 100644
+--- a/packages/sdk/js/src/v2/gen/types.gen.ts
++++ b/packages/sdk/js/src/v2/gen/types.gen.ts
+@@ -2083,12 +2083,6 @@ export type ExperimentalCapabilities = {
+   backgroundSubagents: boolean
+ }
+ 
+-export type ConsoleState = {
+-  consoleManagedProviders: Array<string>
+-  activeOrgName?: string
+-  switchableOrgCount: number
+-}
+-
+ export type EffectHttpApiErrorInternalServerError = {
+   _tag: "InternalServerError"
+ }
+@@ -7351,103 +7345,8 @@ export type ExperimentalCapabilitiesGetResponses = {
+ export type ExperimentalCapabilitiesGetResponse =
+   ExperimentalCapabilitiesGetResponses[keyof ExperimentalCapabilitiesGetResponses]
+ 
+-export type ExperimentalConsoleGetData = {
+-  body?: never
+-  path?: never
+-  query?: {
+-    directory?: string
+-    workspace?: string
+-  }
+-  url: "/experimental/console"
+-}
+-
+-export type ExperimentalConsoleGetErrors = {
+-  /**
+-   * Bad request
+-   */
+-  400: BadRequestError
+-  /**
+-   * InternalServerError
+-   */
+-  500: EffectHttpApiErrorInternalServerError
+-}
+-
+-export type ExperimentalConsoleGetError = ExperimentalConsoleGetErrors[keyof ExperimentalConsoleGetErrors]
+-
+-export type ExperimentalConsoleGetResponses = {
+-  /**
+-   * Active Console provider metadata
+-   */
+-  200: ConsoleState
+-}
+-
+-export type ExperimentalConsoleGetResponse = ExperimentalConsoleGetResponses[keyof ExperimentalConsoleGetResponses]
+-
+-export type ExperimentalConsoleListOrgsData = {
+-  body?: never
+-  path?: never
+-  query?: {
+-    directory?: string
+-    workspace?: string
+-  }
+-  url: "/experimental/console/orgs"
+-}
+ 
+-export type ExperimentalConsoleListOrgsErrors = {
+-  /**
+-   * Bad request
+-   */
+-  400: BadRequestError
+-  /**
+-   * InternalServerError
+-   */
+-  500: EffectHttpApiErrorInternalServerError
+-}
+-
+-export type ExperimentalConsoleListOrgsError =
+-  ExperimentalConsoleListOrgsErrors[keyof ExperimentalConsoleListOrgsErrors]
+-
+-export type ExperimentalConsoleListOrgsResponses = {
+-  /**
+-   * Switchable Console orgs
+-   */
+-  200: {
+-    orgs: Array<{
+-      accountID: string
+-      accountEmail: string
+-      accountUrl: string
+-      orgID: string
+-      orgName: string
+-      active: boolean
+-    }>
+-  }
+-}
+-
+-export type ExperimentalConsoleListOrgsResponse =
+-  ExperimentalConsoleListOrgsResponses[keyof ExperimentalConsoleListOrgsResponses]
+-
+-export type ExperimentalConsoleSwitchOrgData = {
+-  body?: {
+-    accountID: string
+-    orgID: string
+-  }
+-  path?: never
+-  query?: {
+-    directory?: string
+-    workspace?: string
+-  }
+-  url: "/experimental/console/switch"
+-}
+-
+-export type ExperimentalConsoleSwitchOrgResponses = {
+-  /**
+-   * Switch success
+-   */
+-  200: boolean
+-}
+ 
+-export type ExperimentalConsoleSwitchOrgResponse =
+-  ExperimentalConsoleSwitchOrgResponses[keyof ExperimentalConsoleSwitchOrgResponses]
+ 
+ export type ToolListData = {
+   body?: never
+diff --git a/packages/tui/src/app.tsx b/packages/tui/src/app.tsx
+index 25b2cc4afa..d7b548547b 100644
+--- a/packages/tui/src/app.tsx
++++ b/packages/tui/src/app.tsx
+@@ -49,7 +49,6 @@ import { DialogHelp } from "./ui/dialog-help"
+ import { DialogAgent } from "./component/dialog-agent"
+ import { DialogSessionList } from "./component/dialog-session-list"
+ import { DialogWorkspaceList } from "./component/dialog-workspace-list"
+-import { DialogConsoleOrg } from "./component/dialog-console-org"
+ import { ThemeProvider, useTheme } from "./context/theme"
+ import { Home } from "./routes/home"
+ import { Session } from "./routes/session"
+@@ -728,21 +727,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
+         },
+         category: "Provider",
+       },
+-      ...(sync.data.console_state.switchableOrgCount > 1
+-        ? [
+-            {
+-              name: "console.org.switch",
+-              title: "Switch org",
+-              suggested: Boolean(sync.data.console_state.activeOrgName),
+-              slashName: "org",
+-              slashAliases: ["orgs", "switch-org"],
+-              run: () => {
+-                dialog.replace(() => <DialogConsoleOrg />)
+-              },
+-              category: "Provider",
+-            },
+-          ]
+-        : []),
+       {
+         name: "opencode.status",
+         title: "View status",
+diff --git a/packages/tui/src/component/dialog-console-org.tsx b/packages/tui/src/component/dialog-console-org.tsx
+deleted file mode 100644
+index 1f6ef5c746..0000000000
+--- a/packages/tui/src/component/dialog-console-org.tsx
++++ /dev/null
+@@ -1,135 +0,0 @@
+-import { createResource, createMemo, createSignal } from "solid-js"
+-import { TextAttributes } from "@opentui/core"
+-import { DialogSelect } from "../ui/dialog-select"
+-import { useSDK } from "../context/sdk"
+-import { useDialog } from "../ui/dialog"
+-import { useToast } from "../ui/toast"
+-import { useTheme } from "../context/theme"
+-import { errorMessage } from "../util/error"
+-import type { ExperimentalConsoleListOrgsResponse } from "@opencode-ai/sdk/v2"
+-
+-type OrgOption = ExperimentalConsoleListOrgsResponse["orgs"][number]
+-
+-const accountHost = (url: string) => {
+-  try {
+-    return new URL(url).host
+-  } catch {
+-    return url
+-  }
+-}
+-
+-const accountLabel = (item: Pick<OrgOption, "accountEmail" | "accountUrl">) =>
+-  `${item.accountEmail}  ${accountHost(item.accountUrl)}`
+-
+-export function DialogConsoleOrg() {
+-  const sdk = useSDK()
+-  const dialog = useDialog()
+-  const toast = useToast()
+-  const { theme } = useTheme()
+-
+-  const [loadError, setLoadError] = createSignal<unknown>()
+-
+-  const [orgs] = createResource(() =>
+-    sdk.client.experimental.console
+-      .listOrgs({}, { throwOnError: true })
+-      .then((result) => result.data?.orgs ?? [])
+-      // Catch so the rejected resource never reaches the memos below: reading
+-      // orgs() in an errored state re-throws and tears down the dialog.
+-      .catch((error) => {
+-        setLoadError(error)
+-        return undefined
+-      }),
+-  )
+-
+-  const showError = createMemo(() => Boolean(loadError()))
+-
+-  const current = createMemo(() => orgs()?.find((item) => item.active))
+-
+-  const options = createMemo(() => {
+-    if (showError()) return []
+-    const listed = orgs()
+-    if (listed === undefined) {
+-      return [
+-        {
+-          title: "Loading orgs…",
+-          value: "loading",
+-          onSelect: () => {},
+-        },
+-      ]
+-    }
+-
+-    if (listed.length === 0) {
+-      return [
+-        {
+-          title: "No orgs found",
+-          value: "empty",
+-          onSelect: () => {},
+-        },
+-      ]
+-    }
+-
+-    return listed
+-      .toSorted((a, b) => {
+-        const activeAccountA = a.active ? 0 : 1
+-        const activeAccountB = b.active ? 0 : 1
+-        if (activeAccountA !== activeAccountB) return activeAccountA - activeAccountB
+-
+-        const accountCompare = accountLabel(a).localeCompare(accountLabel(b))
+-        if (accountCompare !== 0) return accountCompare
+-
+-        return a.orgName.localeCompare(b.orgName)
+-      })
+-      .map((item) => ({
+-        title: item.orgName,
+-        value: item,
+-        category: accountLabel(item),
+-        categoryView: (
+-          <box flexDirection="row" gap={2}>
+-            <text fg={theme.accent}>{item.accountEmail}</text>
+-            <text fg={theme.textMuted}>{accountHost(item.accountUrl)}</text>
+-          </box>
+-        ),
+-        onSelect: async () => {
+-          if (item.active) {
+-            dialog.clear()
+-            return
+-          }
+-
+-          await sdk.client.experimental.console.switchOrg(
+-            {
+-              accountID: item.accountID,
+-              orgID: item.orgID,
+-            },
+-            { throwOnError: true },
+-          )
+-
+-          await sdk.client.instance.dispose()
+-          toast.show({
+-            message: `Switched to ${item.orgName}`,
+-            variant: "info",
+-          })
+-          dialog.clear()
+-        },
+-      }))
+-  })
+-
+-  return (
+-    <DialogSelect<string | OrgOption>
+-      title="Switch org"
+-      options={options()}
+-      current={current()}
+-      renderFilter={!showError()}
+-      locked={showError()}
+-      emptyView={
+-        showError() ? (
+-          <box paddingLeft={4} paddingRight={4}>
+-            <text fg={theme.error} attributes={TextAttributes.BOLD}>
+-              Could not load orgs
+-            </text>
+-            <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
+-          </box>
+-        ) : undefined
+-      }
+-    />
+-  )
+-}
+diff --git a/packages/tui/src/component/dialog-provider.tsx b/packages/tui/src/component/dialog-provider.tsx
+index 6b86a32e34..15b6a0595f 100644
+--- a/packages/tui/src/component/dialog-provider.tsx
++++ b/packages/tui/src/component/dialog-provider.tsx
+@@ -11,7 +11,6 @@ import { TextAttributes } from "@opentui/core"
+ import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2"
+ import { DialogModel } from "./dialog-model"
+ import { useToast } from "../ui/toast"
+-import { isConsoleManagedProvider } from "../util/provider-origin"
+ import { useConnected } from "./use-connected"
+ import { useBindings } from "../keymap"
+ import { useClipboard } from "../context/clipboard"
+@@ -132,18 +131,15 @@ export function createDialogProviderOptions() {
+         }
+ 
+         const providerID = provider.providerID
+-        const consoleManaged = isConsoleManagedProvider(sync.data.console_state.consoleManagedProviders, providerID)
+         const connected = sync.data.provider_next.connected.includes(providerID)
+ 
+         return {
+           title: provider.title,
+           value: provider.value,
+           description: provider.description,
+-          footer: consoleManaged ? sync.data.console_state.activeOrgName : undefined,
+           category: provider.category,
+           gutter: connected && onboarded() ? () => <text fg={theme.success}>✓</text> : undefined,
+           async onSelect() {
+-            if (consoleManaged) return
+ 
+             const methods = sync.data.provider_auth[providerID] ?? [
+               {
+diff --git a/packages/tui/src/context/sync.tsx b/packages/tui/src/context/sync.tsx
+index 0ac633579f..35f2e42c5d 100644
+--- a/packages/tui/src/context/sync.tsx
++++ b/packages/tui/src/context/sync.tsx
+@@ -17,7 +17,6 @@ import type {
+   ProviderAuthMethod,
+   VcsInfo,
+   SnapshotFileDiff,
+-  ConsoleState,
+ } from "@opencode-ai/sdk/v2"
+ import { createStore, produce, reconcile } from "solid-js/store"
+ import { useProject } from "./project"
+@@ -32,11 +31,6 @@ import path from "path"
+ import { useKV } from "./kv"
+ import { usePermission } from "./permission"
+ 
+-const emptyConsoleState: ConsoleState = {
+-  consoleManagedProviders: [],
+-  switchableOrgCount: 0,
+-}
+-
+ function search<T>(items: T[], target: string, key: (item: T) => string) {
+   let left = 0
+   let right = items.length - 1
+@@ -71,7 +65,6 @@ export const {
+       provider: Provider[]
+       provider_default: Record<string, string>
+       provider_next: ProviderListResponse
+-      console_state: ConsoleState
+       capabilities: {
+         experimentalBackgroundSubagents: boolean
+       }
+@@ -115,7 +108,6 @@ export const {
+         default: {},
+         connected: [],
+       },
+-      console_state: emptyConsoleState,
+       capabilities: {
+         experimentalBackgroundSubagents: false,
+       },
+@@ -452,10 +444,6 @@ export const {
+         .get({ workspace }, { throwOnError: true })
+         .then((x) => x.data)
+         .catch(() => undefined)
+-      const consoleStatePromise = sdk.client.experimental.console
+-        .get({ workspace }, { throwOnError: true })
+-        .then((x) => x.data)
+-        .catch(() => emptyConsoleState)
+       const agentsPromise = sdk.client.app.agents({ workspace }, { throwOnError: true })
+       const configPromise = sdk.client.config.get({ workspace }, { throwOnError: true })
+       await Promise.all([
+@@ -471,7 +459,6 @@ export const {
+           const providersResponse = providersPromise.then((x) => x.data!)
+           const providerListResponse = providerListPromise.then((x) => x.data!)
+           const capabilitiesResponse = capabilitiesPromise
+-          const consoleStateResponse = consoleStatePromise
+           const agentsResponse = agentsPromise.then((x) => x.data ?? [])
+           const configResponse = configPromise.then((x) => x.data!)
+           const sessionListResponse = args.continue ? sessionListPromise : undefined
+@@ -480,7 +467,6 @@ export const {
+             providersResponse,
+             providerListResponse,
+             capabilitiesResponse,
+-            consoleStateResponse,
+             agentsResponse,
+             configResponse,
+             ...(sessionListResponse ? [sessionListResponse] : []),
+@@ -488,17 +474,15 @@ export const {
+             const providers = responses[0]
+             const providerList = responses[1]
+             const capabilities = responses[2]
+-            const consoleState = responses[3]
+-            const agents = responses[4]
+-            const config = responses[5]
+-            const sessions = responses[6]
++            const agents = responses[3]
++            const config = responses[4]
++            const sessions = responses[5]
+ 
+             batch(() => {
+               setStore("provider", reconcile(providers.providers))
+               setStore("provider_default", reconcile(providers.default))
+               setStore("provider_next", reconcile(providerList))
+               setStore("capabilities", "experimentalBackgroundSubagents", capabilities?.backgroundSubagents === true)
+-              setStore("console_state", reconcile(consoleState))
+               setStore("agent", reconcile(agents))
+               setStore("config", reconcile(config))
+               if (sessions !== undefined) setStore("session", reconcile(sessions))
+@@ -510,7 +494,6 @@ export const {
+           // non-blocking
+           void Promise.all([
+             ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
+-            consoleStatePromise.then((consoleState) => setStore("console_state", reconcile(consoleState))),
+             sdk.client.command.list({ workspace }).then((x) => setStore("command", reconcile(x.data ?? []))),
+             sdk.client.mcp.status({ workspace }).then((x) => setStore("mcp", reconcile(x.data ?? {}))),
+             sdk.client.experimental.resource
+diff --git a/packages/tui/src/util/provider-origin.ts b/packages/tui/src/util/provider-origin.ts
+deleted file mode 100644
+index 48d1f852de..0000000000
+--- a/packages/tui/src/util/provider-origin.ts
++++ /dev/null
+@@ -1,7 +0,0 @@
+-const contains = (consoleManagedProviders: string[] | ReadonlySet<string>, providerID: string) =>
+-  Array.isArray(consoleManagedProviders)
+-    ? consoleManagedProviders.includes(providerID)
+-    : consoleManagedProviders.has(providerID)
+-
+-export const isConsoleManagedProvider = (consoleManagedProviders: string[] | ReadonlySet<string>, providerID: string) =>
+-  contains(consoleManagedProviders, providerID)
