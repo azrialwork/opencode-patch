@@ -119,6 +119,14 @@ from view.
   (±3,700 lines) that served editor clients over stdio, plus the
   `@agentclientprotocol/sdk` dependency and the ACP tests. The HTTP
   API server the TUI uses is a separate surface and stays.
+- `0006-remove-share.patch` — removes session sharing: the
+  `SessionShare` service and the `/session/{id}/share` endpoints
+  (upstream had already discontinued the hosted service; the endpoints
+  only ever failed or cleared a local link), the `share` field on
+  sessions end to end (API schema, storage column, projector), the
+  `share` / `autoshare` config keys and the `OPENCODE_AUTO_SHARE`
+  flag, the TUI share keybinds and sidebar share URL, and the SDK
+  share client/types.
 
 To add a patch later:
 

@@ -23,6 +23,11 @@ Current series:
 - `0005-remove-acp.patch` — removes ACP (Agent Client Protocol): the
   `opencode acp` command, the `src/acp/` implementation, the
   `@agentclientprotocol/sdk` dependency, and the ACP tests.
+- `0006-remove-share.patch` — removes session sharing: the
+  `SessionShare` service, the `/session/{id}/share` endpoints, the
+  session `share` field and `share_url` storage column, the `share` /
+  `autoshare` config keys, `OPENCODE_AUTO_SHARE`, the TUI share
+  keybinds/sidebar URL, and the SDK share client/types.
 
 This file is not a patch and is ignored by `scripts/apply-patches.sh`,
 which only reads `*.patch`.

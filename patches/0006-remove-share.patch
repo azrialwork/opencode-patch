@@ -1,0 +1,1097 @@
+diff --git a/packages/core/src/config.ts b/packages/core/src/config.ts
+index 4f7859be6a..0e0c2a5c08 100644
+--- a/packages/core/src/config.ts
++++ b/packages/core/src/config.ts
+@@ -43,9 +43,6 @@ export class Info extends Schema.Class<Info>("Config.Info")({
+     .annotate({
+       description: "Automatically update or notify when a new version is available",
+     }),
+-  share: Schema.Literals(["manual", "auto", "disabled"]).pipe(Schema.optional).annotate({
+-    description: "Control whether sessions may be shared manually, automatically, or not at all",
+-  }),
+   enterprise: Schema.Struct({
+     url: Schema.String.pipe(Schema.optional),
+   })
+diff --git a/packages/core/src/session/projector.ts b/packages/core/src/session/projector.ts
+index 792067017d..5a39f8ca20 100644
+--- a/packages/core/src/session/projector.ts
++++ b/packages/core/src/session/projector.ts
+@@ -53,7 +53,6 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
+     agent: info.agent,
+     model: info.model,
+     version: info.version,
+-    share_url: info.share?.url,
+     summary_additions: info.summary?.additions,
+     summary_deletions: info.summary?.deletions,
+     summary_files: info.summary?.files,
+diff --git a/packages/core/src/session/sql.ts b/packages/core/src/session/sql.ts
+index 264a1d2cca..97bb736325 100644
+--- a/packages/core/src/session/sql.ts
++++ b/packages/core/src/session/sql.ts
+@@ -34,7 +34,6 @@ export const SessionTable = sqliteTable(
+     path: DatabasePath.pathColumn(),
+     title: text().notNull(),
+     version: text().notNull(),
+-    share_url: text(),
+     summary_additions: integer(),
+     summary_deletions: integer(),
+     summary_files: integer(),
+diff --git a/packages/core/src/share/sql.ts b/packages/core/src/share/sql.ts
+deleted file mode 100644
+index a7a08d0c02..0000000000
+--- a/packages/core/src/share/sql.ts
++++ /dev/null
+@@ -1,13 +0,0 @@
+-import { sqliteTable, text } from "drizzle-orm/sqlite-core"
+-import { SessionTable } from "../session/sql"
+-import { Timestamps } from "../database/schema.sql"
+-
+-export const SessionShareTable = sqliteTable("session_share", {
+-  session_id: text()
+-    .primaryKey()
+-    .references(() => SessionTable.id, { onDelete: "cascade" }),
+-  id: text().notNull(),
+-  secret: text().notNull(),
+-  url: text().notNull(),
+-  ...Timestamps,
+-})
+diff --git a/packages/core/src/v1/config/config.ts b/packages/core/src/v1/config/config.ts
+index d98f04d706..84949313bd 100644
+--- a/packages/core/src/v1/config/config.ts
++++ b/packages/core/src/v1/config/config.ts
+@@ -53,13 +53,6 @@ export const Info = Schema.Struct({
+       "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
+   }),
+   plugin: Schema.optional(Schema.mutable(Schema.Array(ConfigPluginV1.Spec))),
+-  share: Schema.optional(Schema.Literals(["manual", "auto", "disabled"])).annotate({
+-    description:
+-      "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
+-  }),
+-  autoshare: Schema.optional(Schema.Boolean).annotate({
+-    description: "@deprecated Use 'share' field instead. Share newly created sessions automatically",
+-  }),
+   autoupdate: Schema.optional(Schema.Union([Schema.Boolean, Schema.Literal("notify")])).annotate({
+     description:
+       "Check for new versions and show an update notice. Updates are never installed automatically; run /update or `opencode upgrade`. Set to false to disable update checks. true and 'notify' behave the same",
+diff --git a/packages/core/src/v1/config/migrate.ts b/packages/core/src/v1/config/migrate.ts
+index 8e4670fffe..19121bf50e 100644
+--- a/packages/core/src/v1/config/migrate.ts
++++ b/packages/core/src/v1/config/migrate.ts
+@@ -14,7 +14,6 @@ const keys = new Set([
+   "reference",
+   "snapshot",
+   "plugin",
+-  "autoshare",
+   "disabled_providers",
+   "enabled_providers",
+   "small_model",
+@@ -39,7 +38,6 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
+     model: info.model,
+     default_agent: info.default_agent,
+     autoupdate: info.autoupdate,
+-    share: info.share ?? (info.autoshare ? "auto" : undefined),
+     enterprise: info.enterprise,
+     username: info.username,
+     permissions: permissions(info.permission, info.tools),
+diff --git a/packages/core/test/config/config.test.ts b/packages/core/test/config/config.test.ts
+index 24cfe02171..2599ded308 100644
+--- a/packages/core/test/config/config.test.ts
++++ b/packages/core/test/config/config.test.ts
+@@ -365,7 +365,6 @@ describe("Config", () => {
+             expect(documents[0]?.info.model).toBe("anthropic/claude")
+             expect(documents[0]?.info.default_agent).toBe("reviewer")
+             expect(documents[0]?.info.autoupdate).toBe("notify")
+-            expect(documents[0]?.info.share).toBe("disabled")
+             expect(documents[0]?.info.enterprise).toEqual({ url: "https://share.example.com" })
+             expect(documents[0]?.info.username).toBe("test-user")
+             expect(documents[0]?.info.permissions).toEqual([
+@@ -578,7 +577,6 @@ describe("Config", () => {
+             expect(documents[0]?.info.shell).toBe("/bin/zsh")
+             expect(documents[0]?.info.default_agent).toBe("reviewer")
+             expect(documents[0]?.info.snapshots).toBe(false)
+-            expect(documents[0]?.info.share).toBe("auto")
+             expect(documents[0]?.info.permissions).toEqual([
+               { action: "bash", resource: "*", effect: "ask" },
+               { action: "edit", resource: "*.md", effect: "allow" },
+diff --git a/packages/opencode/src/config/config.ts b/packages/opencode/src/config/config.ts
+index 9e10b67fe7..cfbc73c417 100644
+--- a/packages/opencode/src/config/config.ts
++++ b/packages/opencode/src/config/config.ts
+@@ -586,10 +586,6 @@ const layer = Layer.effect(
+           }
+         }
+ 
+-        if (result.autoshare === true && !result.share) {
+-          result.share = "auto"
+-        }
+-
+         if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
+           result.compaction = { ...result.compaction, auto: false }
+         }
+diff --git a/packages/opencode/src/effect/app-runtime.ts b/packages/opencode/src/effect/app-runtime.ts
+index fb363e298d..9d9469e8ca 100644
+--- a/packages/opencode/src/effect/app-runtime.ts
++++ b/packages/opencode/src/effect/app-runtime.ts
+@@ -43,7 +43,6 @@ import { Vcs } from "@/project/vcs"
+ import { Workspace } from "@/control-plane/workspace"
+ import { Worktree } from "@/worktree"
+ import { Installation } from "@/installation"
+-import { SessionShare } from "@/share/session"
+ import { Npm } from "@opencode-ai/core/npm"
+ import { memoMap } from "@opencode-ai/core/effect/memo-map"
+ import { BackgroundJob } from "@/background/job"
+@@ -100,7 +99,6 @@ export const AppLayer = AppNodeBuilderV1.build(
+     Workspace.node,
+     Worktree.node,
+     Installation.node,
+-    SessionShare.node,
+   ]),
+ ).pipe(Layer.provideMerge(AppNodeBuilderV1.build(Ripgrep.node)), Layer.provideMerge(Observability.layer))
+ 
+diff --git a/packages/opencode/src/effect/runtime-flags.ts b/packages/opencode/src/effect/runtime-flags.ts
+index 45e455f0bd..e64df27032 100644
+--- a/packages/opencode/src/effect/runtime-flags.ts
++++ b/packages/opencode/src/effect/runtime-flags.ts
+@@ -14,7 +14,6 @@ const enabledByExperimental = (name: string) =>
+   )
+ 
+ export class Service extends ConfigService.Service<Service>()("@opencode/RuntimeFlags", {
+-  autoShare: bool("OPENCODE_AUTO_SHARE"),
+   pure: bool("OPENCODE_PURE"),
+   disableDefaultPlugins: bool("OPENCODE_DISABLE_DEFAULT_PLUGINS"),
+   disableExternalSkills: bool("OPENCODE_DISABLE_EXTERNAL_SKILLS"),
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/groups/session.ts b/packages/opencode/src/server/routes/instance/httpapi/groups/session.ts
+index 959a303dc9..7bec08c4fe 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/groups/session.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/groups/session.ts
+@@ -89,7 +89,6 @@ export const SessionPaths = {
+   update: `${root}/:sessionID`,
+   fork: `${root}/:sessionID/fork`,
+   abort: `${root}/:sessionID/abort`,
+-  share: `${root}/:sessionID/share`,
+   init: `${root}/:sessionID/init`,
+   summarize: `${root}/:sessionID/summarize`,
+   prompt: `${root}/:sessionID/message`,
+@@ -276,30 +275,6 @@ export const SessionApi = HttpApi.make("session")
+               "Analyze the current application and create an AGENTS.md file with project-specific agent configurations.",
+           }),
+         ),
+-        HttpApiEndpoint.post("share", SessionPaths.share, {
+-          params: { sessionID: SessionID },
+-          query: WorkspaceRoutingQuery,
+-          success: described(Session.Info, "Successfully shared session"),
+-          error: [HttpApiError.InternalServerError, ApiNotFoundError],
+-        }).annotateMerge(
+-          OpenApi.annotations({
+-            identifier: "session.share",
+-            summary: "Share session",
+-            description: "Create a shareable link for a session, allowing others to view the conversation.",
+-          }),
+-        ),
+-        HttpApiEndpoint.delete("unshare", SessionPaths.share, {
+-          params: { sessionID: SessionID },
+-          query: WorkspaceRoutingQuery,
+-          success: described(Session.Info, "Successfully unshared session"),
+-          error: [HttpApiError.InternalServerError, ApiNotFoundError],
+-        }).annotateMerge(
+-          OpenApi.annotations({
+-            identifier: "session.unshare",
+-            summary: "Unshare session",
+-            description: "Remove the shareable link for a session, making it private again.",
+-          }),
+-        ),
+         HttpApiEndpoint.post("summarize", SessionPaths.summarize, {
+           params: { sessionID: SessionID },
+           query: WorkspaceRoutingQuery,
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts b/packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts
+index 662585020a..22dd6c80cc 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts
+@@ -4,7 +4,6 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
+ import { EventV2Bridge } from "@/event-v2-bridge"
+ import { Command } from "@/command"
+ import { Permission } from "@/permission"
+-import { SessionShare } from "@/share/session"
+ import { Session } from "@/session/session"
+ import { SessionCompaction } from "@/session/compaction"
+ import { MessageV2 } from "@/session/message-v2"
+@@ -48,7 +47,6 @@ const tryParseJson = (text: string) =>
+ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", (handlers) =>
+   Effect.gen(function* () {
+     const session = yield* Session.Service
+-    const shareSvc = yield* SessionShare.Service
+     const promptSvc = yield* SessionPrompt.Service
+     const revertSvc = yield* SessionRevert.Service
+     const compactSvc = yield* SessionCompaction.Service
+@@ -153,7 +151,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session",
+     })
+ 
+     const create = Effect.fn("SessionHttpApi.create")(function* (ctx: { payload?: Session.CreateInput }) {
+-      return yield* shareSvc.create(ctx.payload)
++      return yield* session.create(ctx.payload)
+     })
+ 
+     const createRaw = Effect.fn("SessionHttpApi.createRaw")(function* (ctx: {
+@@ -251,25 +249,6 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session",
+       return true
+     })
+ 
+-    // share/unshare errors aren't all client-induced — storage and network
+-    // failures from SessionShare are real possibilities. Map to a typed 500
+-    // (matches the legacy route behavior which routed any failure through
+-    // ErrorMiddleware → NamedError.Unknown 500) instead of blanket-mapping
+-    // every failure to a 400 BadRequest.
+-    const share = Effect.fn("SessionHttpApi.share")(function* (ctx: { params: { sessionID: SessionID } }) {
+-      yield* requireSession(ctx.params.sessionID)
+-      yield* shareSvc.share(ctx.params.sessionID).pipe(Effect.mapError(() => new HttpApiError.InternalServerError({})))
+-      return yield* requireSession(ctx.params.sessionID)
+-    })
+-
+-    const unshare = Effect.fn("SessionHttpApi.unshare")(function* (ctx: { params: { sessionID: SessionID } }) {
+-      yield* requireSession(ctx.params.sessionID)
+-      yield* shareSvc
+-        .unshare(ctx.params.sessionID)
+-        .pipe(Effect.mapError(() => new HttpApiError.InternalServerError({})))
+-      return yield* requireSession(ctx.params.sessionID)
+-    })
+-
+     const summarize = Effect.fn("SessionHttpApi.summarize")(function* (ctx: {
+       params: { sessionID: SessionID }
+       payload: typeof SummarizePayload.Type
+@@ -425,8 +404,6 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session",
+       .handleRaw("fork", forkRaw)
+       .handle("abort", abort)
+       .handle("init", init)
+-      .handle("share", share)
+-      .handle("unshare", unshare)
+       .handle("summarize", summarize)
+       .handle("prompt", prompt)
+       .handle("promptAsync", promptAsync)
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/handlers/tui.ts b/packages/opencode/src/server/routes/instance/httpapi/handlers/tui.ts
+index dbd8e19de1..ccf0a8db06 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/handlers/tui.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/handlers/tui.ts
+@@ -10,7 +10,6 @@ import * as SessionError from "./session-errors"
+ 
+ const commandAliases = {
+   session_new: "session.new",
+-  session_share: "session.share",
+   session_interrupt: "session.interrupt",
+   session_compact: "session.compact",
+   messages_page_up: "session.page.up",
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/server.ts b/packages/opencode/src/server/routes/instance/httpapi/server.ts
+index 897851d445..d8b9c3fe9a 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/server.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/server.ts
+@@ -38,7 +38,6 @@ import { Session } from "@/session/session"
+ import { SessionStatus } from "@/session/status"
+ import { SessionSummary } from "@/session/summary"
+ import { Todo } from "@/session/todo"
+-import { SessionShare } from "@/share/session"
+ import { Skill } from "@/skill"
+ import { Discovery } from "@/skill/discovery"
+ import { Snapshot } from "@/snapshot"
+@@ -242,7 +241,6 @@ const app = LayerNode.group([
+   Workspace.node,
+   Worktree.node,
+   Installation.node,
+-  SessionShare.node,
+   InstanceStore.node,
+   httpClient,
+   EventV2.node,
+diff --git a/packages/opencode/src/session/session.ts b/packages/opencode/src/session/session.ts
+index a2a91cd47b..9be140af60 100644
+--- a/packages/opencode/src/session/session.ts
++++ b/packages/opencode/src/session/session.ts
+@@ -66,7 +66,6 @@ export function fromRow(row: SessionRow): Info {
+           diffs: row.summary_diffs ?? undefined,
+         }
+       : undefined
+-  const share = row.share_url ? { url: row.share_url } : undefined
+   const revert = row.revert
+     ? {
+         messageID: MessageID.make(row.revert.messageID),
+@@ -104,7 +103,6 @@ export function fromRow(row: SessionRow): Info {
+         write: row.tokens_cache_write,
+       },
+     },
+-    share,
+     metadata: row.metadata ?? undefined,
+     revert,
+     permission: row.permission ? [...row.permission] : undefined,
+@@ -130,7 +128,6 @@ export function toRow(info: Info) {
+     agent: info.agent,
+     model: info.model,
+     version: info.version,
+-    share_url: info.share?.url,
+     summary_additions: info.summary?.additions,
+     summary_deletions: info.summary?.deletions,
+     summary_files: info.summary?.files,
+@@ -191,10 +188,6 @@ const Tokens = Schema.Struct({
+ 
+ const EmptyTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+ 
+-const Share = Schema.Struct({
+-  url: Schema.String,
+-})
+-
+ // Legacy HTTP accepted negative values here. Keep archive timestamps permissive
+ // while excluding non-finite values that cannot round-trip through JSON.
+ export const ArchivedTimestamp = Schema.Finite
+@@ -232,7 +225,6 @@ export const Info = Schema.Struct({
+   summary: optional(Summary),
+   cost: optional(Schema.Finite),
+   tokens: optional(Tokens),
+-  share: optional(Share),
+   title: Schema.String,
+   agent: optional(Schema.String),
+   model: optional(Model),
+@@ -442,7 +434,6 @@ export interface Interface {
+   }) => Effect.Effect<void>
+   readonly clearRevert: (sessionID: SessionID) => Effect.Effect<void>
+   readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
+-  readonly setShare: (input: { sessionID: SessionID; share: Info["share"] }) => Effect.Effect<void>
+   readonly setWorkspace: (input: { sessionID: SessionID; workspaceID: Info["workspaceID"] }) => Effect.Effect<void>
+   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
+   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
+@@ -475,9 +466,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
+ 
+ export const use = serviceUse(Service)
+ 
+-export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" | "permission"> & {
++export type Patch = Omit<Partial<Info>, "time" | "summary" | "revert" | "permission"> & {
+   time?: Partial<Info["time"]>
+-  share?: Partial<NonNullable<Info["share"]>> | null
+   summary?: Info["summary"] | null
+   revert?: Info["revert"] | null
+   permission?: Info["permission"] | null
+@@ -738,7 +728,6 @@ const layer: Layer.Layer<
+           ...current,
+           ...info,
+           time: info.time ? { ...current.time, ...info.time } : current.time,
+-          share: info.share === null ? undefined : info.share ? { ...current.share, ...info.share } : current.share,
+           summary: info.summary === null ? undefined : (info.summary ?? current.summary),
+           revert: info.revert === null ? undefined : (info.revert ?? current.revert),
+           permission: info.permission === null ? undefined : (info.permission ?? current.permission),
+@@ -807,9 +796,6 @@ const layer: Layer.Layer<
+       yield* patch(input.sessionID, { time: { updated: Date.now() }, summary: input.summary }).pipe(Effect.orDie)
+     })
+ 
+-    const setShare = Effect.fn("Session.setShare")(function* (input: { sessionID: SessionID; share: Info["share"] }) {
+-      yield* patch(input.sessionID, { share: input.share ?? null, time: { updated: Date.now() } }).pipe(Effect.orDie)
+-    })
+ 
+     const setWorkspace = Effect.fn("Session.setWorkspace")(function* (input: {
+       sessionID: SessionID
+@@ -918,7 +904,6 @@ const layer: Layer.Layer<
+       setRevert,
+       clearRevert,
+       setSummary,
+-      setShare,
+       setWorkspace,
+       diff,
+       messages,
+diff --git a/packages/opencode/src/share/session.ts b/packages/opencode/src/share/session.ts
+deleted file mode 100644
+index 7634aea18e..0000000000
+--- a/packages/opencode/src/share/session.ts
++++ /dev/null
+@@ -1,43 +0,0 @@
+-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+-import { Session } from "@/session/session"
+-import { SessionID } from "@/session/schema"
+-import { Effect, Layer, Context } from "effect"
+-
+-export interface Interface {
+-  readonly create: (input?: Session.CreateInput) => Effect.Effect<Session.Info>
+-  readonly share: (sessionID: SessionID) => Effect.Effect<{ url: string }, unknown>
+-  readonly unshare: (sessionID: SessionID) => Effect.Effect<void, unknown>
+-}
+-
+-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionShare") {}
+-
+-const layer = Layer.effect(
+-  Service,
+-  Effect.gen(function* () {
+-    const session = yield* Session.Service
+-
+-    // Session sharing was discontinued. The share endpoints stay for API compatibility: share fails and unshare only
+-    // clears the local link.
+-    const share = Effect.fn("SessionShare.share")(function* (_sessionID: SessionID) {
+-      return yield* Effect.fail(new Error("Session sharing has been discontinued"))
+-    })
+-
+-    const unshare = Effect.fn("SessionShare.unshare")(function* (sessionID: SessionID) {
+-      yield* session.setShare({ sessionID, share: undefined })
+-    })
+-
+-    const create = Effect.fn("SessionShare.create")(function* (input?: Session.CreateInput) {
+-      return yield* session.create(input)
+-    })
+-
+-    return Service.of({ create, share, unshare })
+-  }),
+-)
+-
+-export const node = LayerNode.make({
+-  service: Service,
+-  layer: layer,
+-  deps: [Session.node],
+-})
+-
+-export * as SessionShare from "./session"
+diff --git a/packages/opencode/src/storage/schema.ts b/packages/opencode/src/storage/schema.ts
+index 06d095f06d..b79513b096 100644
+--- a/packages/opencode/src/storage/schema.ts
++++ b/packages/opencode/src/storage/schema.ts
+@@ -1,5 +1,4 @@
+ export { AccountTable, AccountStateTable, ControlAccountTable } from "@opencode-ai/core/account/sql"
+ export { ProjectTable } from "@opencode-ai/core/project/sql"
+ export { SessionTable, MessageTable, PartTable, TodoTable } from "@opencode-ai/core/session/sql"
+-export { SessionShareTable } from "@opencode-ai/core/share/sql"
+ export { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
+diff --git a/packages/opencode/test/config/config.test.ts b/packages/opencode/test/config/config.test.ts
+index ed89f6724b..e73b935778 100644
+--- a/packages/opencode/test/config/config.test.ts
++++ b/packages/opencode/test/config/config.test.ts
+@@ -866,18 +866,6 @@ it.instance("handles command configuration", () =>
+   }),
+ )
+ 
+-it.instance("migrates autoshare to share field", () =>
+-  Effect.gen(function* () {
+-    const test = yield* TestInstance
+-    yield* writeConfigEffect(test.directory, {
+-      $schema: "https://opencode.ai/config.json",
+-      autoshare: true,
+-    })
+-    const config = yield* Config.use.get()
+-    expect(config.share).toBe("auto")
+-    expect(config.autoshare).toBe(true)
+-  }),
+-)
+ 
+ it.instance("migrates mode field to agent field", () =>
+   Effect.gen(function* () {
+@@ -1366,15 +1354,13 @@ it.instance(
+     yield* writeManagedSettingsEffect({
+       $schema: "https://opencode.ai/config.json",
+       model: "managed/model",
+-      share: "disabled",
+     })
+ 
+     const config = yield* Config.use.get()
+     expect(config.model).toBe("managed/model")
+-    expect(config.share).toBe("disabled")
+     expect(config.username).toBe("testuser")
+   }),
+-  { config: { model: "user/model", share: "auto", username: "testuser" } },
++  { config: { model: "user/model", username: "testuser" } },
+ )
+ 
+ it.instance(
+@@ -2129,7 +2115,6 @@ test("parseManagedPlist strips MDM metadata keys", async () => {
+           PayloadUUID: "AAAA-BBBB-CCCC",
+           PayloadVersion: 1,
+           _manualProfile: true,
+-          share: "disabled",
+           model: "mdm/model",
+         }),
+       ),
+@@ -2137,7 +2122,6 @@ test("parseManagedPlist strips MDM metadata keys", async () => {
+     ),
+     "test:mobileconfig",
+   )
+-  expect(config.share).toBe("disabled")
+   expect(config.model).toBe("mdm/model")
+   // MDM keys must not leak into the parsed config
+   expect((config as any).PayloadUUID).toBeUndefined()
+diff --git a/packages/opencode/test/effect/runtime-flags.test.ts b/packages/opencode/test/effect/runtime-flags.test.ts
+index 77a6063e24..48736bd3d3 100644
+--- a/packages/opencode/test/effect/runtime-flags.test.ts
++++ b/packages/opencode/test/effect/runtime-flags.test.ts
+@@ -10,14 +10,6 @@ const fromConfig = (input: Record<string, unknown>) =>
+ const readFlags = RuntimeFlags.Service.useSync((flags) => flags)
+ 
+ describe("RuntimeFlags", () => {
+-  it.effect("layer defaults autoShare to false", () =>
+-    Effect.gen(function* () {
+-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
+-
+-      expect(flags.autoShare).toBe(false)
+-    }),
+-  )
+-
+   it.effect("layer parses plugin flags from the active ConfigProvider", () =>
+     Effect.gen(function* () {
+       const flags = yield* readFlags.pipe(
+@@ -25,7 +17,6 @@ describe("RuntimeFlags", () => {
+           fromConfig({
+             OPENCODE_PURE: "true",
+             OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
+-            OPENCODE_AUTO_SHARE: "true",
+             OPENCODE_DISABLE_EXTERNAL_SKILLS: "true",
+             OPENCODE_EXPERIMENTAL: "true",
+             OPENCODE_ENABLE_EXA: "true",
+@@ -38,7 +29,6 @@ describe("RuntimeFlags", () => {
+       )
+ 
+       expect(flags.pure).toBe(true)
+-      expect(flags.autoShare).toBe(true)
+       expect(flags.disableDefaultPlugins).toBe(true)
+       expect(flags.disableExternalSkills).toBe(true)
+       expect(flags.disableClaudeCodePrompt).toBe(false)
+@@ -86,7 +76,6 @@ describe("RuntimeFlags", () => {
+       )
+ 
+       expect(flags.pure).toBe(false)
+-      expect(flags.autoShare).toBe(false)
+       expect(flags.disableDefaultPlugins).toBe(true)
+       expect(flags.disableExternalSkills).toBe(false)
+       expect(flags.disableClaudeCodePrompt).toBe(false)
+diff --git a/packages/opencode/test/server/httpapi-exercise/index.ts b/packages/opencode/test/server/httpapi-exercise/index.ts
+index 4f38959320..65ed31a718 100644
+--- a/packages/opencode/test/server/httpapi-exercise/index.ts
++++ b/packages/opencode/test/server/httpapi-exercise/index.ts
+@@ -1650,25 +1650,6 @@ const scenarios: Scenario[] = [
+       body: { response: "once" },
+     }))
+     .json(404, object, "status"),
+-  http.protected
+-    .post("/session/{sessionID}/share", "session.share")
+-    .mutating()
+-    .seeded((ctx) => ctx.session({ title: "Share session" }))
+-    .at((ctx) => ({ path: route("/session/{sessionID}/share", { sessionID: ctx.state.id }), headers: ctx.headers() }))
+-    .json(500, object, "status"),
+-  http.protected
+-    .delete("/session/{sessionID}/share", "session.unshare")
+-    .mutating()
+-    .seeded((ctx) => ctx.session({ title: "Unshare session" }))
+-    .at((ctx) => ({ path: route("/session/{sessionID}/share", { sessionID: ctx.state.id }), headers: ctx.headers() }))
+-    .json(
+-      200,
+-      (body, ctx) => {
+-        object(body)
+-        check(body.id === ctx.state.id, "unshare should return the session")
+-      },
+-      "status",
+-    ),
+   http.protected
+     .post("/tui/append-prompt", "tui.appendPrompt")
+     .at((ctx) => ({ path: "/tui/append-prompt", headers: ctx.headers(), body: { text: "hello" } }))
+diff --git a/packages/opencode/test/server/httpapi-session.test.ts b/packages/opencode/test/server/httpapi-session.test.ts
+index ecbf5fefd5..8c01d30358 100644
+--- a/packages/opencode/test/server/httpapi-session.test.ts
++++ b/packages/opencode/test/server/httpapi-session.test.ts
+@@ -789,7 +789,7 @@ describe("session HttpApi", () => {
+           }),
+         ).toBe(true)
+       }),
+-    { git: true, config: { formatter: false, share: "disabled" } },
++    { git: true, config: { formatter: false } },
+   )
+ 
+   it.instance(
+@@ -821,7 +821,7 @@ describe("session HttpApi", () => {
+         expect(messages.status).toBe(200)
+         expect(yield* getWorkspaceID(created.id)).toEqual({ workspaceID: workspace.id })
+       }),
+-    { git: true, config: { formatter: false, share: "disabled" } },
++    { git: true, config: { formatter: false } },
+   )
+ 
+   it.instance(
+@@ -901,7 +901,7 @@ describe("session HttpApi", () => {
+         const global = yield* requestJson<Session.Info[]>(`${ExperimentalPaths.session}?${globalQuery}`, { headers })
+         expect(global.map((item) => item.id)).toContain(created.id)
+       }),
+-    { git: true, config: { formatter: false, share: "disabled" } },
++    { git: true, config: { formatter: false } },
+   )
+ 
+   it.instance(
+@@ -926,7 +926,7 @@ describe("session HttpApi", () => {
+           expect({ spelling, ids: listed.map((item) => item.id) }).toEqual({ spelling, ids: [created.id] })
+         }
+       }),
+-    { git: true, config: { formatter: false, share: "disabled" } },
++    { git: true, config: { formatter: false } },
+     { timeout: 15000 },
+   )
+ 
+@@ -948,7 +948,7 @@ describe("session HttpApi", () => {
+         const listed = yield* requestJson<Session.Info[]>(`${SessionPaths.list}?${query}`, { headers })
+         expect(listed.map((item) => item.id)).toContain(driveRootSession.id)
+       }),
+-    { git: true, config: { formatter: false, share: "disabled" } },
++    { git: true, config: { formatter: false } },
+     { timeout: 15000 },
+   )
+ 
+diff --git a/packages/opencode/test/session/session-schema.test.ts b/packages/opencode/test/session/session-schema.test.ts
+index 92249c4a09..c85888d09a 100644
+--- a/packages/opencode/test/session/session-schema.test.ts
++++ b/packages/opencode/test/session/session-schema.test.ts
+@@ -14,7 +14,6 @@ const info = {
+   summary: undefined,
+   cost: 0,
+   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+-  share: undefined,
+   title: "Test session",
+   version: "1.0.0",
+   time: {
+diff --git a/packages/plugin/src/tui.ts b/packages/plugin/src/tui.ts
+index 95ec1ba644..38099c0c8f 100644
+--- a/packages/plugin/src/tui.ts
++++ b/packages/plugin/src/tui.ts
+@@ -472,7 +472,6 @@ export type TuiHostSlotMap = {
+   sidebar_title: {
+     session_id: string
+     title: string
+-    share_url?: string
+   }
+   sidebar_content: {
+     session_id: string
+diff --git a/packages/sdk/js/src/gen/sdk.gen.ts b/packages/sdk/js/src/gen/sdk.gen.ts
+index b620d13623..2a8c30ae1f 100644
+--- a/packages/sdk/js/src/gen/sdk.gen.ts
++++ b/packages/sdk/js/src/gen/sdk.gen.ts
+@@ -73,12 +73,6 @@ import type {
+   SessionAbortData,
+   SessionAbortResponses,
+   SessionAbortErrors,
+-  SessionUnshareData,
+-  SessionUnshareResponses,
+-  SessionUnshareErrors,
+-  SessionShareData,
+-  SessionShareResponses,
+-  SessionShareErrors,
+   SessionDiffData,
+   SessionDiffResponses,
+   SessionDiffErrors,
+@@ -551,26 +545,6 @@ class Session extends _HeyApiClient {
+     })
+   }
+ 
+-  /**
+-   * Unshare the session
+-   */
+-  public unshare<ThrowOnError extends boolean = false>(options: Options<SessionUnshareData, ThrowOnError>) {
+-    return (options.client ?? this._client).delete<SessionUnshareResponses, SessionUnshareErrors, ThrowOnError>({
+-      url: "/session/{id}/share",
+-      ...options,
+-    })
+-  }
+-
+-  /**
+-   * Share a session
+-   */
+-  public share<ThrowOnError extends boolean = false>(options: Options<SessionShareData, ThrowOnError>) {
+-    return (options.client ?? this._client).post<SessionShareResponses, SessionShareErrors, ThrowOnError>({
+-      url: "/session/{id}/share",
+-      ...options,
+-    })
+-  }
+-
+   /**
+    * Get the diff for this session
+    */
+diff --git a/packages/sdk/js/src/gen/types.gen.ts b/packages/sdk/js/src/gen/types.gen.ts
+index 83e5e9a44f..30db4a23a7 100644
+--- a/packages/sdk/js/src/gen/types.gen.ts
++++ b/packages/sdk/js/src/gen/types.gen.ts
+@@ -526,9 +526,6 @@ export type Session = {
+     files: number
+     diffs?: Array<FileDiff>
+   }
+-  share?: {
+-    url: string
+-  }
+   title: string
+   version: string
+   time: {
+@@ -610,7 +607,6 @@ export type EventTuiCommandExecute = {
+       | (
+           | "session.list"
+           | "session.new"
+-          | "session.share"
+           | "session.interrupt"
+           | "session.compact"
+           | "session.page.up"
+@@ -801,14 +797,6 @@ export type KeybindsConfig = {
+    * Show session timeline
+    */
+   session_timeline?: string
+-  /**
+-   * Share current session
+-   */
+-  session_share?: string
+-  /**
+-   * Unshare current session
+-   */
+-  session_unshare?: string
+   /**
+    * Interrupt current session
+    */
+@@ -1208,14 +1196,6 @@ export type Config = {
+   }
+   plugin?: Array<string>
+   snapshot?: boolean
+-  /**
+-   * Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing
+-   */
+-  share?: "manual" | "auto" | "disabled"
+-  /**
+-   * @deprecated Use 'share' field instead. Share newly created sessions automatically
+-   */
+-  autoshare?: boolean
+   /**
+    * Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications
+    */
+@@ -2360,72 +2340,6 @@ export type SessionAbortResponses = {
+ 
+ export type SessionAbortResponse = SessionAbortResponses[keyof SessionAbortResponses]
+ 
+-export type SessionUnshareData = {
+-  body?: never
+-  path: {
+-    id: string
+-  }
+-  query?: {
+-    directory?: string
+-  }
+-  url: "/session/{id}/share"
+-}
+-
+-export type SessionUnshareErrors = {
+-  /**
+-   * Bad request
+-   */
+-  400: BadRequestError
+-  /**
+-   * Not found
+-   */
+-  404: NotFoundError
+-}
+-
+-export type SessionUnshareError = SessionUnshareErrors[keyof SessionUnshareErrors]
+-
+-export type SessionUnshareResponses = {
+-  /**
+-   * Successfully unshared session
+-   */
+-  200: Session
+-}
+-
+-export type SessionUnshareResponse = SessionUnshareResponses[keyof SessionUnshareResponses]
+-
+-export type SessionShareData = {
+-  body?: never
+-  path: {
+-    id: string
+-  }
+-  query?: {
+-    directory?: string
+-  }
+-  url: "/session/{id}/share"
+-}
+-
+-export type SessionShareErrors = {
+-  /**
+-   * Bad request
+-   */
+-  400: BadRequestError
+-  /**
+-   * Not found
+-   */
+-  404: NotFoundError
+-}
+-
+-export type SessionShareError = SessionShareErrors[keyof SessionShareErrors]
+-
+-export type SessionShareResponses = {
+-  /**
+-   * Successfully shared session
+-   */
+-  200: Session
+-}
+-
+-export type SessionShareResponse = SessionShareResponses[keyof SessionShareResponses]
+-
+ export type SessionDiffData = {
+   body?: never
+   path: {
+diff --git a/packages/sdk/js/src/v2/gen/sdk.gen.ts b/packages/sdk/js/src/v2/gen/sdk.gen.ts
+index 1945fcedd0..8cc4a17bc6 100644
+--- a/packages/sdk/js/src/v2/gen/sdk.gen.ts
++++ b/packages/sdk/js/src/v2/gen/sdk.gen.ts
+@@ -203,8 +203,6 @@ import type {
+   SessionPromptResponses,
+   SessionRevertErrors,
+   SessionRevertResponses,
+-  SessionShareErrors,
+-  SessionShareResponses,
+   SessionShellErrors,
+   SessionShellResponses,
+   SessionStatusErrors,
+@@ -215,8 +213,6 @@ import type {
+   SessionTodoResponses,
+   SessionUnrevertErrors,
+   SessionUnrevertResponses,
+-  SessionUnshareErrors,
+-  SessionUnshareResponses,
+   SessionUpdateErrors,
+   SessionUpdateResponses,
+   SubtaskPartInput,
+@@ -3913,69 +3909,7 @@ export class Session2 extends HeyApiClient {
+     })
+   }
+ 
+-  /**
+-   * Unshare session
+-   *
+-   * Remove the shareable link for a session, making it private again.
+-   */
+-  public unshare<ThrowOnError extends boolean = false>(
+-    parameters: {
+-      sessionID: string
+-      directory?: string
+-      workspace?: string
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "path", key: "sessionID" },
+-            { in: "query", key: "directory" },
+-            { in: "query", key: "workspace" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).delete<SessionUnshareResponses, SessionUnshareErrors, ThrowOnError>({
+-      url: "/session/{sessionID}/share",
+-      ...options,
+-      ...params,
+-    })
+-  }
+ 
+-  /**
+-   * Share session
+-   *
+-   * Create a shareable link for a session, allowing others to view the conversation.
+-   */
+-  public share<ThrowOnError extends boolean = false>(
+-    parameters: {
+-      sessionID: string
+-      directory?: string
+-      workspace?: string
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "path", key: "sessionID" },
+-            { in: "query", key: "directory" },
+-            { in: "query", key: "workspace" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).post<SessionShareResponses, SessionShareErrors, ThrowOnError>({
+-      url: "/session/{sessionID}/share",
+-      ...options,
+-      ...params,
+-    })
+-  }
+ 
+   /**
+    * Summarize session
+diff --git a/packages/sdk/js/src/v2/gen/types.gen.ts b/packages/sdk/js/src/v2/gen/types.gen.ts
+index 8ff906f005..755a36deb1 100644
+--- a/packages/sdk/js/src/v2/gen/types.gen.ts
++++ b/packages/sdk/js/src/v2/gen/types.gen.ts
+@@ -190,9 +190,6 @@ export type Session = {
+       write: number
+     }
+   }
+-  share?: {
+-    url: string
+-  }
+   title: string
+   agent?: string
+   model?: {
+@@ -1406,7 +1403,6 @@ export type GlobalEvent = {
+           command:
+             | "session.list"
+             | "session.new"
+-            | "session.share"
+             | "session.interrupt"
+             | "session.compact"
+             | "session.page.up"
+@@ -1932,8 +1928,6 @@ export type Config = {
+         },
+       ]
+   >
+-  share?: "manual" | "auto" | "disabled"
+-  autoshare?: boolean
+   /**
+    * Check for new versions and show an update notice. Updates are never installed automatically; run /update or `opencode upgrade`. Set to false to disable update checks. true and 'notify' behave the same
+    */
+@@ -2205,9 +2199,6 @@ export type GlobalSession = {
+       write: number
+     }
+   }
+-  share?: {
+-    url: string
+-  }
+   title: string
+   agent?: string
+   model?: {
+@@ -2596,7 +2587,6 @@ export type EventTuiCommandExecute = {
+     command:
+       | "session.list"
+       | "session.new"
+-      | "session.share"
+       | "session.interrupt"
+       | "session.compact"
+       | "session.page.up"
+@@ -2957,7 +2947,6 @@ export type EventTuiCommandExecute2 = {
+     command:
+       | "session.list"
+       | "session.new"
+-      | "session.share"
+       | "session.interrupt"
+       | "session.compact"
+       | "session.page.up"
+@@ -5737,7 +5726,6 @@ export type TuiCommandExecute = {
+     command:
+       | "session.list"
+       | "session.new"
+-      | "session.share"
+       | "session.interrupt"
+       | "session.compact"
+       | "session.page.up"
+@@ -9927,82 +9915,6 @@ export type SessionInitResponses = {
+ 
+ export type SessionInitResponse = SessionInitResponses[keyof SessionInitResponses]
+ 
+-export type SessionUnshareData = {
+-  body?: never
+-  path: {
+-    sessionID: string
+-  }
+-  query?: {
+-    directory?: string
+-    workspace?: string
+-  }
+-  url: "/session/{sessionID}/share"
+-}
+-
+-export type SessionUnshareErrors = {
+-  /**
+-   * Bad request
+-   */
+-  400: BadRequestError
+-  /**
+-   * NotFoundError
+-   */
+-  404: NotFoundError
+-  /**
+-   * InternalServerError
+-   */
+-  500: EffectHttpApiErrorInternalServerError
+-}
+-
+-export type SessionUnshareError = SessionUnshareErrors[keyof SessionUnshareErrors]
+-
+-export type SessionUnshareResponses = {
+-  /**
+-   * Successfully unshared session
+-   */
+-  200: Session
+-}
+-
+-export type SessionUnshareResponse = SessionUnshareResponses[keyof SessionUnshareResponses]
+-
+-export type SessionShareData = {
+-  body?: never
+-  path: {
+-    sessionID: string
+-  }
+-  query?: {
+-    directory?: string
+-    workspace?: string
+-  }
+-  url: "/session/{sessionID}/share"
+-}
+-
+-export type SessionShareErrors = {
+-  /**
+-   * Bad request
+-   */
+-  400: BadRequestError
+-  /**
+-   * NotFoundError
+-   */
+-  404: NotFoundError
+-  /**
+-   * InternalServerError
+-   */
+-  500: EffectHttpApiErrorInternalServerError
+-}
+-
+-export type SessionShareError = SessionShareErrors[keyof SessionShareErrors]
+-
+-export type SessionShareResponses = {
+-  /**
+-   * Successfully shared session
+-   */
+-  200: Session
+-}
+-
+-export type SessionShareResponse = SessionShareResponses[keyof SessionShareResponses]
+-
+ export type SessionSummarizeData = {
+   body?: {
+     providerID: string
+diff --git a/packages/tui/src/config/keybind.ts b/packages/tui/src/config/keybind.ts
+index 5dd7e4b5aa..853448d368 100644
+--- a/packages/tui/src/config/keybind.ts
++++ b/packages/tui/src/config/keybind.ts
+@@ -92,8 +92,6 @@ export const Definitions = {
+   session_fork: keybind("none", "Fork session from message"),
+   session_rename: keybind("ctrl+r", "Rename session"),
+   session_delete: keybind("ctrl+d", "Delete session"),
+-  session_share: keybind("none", "Share current session"),
+-  session_unshare: keybind("none", "Unshare current session"),
+   session_interrupt: keybind("escape", "Interrupt current session"),
+   session_background: keybind("ctrl+b", "Background synchronous subagents"),
+   session_compact: keybind("<leader>c", "Compact the session"),
+@@ -299,8 +297,6 @@ export const CommandMap = {
+   session_fork: "session.fork",
+   session_rename: "session.rename",
+   session_delete: "session.delete",
+-  session_share: "session.share",
+-  session_unshare: "session.unshare",
+   session_interrupt: "session.interrupt",
+   session_background: "session.background",
+   session_compact: "session.compact",
+diff --git a/packages/tui/src/routes/session/sidebar.tsx b/packages/tui/src/routes/session/sidebar.tsx
+index 6103e22532..c87e122b0d 100644
+--- a/packages/tui/src/routes/session/sidebar.tsx
++++ b/packages/tui/src/routes/session/sidebar.tsx
+@@ -51,7 +51,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+               mode="single_winner"
+               session_id={props.sessionID}
+               title={session()!.title}
+-              share_url={session()!.share?.url}
+             >
+               <box paddingRight={1}>
+                 <text fg={theme.text}>
