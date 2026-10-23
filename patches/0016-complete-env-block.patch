@@ -1,5 +1,5 @@
 diff --git a/packages/opencode/src/session/system.ts b/packages/opencode/src/session/system.ts
-index a86ec804ff..c98e66fb6c 100644
+index a86ec804ff..1da3539150 100644
 --- a/packages/opencode/src/session/system.ts
 +++ b/packages/opencode/src/session/system.ts
 @@ -1,5 +1,9 @@
@@ -12,7 +12,7 @@ index a86ec804ff..c98e66fb6c 100644
  
  import { InstanceState } from "@/effect/instance-state"
  
-@@ -22,6 +26,183 @@ export function provider(_model: Provider.Model) {
+@@ -22,6 +26,176 @@ export function provider(_model: Provider.Model) {
    return [PROMPT_DEFAULT]
  }
  
@@ -22,6 +22,12 @@ index a86ec804ff..c98e66fb6c 100644
 +// once per process and cached; git branch and free disk space describe
 +// the current worktree and are read per call. Every fact that cannot be
 +// determined is omitted silently.
++//
++// opencode-patch 0017: the block is trimmed to what an agent actually
++// acts on. Gone: the terminal type, the runtime version, the CPU model
++// string (the core count stays), the hostname on non-Android systems,
++// and the workspace root line whenever it duplicates the working
++// directory.
 +type DeviceInfo = {
 +  device?: string
 +  android?: string
@@ -32,10 +38,8 @@ index a86ec804ff..c98e66fb6c 100644
 +  home?: string
 +  user?: string
 +  shell?: string
-+  terminal?: string
 +  locale?: string
 +  timezone?: string
-+  runtime?: string
 +}
 +
 +let deviceCache: DeviceInfo | undefined
@@ -71,16 +75,11 @@ index a86ec804ff..c98e66fb6c 100644
 +  const prop = (key: string) => props.get(key)
 +
 +  const device = (() => {
-+    if (android) {
-+      const name = [prop("ro.product.manufacturer"), prop("ro.product.model")].filter(Boolean).join(" ")
-+      const market = prop("ro.product.marketname")
-+      if (name) return market && market !== prop("ro.product.model") ? `${name} (${market})` : name
-+    }
-+    try {
-+      return os.hostname() || undefined
-+    } catch {
-+      return undefined
-+    }
++    if (!android) return undefined
++    const name = [prop("ro.product.manufacturer"), prop("ro.product.model")].filter(Boolean).join(" ")
++    const market = prop("ro.product.marketname")
++    if (!name) return undefined
++    return market && market !== prop("ro.product.model") ? `${name} (${market})` : name
 +  })()
 +
 +  const androidLine = (() => {
@@ -107,12 +106,8 @@ index a86ec804ff..c98e66fb6c 100644
 +  })()
 +
 +  const cpu = (() => {
-+    const list = os.cpus()
-+    const model = list.find((entry) => entry.model.trim())?.model.trim()
-+    const soc = android ? (prop("ro.soc.model") ?? prop("ro.board.platform")) : undefined
-+    const name = model ?? soc
-+    if (!name && list.length === 0) return undefined
-+    return [name, list.length > 0 ? `(${list.length} cores)` : undefined].filter(Boolean).join(" ")
++    const cores = os.cpus().length
++    return cores > 0 ? `${cores} cores` : undefined
 +  })()
 +
 +  const termux = (() => {
@@ -160,10 +155,8 @@ index a86ec804ff..c98e66fb6c 100644
 +      }
 +    })(),
 +    shell: process.env.SHELL || undefined,
-+    terminal: process.env.TERM || undefined,
 +    locale: intl?.locale,
 +    timezone: intl?.timeZone,
-+    runtime: process.versions.bun ? `Bun ${process.versions.bun}` : undefined,
 +  }
 +  return deviceCache
 +}
@@ -196,7 +189,7 @@ index a86ec804ff..c98e66fb6c 100644
  export interface Interface {
    readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
    readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
-@@ -38,21 +219,38 @@ const layer = Layer.effect(
+@@ -38,20 +212,35 @@ const layer = Layer.effect(
      const locations = yield* LocationServiceMap.Service
  
      return Service.of({
@@ -215,8 +208,9 @@ index a86ec804ff..c98e66fb6c 100644
              `Here is some useful information about the environment you are running in:`,
              `<env>`,
              `  Working directory: ${ctx.directory}`,
-             `  Workspace root folder: ${ctx.worktree}`,
+-            `  Workspace root folder: ${ctx.worktree}`,
 -            `  Is directory a git repo: ${ctx.project.vcs === "git" ? "yes" : "no"}`,
++            ...(ctx.worktree !== ctx.directory ? [`  Workspace root folder: ${ctx.worktree}`] : []),
 +            `  Is directory a git repo: ${ctx.project.vcs === "git" ? `yes${branch ? ` (branch: ${branch})` : ""}` : "no"}`,
 +            ...(info.device ? [`  Device: ${info.device}`] : []),
 +            ...(info.android ? [`  Android: ${info.android}`] : []),
@@ -230,11 +224,8 @@ index a86ec804ff..c98e66fb6c 100644
 +            ...(info.home ? [`  Home directory: ${info.home}`] : []),
 +            ...(info.user ? [`  User: ${info.user}`] : []),
 +            ...(info.shell ? [`  Shell: ${info.shell}`] : []),
-+            ...(info.terminal ? [`  Terminal: ${info.terminal}`] : []),
 +            ...(info.locale ? [`  Locale: ${info.locale}`] : []),
 +            ...(info.timezone ? [`  Timezone: ${info.timezone}`] : []),
              `  Today's date: ${new Date().toDateString()}`,
-+            ...(info.runtime ? [`  Runtime: ${info.runtime}`] : []),
              `</env>`,
            ].join("\n"),
-           references.length === 0

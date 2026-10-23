@@ -133,29 +133,20 @@ every model gets, Zen or custom. The plan-mode reminder texts and
 the built-in agent prompts (title, summary, explore, compaction)
 are separate surfaces and are not touched.
 
-**16. `0016-complete-env-block.patch` — the environment block tells
-the whole truth about the device.** The "You are powered by the
-model named …" line is removed from the environment string, and the
-`<env>` block grows from five lines to a complete device snapshot:
-working directory, workspace root, git repo and branch (read from
-`.git/HEAD`), device name, operating system (distro name on Linux),
-platform, architecture, CPU model and cores, RAM, free disk,
-home, user, shell, terminal, locale, timezone, date, and the Bun
-runtime version. On Android it renders a Termux variant instead —
-product and market name, an `Android:` line (version, API level,
-build, security patch, all from one `getprop` dump), and a
-`Termux:` line. Facts are collected once per process and cached;
-anything that cannot be determined is omitted, never guessed.
-
-**17. `0017-trim-env-block.patch` — the environment block, trimmed
-to what an agent acts on.** On top of 0016: the terminal type, the
-Bun runtime version, and the CPU model string are removed (the
-core count stays), the device line no longer falls back to the
-hostname outside Android, and the workspace root line is only
-printed when it differs from the working directory. What remains:
-location and branch, OS, platform, architecture, cores, memory,
-disk, home, user, shell, locale, timezone, date — plus the Android
-variant's product, Android, and Termux lines.
+**16. `0016-complete-env-block.patch` — the environment block
+tells the truth about the device, and only the useful truth.** The
+"You are powered by the model named …" line is removed from the
+environment string, and the `<env>` block is rebuilt to hold what
+an agent actually acts on: working directory, workspace root (only
+when it differs from the working directory), git repo and branch
+(read from `.git/HEAD`), operating system (distro name on Linux),
+platform, architecture, CPU core count, RAM, free disk, home,
+user, shell, locale, timezone, and date. On Android it renders a
+Termux variant instead — product and market name, an `Android:`
+line (version, API level, build, security patch, all from one
+`getprop` dump), and a `Termux:` line. Facts are collected once
+per process and cached; anything that cannot be determined is
+omitted, never guessed.
 
 ---
 

@@ -134,29 +134,19 @@ Teks pengingat plan-mode dan prompt agen bawaan (title, summary,
 explore, compaction) adalah permukaan terpisah dan tidak disentuh.
 
 **16. `0016-complete-env-block.patch` — blok environment bercerita
-lengkap tentang perangkatnya.** Baris "You are powered by the model
-named …" dihapus dari string environment, dan blok `<env>` tumbuh
-dari lima baris menjadi potret perangkat yang lengkap: direktori
-kerja, root workspace, repo git beserta branch-nya (dibaca dari
-`.git/HEAD`), nama perangkat, sistem operasi (nama distro di
-Linux), platform, arsitektur, model dan jumlah core CPU, RAM,
-disk bebas, home, user, shell, terminal, locale, zona waktu,
-tanggal, dan versi runtime Bun. Di Android ia menggambar varian
-Termux sebagai gantinya — nama produk dan nama pasar, baris
-`Android:` (versi, level API, build, security patch, semuanya dari
-satu dump `getprop`), dan baris `Termux:`. Fakta dikumpulkan
-sekali per proses lalu di-cache; apa pun yang tidak bisa
-ditentukan akan hilang, tidak pernah ditebak.
-
-**17. `0017-trim-env-block.patch` — blok environment, dipangkas
-menjadi yang benar-benar ditindaklanjuti agen.** Di atas 0016:
-jenis terminal, versi runtime Bun, dan string model CPU dihapus
-(jumlah core tetap tinggal), baris perangkat tidak lagi jatuh ke
-hostname di luar Android, dan baris root workspace hanya dicetak
-bila berbeda dari direktori kerja. Yang tersisa: lokasi dan
-branch, OS, platform, arsitektur, core, memori, disk, home, user,
-shell, locale, zona waktu, tanggal — plus baris produk, Android,
-dan Termux pada varian Android.
+benar tentang perangkatnya, dan hanya kebenaran yang berguna.**
+Baris "You are powered by the model named …" dihapus dari string
+environment, dan blok `<env>` dibangun ulang untuk memuat yang
+benar-benar ditindaklanjuti agen: direktori kerja, root workspace
+(hanya bila berbeda dari direktori kerja), repo git beserta
+branch-nya (dibaca dari `.git/HEAD`), sistem operasi (nama distro
+di Linux), platform, arsitektur, jumlah core CPU, RAM, disk
+bebas, home, user, shell, locale, zona waktu, dan tanggal. Di
+Android ia menggambar varian Termux sebagai gantinya — nama
+produk dan nama pasar, baris `Android:` (versi, level API, build,
+security patch, semuanya dari satu dump `getprop`), dan baris
+`Termux:`. Fakta dikumpulkan sekali per proses lalu di-cache; apa
+pun yang tidak bisa ditentukan akan hilang, tidak pernah ditebak.
 
 ---
 
