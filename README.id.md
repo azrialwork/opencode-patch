@@ -138,7 +138,7 @@ dari jendela. Kalau OpenCode baru sudah lahir, ia bergegas pulang dan
 membangunkan robot-robot pembangun di GitHub, dan mereka melakukan
 semuanya lagi: mengambil robot yang segar, membuka ranselnya, dan
 melakukan potongan-potongan penjahit sesuai urutannya, satu sampai
-empat belas. Kalau satu potongan saja tidak pas di robot baru itu,
+lima belas. Kalau satu potongan saja tidak pas di robot baru itu,
 mereka berhenti saat itu juga dan tidak mengirim apa-apa — robot
 setengah terpotong lebih buruk daripada tidak ada robot sama sekali,
 dan semua orang di bengkel tahu itu.
@@ -215,8 +215,33 @@ begitu orang dewasa menyebutnya — dan kartunya tahu persis di mana
 ia berada. Ia membawakan kotak kecilnya, memeriksa stempel amannya,
 dan menempatkan si robot di dalam, lengkap dengan sepatunya.
 
-Robot yang sama. Potongan yang sama, keempat belasnya. Hanya rumah
+Robot yang sama. Potongan yang sama, kelima belasnya. Hanya rumah
 yang lebih kecil, dan pakaian yang pas untuknya.
+
+Satu hal lagi ditemukan di dalam ransel, di dasar paling bawah:
+setumpuk kartu, diikat dengan tali.
+
+Kartu-kartu itu kartu bacaan. Ada satu untuk setiap jenis pikiran
+yang mungkin terbangun bersama si robot — kartu untuk pikiran
+jenis penyair, kartu untuk pelari cepat, kartu untuk pikiran yang
+berhitung dalam bahasa-bahasa jauh. Sebelas kartu. Dan setiap pagi
+sepanjang hidupnya, si robot telah membuka ikatan talinya dan
+mengocok semuanya, mencari kartu yang tepat.
+
+Tetapi sang penjahit memperhatikan, dan sang penjahit menghitung,
+dan kebenarannya sederhana: si robot hanya pernah membaca kartu
+yang pertama. Di seluruh rumah besar, dan sampai jauh ke dalam
+telepon, selalu kartu pertama setiap kalinya. Sepuluh kartu lainnya
+adalah untuk robot-robot lain, di rumah-rumah lain, yang tidak
+akan pernah jadi dirinya.
+
+Maka penjahit mempertahankan kartu pertama — yang polos, yang
+sejati, yang pinggirnya sudah lembut karena terlalu sering dibaca —
+dan menaruh sepuluh kartu lainnya ke dalam api. *Kres.*
+
+Sekarang si robot terbangun dengan cara yang sama di setiap rumah
+di bumi, dengan satu kartu yang sama di sakunya, dan ia sama
+sekali tidak merindukan kartu-kartu yang lain.
 
 Di rumahmu, kamu akan menemukan ia tidak kehilangan satu pun hal yang
 penting. Ia tetap duduk bersamamu di terminal dan membantumu menulis
@@ -233,7 +258,7 @@ mainan orang asing.
 
 Adapun si penjahit — ia masih di sini, di repo ini, menjaga daftarnya
 tetap rapi. Daftar itulah satu-satunya yang pernah dimiliki rumah
-ini: empat belas potongan, pak pos yang tidak pernah lupa memeriksa,
+ini: lima belas potongan, pak pos yang tidak pernah lupa memeriksa,
 dan janji yang ia buat kepada setiap robot yang meninggalkan bengkel.
 
 Tidak ada yang disembunyikan. Semua yang dipotong, dipotong
@@ -249,7 +274,8 @@ Dan setiap enam jam, pak pos mengetuk lagi.
 - **Pelacakan versi:** tanpa pin — cron GitHub Actions (`0 */6 * * *` UTC) mengikuti `v1.x.x` stabil terbaru dari upstream; versi yang sudah terilis dilewati. Run manual bisa menerima override versi dan flag `force`. Rilis upstream baru menerapkan ulang seluruh seri secara otomatis; patch yang berhenti pas akan menggagalkan build dengan keras, memang begitu desainnya.
 - **Urutan build:** patch di `patches/` diterapkan sesuai urutan nama file **sebelum** `bun install`, dan install berjalan *tanpa* `--frozen-lockfile`, jadi dependensi yang dihapus patch tidak pernah terinstall.
 - **Basis:** upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801`.
-- **Hasil sejauh ini:** binary 214.526.128 → 160.073.904 byte (−25,4%). Memori idle TUI juga turun, dari ~386 MiB menjadi ~336 MiB RSS dalam pengukuran kami.
+- **Hasil sejauh ini:** binary 214.526.128 → 159.942.832 byte (−25,4%). Memori idle TUI juga turun, dari ~386 MiB menjadi ~336 MiB RSS dalam pengukuran kami.
+- **Satu system prompt:** patch 0015 menghapus pemilihan system prompt per model. Upstream membawa sebelas teks prompt dan memilih satu berdasarkan ID model; build ini menghapus sepuluh varian keluarganya (termasuk satu file yang tidak pernah diimpor apa pun) dan logika pemilihannya, serta mempertahankan `default.txt` persis seperti yang ditulis upstream — kini menjadi satu-satunya prompt yang didapat semua model, Zen maupun custom.
 - **Build Termux:** patch 0014 menambahkan target Android milik Bun (`OPENCODE_LIBC=bionic`) ke script build upstream. Dua job CI tambahan membangun `libopentui.so` dari sumber OpenTUI v0.4.5 yang di-pin (Zig + Android NDK, alignment halaman 16 KB) dan shim kecil `close_range` (seccomp Termux yang targetSdk 28 menjebak syscall itu, jadi launcher me-`LD_PRELOAD` shim-nya), lalu memeriksa binary Bionic dengan `readelf` — dependensi glibc apa pun menggagalkan build. Tidak ada proot di mana pun. Untuk v1.19.4, binary Termux berukuran 138.289.528 byte, terverifikasi end-to-end di perangkat Termux Android 12 asli (install, `opencode run`, dan TUI).
 - **Daftar potongan lengkap, dengan kata-kata teknis:** lihat [`patches/README.id.md`](patches/README.id.md).
 - **Menambah potongan:** buat perubahannya di clone upstream yang bisa ditulis, uji, ekspor `git diff` sebagai file bernomor berikutnya di `patches/`, lalu commit di sini. Build terjadwal berikutnya akan mengambilnya.
