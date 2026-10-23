@@ -12,6 +12,9 @@ Current series:
 - `0002-cli-tui-only.patch` — removes the Web UI (build embed, `web` /
   `serve` / `attach` commands, and the server's UI route incl. its
   `app.opencode.ai` proxy fallback) so the result is CLI + TUI only.
+- `0003-remove-github-integration.patch` — removes the `opencode github`
+  agent command, the `opencode pr` helper, and the GitHub-only
+  (`@octokit/*`, `@actions/github`) dependencies and tests.
 
 This file is not a patch and is ignored by `scripts/apply-patches.sh`,
 which only reads `*.patch`.

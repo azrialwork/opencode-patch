@@ -88,6 +88,15 @@ from view.
   `server/shared/ui.ts` — including its fallback that proxied the UI
   from `app.opencode.ai` when no embedded bundle existed. The
   `OPENCODE_DISABLE_EMBEDDED_WEB_UI` flag goes with it.
+- `0003-remove-github-integration.patch` — removes the GitHub
+  integration: the `opencode github` agent command (`install` / `run`,
+  ±1,650 lines across `github.ts`, `github.handler.ts`,
+  `github.shared.ts`), the `opencode pr` helper (it shells out to the
+  `gh` CLI), the GitHub-only helper `parseGitHubRemote` in
+  `util/repository.ts`, and the GitHub-only dependencies
+  (`@actions/github`, `@octokit/graphql`, `@octokit/rest`,
+  `@octokit/webhooks-types`), plus their tests. Plain git support is
+  untouched.
 
 To add a patch later:
 
