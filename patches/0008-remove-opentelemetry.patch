@@ -1,0 +1,389 @@
+diff --git a/package.json b/package.json
+index d554a19697..40201a8ca8 100644
+--- a/package.json
++++ b/package.json
+@@ -31,7 +31,6 @@
+       "packages/slack"
+     ],
+     "catalog": {
+-      "@effect/opentelemetry": "4.0.0-beta.83",
+       "@effect/platform-node": "4.0.0-beta.83",
+       "@effect/sql-sqlite-bun": "4.0.0-beta.83",
+       "@npmcli/arborist": "9.4.0",
+diff --git a/packages/core/package.json b/packages/core/package.json
+index f498ac7bb7..7233a65606 100644
+--- a/packages/core/package.json
++++ b/packages/core/package.json
+@@ -64,7 +64,6 @@
+     "@ai-sdk/openai-compatible": "2.0.41",
+     "@ai-sdk/provider": "3.0.16",
+     "@ai-sdk/provider-utils": "4.0.51",
+-    "@effect/opentelemetry": "catalog:",
+     "@effect/platform-node": "catalog:",
+     "@effect/sql-sqlite-bun": "catalog:",
+     "@lydell/node-pty": "catalog:",
+@@ -76,10 +75,6 @@
+     "@opencode-ai/llm": "workspace:*",
+     "@opencode-ai/schema": "workspace:*",
+     "@opencode-ai/plugin": "workspace:*",
+-    "@opentelemetry/api": "1.9.0",
+-    "@opentelemetry/context-async-hooks": "2.6.1",
+-    "@opentelemetry/exporter-trace-otlp-http": "0.214.0",
+-    "@opentelemetry/sdk-trace-base": "2.6.1",
+     "@parcel/watcher": "2.5.1",
+     "@silvia-odwyer/photon-node": "0.3.4",
+     "ai-gateway-provider": "3.2.0",
+diff --git a/packages/core/src/flag/flag.ts b/packages/core/src/flag/flag.ts
+index b947c48e51..fc8a9323d6 100644
+--- a/packages/core/src/flag/flag.ts
++++ b/packages/core/src/flag/flag.ts
+@@ -13,8 +13,6 @@ function enabledByExperimental(key: string) {
+ }
+ 
+ export const Flag = {
+-  OTEL_EXPORTER_OTLP_ENDPOINT: process.env["OTEL_EXPORTER_OTLP_ENDPOINT"],
+-  OTEL_EXPORTER_OTLP_HEADERS: process.env["OTEL_EXPORTER_OTLP_HEADERS"],
+ 
+   OPENCODE_AUTO_HEAP_SNAPSHOT: truthy("OPENCODE_AUTO_HEAP_SNAPSHOT"),
+   OPENCODE_GIT_BASH_PATH: process.env["OPENCODE_GIT_BASH_PATH"],
+diff --git a/packages/core/src/observability.ts b/packages/core/src/observability.ts
+index 22285974d8..3a7ed79d4e 100644
+--- a/packages/core/src/observability.ts
++++ b/packages/core/src/observability.ts
+@@ -2,23 +2,13 @@ export * as Observability from "./observability"
+ 
+ import { NodeFileSystem } from "@effect/platform-node"
+ import { LayerNode } from "./effect/layer-node"
+-import { Effect, Layer, Logger, References } from "effect"
+-import { FetchHttpClient } from "effect/unstable/http"
+-import { OtlpSerialization } from "effect/unstable/observability"
++import { Layer, Logger, References } from "effect"
+ import { Logging } from "./observability/logging"
+-import { Otlp } from "./observability/otlp"
+ 
+-export const layer = Layer.unwrap(
+-  Effect.gen(function* () {
+-    const logs = Logger.layer([...Logging.loggers(), ...Otlp.loggers()], { mergeWithExisting: false }).pipe(
+-      Layer.provide(NodeFileSystem.layer),
+-      Layer.provide(OtlpSerialization.layerJson),
+-      Layer.provide(FetchHttpClient.layer),
+-      Layer.orDie,
+-      Layer.merge(Layer.succeed(References.MinimumLogLevel, Logging.minimumLogLevel())),
+-    )
+-    return Layer.merge(logs, yield* Effect.promise(Otlp.tracingLayer))
+-  }),
++export const layer = Logger.layer(Logging.loggers(), { mergeWithExisting: false }).pipe(
++  Layer.provide(NodeFileSystem.layer),
++  Layer.orDie,
++  Layer.merge(Layer.succeed(References.MinimumLogLevel, Logging.minimumLogLevel())),
+ )
+ 
+ export const node = LayerNode.make({ name: "observability", layer, deps: [] })
+diff --git a/packages/core/src/observability/otlp.ts b/packages/core/src/observability/otlp.ts
+deleted file mode 100644
+index dd99ebc143..0000000000
+--- a/packages/core/src/observability/otlp.ts
++++ /dev/null
+@@ -1,79 +0,0 @@
+-import { Layer } from "effect"
+-import { OtlpLogger } from "effect/unstable/observability"
+-import { Flag } from "../flag/flag"
+-import { InstallationChannel, InstallationVersion } from "../installation/version"
+-import { runID } from "./shared"
+-
+-const endpoint = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
+-
+-const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
+-  ? Flag.OTEL_EXPORTER_OTLP_HEADERS.split(",").reduce(
+-      (acc, entry) => {
+-        const [key, ...value] = entry.split("=")
+-        acc[key] = value.join("=")
+-        return acc
+-      },
+-      {} as Record<string, string>,
+-    )
+-  : undefined
+-
+-function resourceAttributes() {
+-  const value = process.env.OTEL_RESOURCE_ATTRIBUTES
+-  if (!value) return {}
+-  try {
+-    return Object.fromEntries(
+-      value.split(",").map((entry) => {
+-        const index = entry.indexOf("=")
+-        if (index < 1) throw new Error("Invalid OTEL_RESOURCE_ATTRIBUTES entry")
+-        return [decodeURIComponent(entry.slice(0, index)), decodeURIComponent(entry.slice(index + 1))]
+-      }),
+-    )
+-  } catch {
+-    return {}
+-  }
+-}
+-
+-export function resource(): { serviceName: string; serviceVersion: string; attributes: Record<string, string> } {
+-  return {
+-    serviceName: "opencode",
+-    serviceVersion: InstallationVersion,
+-    attributes: {
+-      ...resourceAttributes(),
+-      "deployment.environment.name": InstallationChannel,
+-      "opencode.client": Flag.OPENCODE_CLIENT,
+-      "opencode.run": runID,
+-      "service.instance.id": runID,
+-    },
+-  }
+-}
+-
+-export function loggers() {
+-  if (!endpoint) return []
+-  return [OtlpLogger.make({ url: `${endpoint}/v1/logs`, resource: resource(), headers })]
+-}
+-
+-export async function tracingLayer() {
+-  if (!endpoint) return Layer.empty
+-  const NodeSdk = await import("@effect/opentelemetry/NodeSdk")
+-  const OTLP = await import("@opentelemetry/exporter-trace-otlp-http")
+-  const SdkBase = await import("@opentelemetry/sdk-trace-base")
+-  const { AsyncLocalStorageContextManager } = await import("@opentelemetry/context-async-hooks")
+-  const { context } = await import("@opentelemetry/api")
+-
+-  // The Effect Node SDK does not register a global context manager, but the AI SDK uses it to parent spans.
+-  const manager = new AsyncLocalStorageContextManager()
+-  manager.enable()
+-  context.setGlobalContextManager(manager)
+-
+-  return NodeSdk.layer(() => ({
+-    resource: resource(),
+-    spanProcessor: new SdkBase.BatchSpanProcessor(
+-      new OTLP.OTLPTraceExporter({
+-        url: `${endpoint}/v1/traces`,
+-        headers,
+-      }),
+-    ),
+-  }))
+-}
+-
+-export * as Otlp from "./otlp"
+diff --git a/packages/core/src/v1/config/config.ts b/packages/core/src/v1/config/config.ts
+index 072c565fe0..4a1e0b44af 100644
+--- a/packages/core/src/v1/config/config.ts
++++ b/packages/core/src/v1/config/config.ts
+@@ -154,9 +154,6 @@ export const Info = Schema.Struct({
+     Schema.Struct({
+       disable_paste_summary: Schema.optional(Schema.Boolean),
+       batch_tool: Schema.optional(Schema.Boolean).annotate({ description: "Enable the batch tool" }),
+-      openTelemetry: Schema.optional(Schema.Boolean).annotate({
+-        description: "Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)",
+-      }),
+       primary_tools: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+         description: "Tools that should only be available to primary agents.",
+       }),
+diff --git a/packages/core/test/effect/observability.test.ts b/packages/core/test/effect/observability.test.ts
+index 4758563f28..9888f671a8 100644
+--- a/packages/core/test/effect/observability.test.ts
++++ b/packages/core/test/effect/observability.test.ts
+@@ -5,52 +5,6 @@ import fs from "fs/promises"
+ import os from "os"
+ import path from "path"
+ import { fileLogger } from "../../src/observability/logging"
+-import { resource } from "../../src/observability/otlp"
+-
+-const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
+-const opencodeClient = process.env.OPENCODE_CLIENT
+-
+-afterEach(() => {
+-  if (otelResourceAttributes === undefined) delete process.env.OTEL_RESOURCE_ATTRIBUTES
+-  else process.env.OTEL_RESOURCE_ATTRIBUTES = otelResourceAttributes
+-
+-  if (opencodeClient === undefined) delete process.env.OPENCODE_CLIENT
+-  else process.env.OPENCODE_CLIENT = opencodeClient
+-})
+-
+-describe("resource", () => {
+-  test("parses and decodes OTEL resource attributes", () => {
+-    process.env.OTEL_RESOURCE_ATTRIBUTES =
+-      "service.namespace=anomalyco,team=platform%2Cobservability,label=hello%3Dworld,key%2Fname=value%20here"
+-
+-    expect(resource().attributes).toMatchObject({
+-      "service.namespace": "anomalyco",
+-      team: "platform,observability",
+-      label: "hello=world",
+-      "key/name": "value here",
+-    })
+-  })
+-
+-  test("drops OTEL resource attributes when any entry is invalid", () => {
+-    process.env.OTEL_RESOURCE_ATTRIBUTES = "service.namespace=anomalyco,broken"
+-
+-    expect(resource().attributes["service.namespace"]).toBeUndefined()
+-    expect(resource().attributes["opencode.client"]).toBeDefined()
+-  })
+-
+-  test("keeps built-in attributes when env values conflict", () => {
+-    process.env.OPENCODE_CLIENT = "cli"
+-    process.env.OTEL_RESOURCE_ATTRIBUTES =
+-      "opencode.client=web,service.instance.id=override,service.namespace=anomalyco"
+-
+-    expect(resource().attributes).toMatchObject({
+-      "opencode.client": "cli",
+-      "service.namespace": "anomalyco",
+-    })
+-    expect(resource().attributes["service.instance.id"]).not.toBe("override")
+-    expect(resource().attributes["opencode.run"]).toMatch(/^[0-9a-f]{8}$/)
+-  })
+-})
+ 
+ test("file logger appends concurrent runs with a run on every line", async () => {
+   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-log-test-"))
+diff --git a/packages/opencode/package.json b/packages/opencode/package.json
+index 080171f477..3ce67b78bc 100644
+--- a/packages/opencode/package.json
++++ b/packages/opencode/package.json
+@@ -54,7 +54,6 @@
+     "@ai-sdk/openai-compatible": "2.0.41",
+     "@ai-sdk/provider": "3.0.16",
+     "@clack/prompts": "1.0.0-alpha.1",
+-    "@effect/opentelemetry": "catalog:",
+     "@effect/platform-node": "catalog:",
+     "@ff-labs/fff-bun": "0.10.5",
+     "@modelcontextprotocol/sdk": "1.29.0",
+@@ -68,11 +67,6 @@
+     "@opencode-ai/sdk": "workspace:*",
+     "@opencode-ai/server": "workspace:*",
+     "@opencode-ai/tui": "workspace:*",
+-    "@opentelemetry/api": "1.9.0",
+-    "@opentelemetry/context-async-hooks": "2.6.1",
+-    "@opentelemetry/exporter-trace-otlp-http": "0.214.0",
+-    "@opentelemetry/sdk-trace-base": "2.6.1",
+-    "@opentelemetry/sdk-trace-node": "2.6.1",
+     "@opentui/core": "catalog:",
+     "@opentui/keymap": "catalog:",
+     "@opentui/solid": "catalog:",
+diff --git a/packages/opencode/src/agent/agent.ts b/packages/opencode/src/agent/agent.ts
+index 536a642fe4..af0ff0e331 100644
+--- a/packages/opencode/src/agent/agent.ts
++++ b/packages/opencode/src/agent/agent.ts
+@@ -23,7 +23,6 @@ import { Skill } from "../skill"
+ import { Effect, Context, Layer, Schema } from "effect"
+ import { InstanceState } from "@/effect/instance-state"
+ import * as Option from "effect/Option"
+-import * as OtelTracer from "@effect/opentelemetry/Tracer"
+ import { AbsolutePath, type DeepMutable } from "@opencode-ai/core/schema"
+ import { ProviderV2 } from "@opencode-ai/core/provider"
+ import { ModelV2 } from "@opencode-ai/core/model"
+@@ -373,9 +372,6 @@ const layer = Layer.effect(
+         const model = input.model ?? (yield* provider.defaultModel())
+         const resolved = yield* provider.getModel(model.providerID, model.modelID)
+         const language = yield* provider.getLanguage(resolved)
+-        const tracer = cfg.experimental?.openTelemetry
+-          ? Option.getOrUndefined(yield* Effect.serviceOption(OtelTracer.OtelTracer))
+-          : undefined
+ 
+         const system = [PROMPT_GENERATE]
+         yield* plugin.trigger("experimental.chat.system.transform", { model: resolved }, { system })
+@@ -386,13 +382,6 @@ const layer = Layer.effect(
+         const isOpenaiOauth = model.providerID === "openai" && authInfo?.type === "oauth"
+ 
+         const params = {
+-          experimental_telemetry: {
+-            isEnabled: cfg.experimental?.openTelemetry,
+-            tracer,
+-            metadata: {
+-              userId: cfg.username ?? "unknown",
+-            },
+-          },
+           temperature: 0.3,
+           messages: [
+             ...(isOpenaiOauth
+diff --git a/packages/opencode/src/control-plane/workspace.ts b/packages/opencode/src/control-plane/workspace.ts
+index 188cd383bb..7ee1dd72a8 100644
+--- a/packages/opencode/src/control-plane/workspace.ts
++++ b/packages/opencode/src/control-plane/workspace.ts
+@@ -530,9 +530,6 @@ const layer = Layer.effect(
+         OPENCODE_AUTH_CONTENT: JSON.stringify(yield* auth.all()),
+         OPENCODE_WORKSPACE_ID: config.id,
+         OPENCODE_EXPERIMENTAL_WORKSPACES: "true",
+-        OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
+-        OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+-        OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
+       }
+ 
+       yield* WorkspaceAdapterRuntime.create(adapter, config, env)
+diff --git a/packages/opencode/src/session/llm.ts b/packages/opencode/src/session/llm.ts
+index 7ec0cd9edd..e7c0db7850 100644
+--- a/packages/opencode/src/session/llm.ts
++++ b/packages/opencode/src/session/llm.ts
+@@ -24,7 +24,6 @@ import { Auth } from "@/auth"
+ import { EffectBridge } from "@/effect/bridge"
+ import { RuntimeFlags } from "@/effect/runtime-flags"
+ import * as Option from "effect/Option"
+-import * as OtelTracer from "@effect/opentelemetry/Tracer"
+ import { LLMAISDK } from "./llm/ai-sdk"
+ import { LLMNativeRuntime } from "./llm/native-runtime"
+ import { LLMRequestPrep } from "./llm/request"
+@@ -111,22 +110,6 @@ const live: Layer.Layer<
+ 
+       const bridge = yield* EffectBridge.make()
+ 
+-      const tracer = cfg.experimental?.openTelemetry
+-        ? Option.getOrUndefined(yield* Effect.serviceOption(OtelTracer.OtelTracer))
+-        : undefined
+-      const telemetryTracer = tracer
+-        ? new Proxy(tracer, {
+-            get(target, prop, receiver) {
+-              if (prop !== "startSpan") return Reflect.get(target, prop, receiver)
+-              return (...args: Parameters<typeof target.startSpan>) => {
+-                const span = target.startSpan(...args)
+-                span.setAttribute("session.id", input.sessionID)
+-                return span
+-              }
+-            },
+-          })
+-        : undefined
+-
+       // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
+       // either returns a ready LLMEvent stream or a concrete fallback reason.
+       if (flags.experimentalNativeLlm) {
+@@ -247,15 +230,6 @@ const live: Layer.Layer<
+               },
+             ],
+           }),
+-          experimental_telemetry: {
+-            isEnabled: cfg.experimental?.openTelemetry,
+-            functionId: "session.llm",
+-            tracer: telemetryTracer,
+-            metadata: {
+-              userId: cfg.username ?? "unknown",
+-              sessionId: input.sessionID,
+-            },
+-          },
+         }),
+       }
+     })
+diff --git a/packages/sdk/js/src/gen/types.gen.ts b/packages/sdk/js/src/gen/types.gen.ts
+index 2d1b6afcce..1e27453f4d 100644
+--- a/packages/sdk/js/src/gen/types.gen.ts
++++ b/packages/sdk/js/src/gen/types.gen.ts
+@@ -1293,10 +1293,6 @@ export type Config = {
+      * Enable the batch tool
+      */
+     batch_tool?: boolean
+-    /**
+-     * Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)
+-     */
+-    openTelemetry?: boolean
+     /**
+      * Tools that should only be available to primary agents.
+      */
+diff --git a/packages/sdk/js/src/v2/gen/types.gen.ts b/packages/sdk/js/src/v2/gen/types.gen.ts
+index 1baf5c1feb..c1cfe5f02d 100644
+--- a/packages/sdk/js/src/v2/gen/types.gen.ts
++++ b/packages/sdk/js/src/v2/gen/types.gen.ts
+@@ -1987,7 +1987,6 @@ export type Config = {
+   experimental?: {
+     disable_paste_summary?: boolean
+     batch_tool?: boolean
+-    openTelemetry?: boolean
+     primary_tools?: Array<string>
+     continue_loop_on_deny?: boolean
+     mcp_timeout?: number

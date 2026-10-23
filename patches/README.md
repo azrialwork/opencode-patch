@@ -33,6 +33,10 @@ Current series:
   the `Installation` service, the `/global/upgrade` endpoint, the TUI
   `/update` flow and update notices, the `autoupdate` config keys,
   and `OPENCODE_DISABLE_AUTOUPDATE`.
+- `0008-remove-opentelemetry.patch` — removes OpenTelemetry: the OTLP
+  exporters, the `@opentelemetry/*` / `@effect/opentelemetry`
+  dependencies, the AI SDK telemetry tracer plumbing, the
+  `experimental.openTelemetry` config key, and the `OTEL_*` flags.
 
 This file is not a patch and is ignored by `scripts/apply-patches.sh`,
 which only reads `*.patch`.

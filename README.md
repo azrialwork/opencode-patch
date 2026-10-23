@@ -135,6 +135,13 @@ from view.
   dialog and home-screen update notice, the periodic update checker,
   the `autoupdate` config keys, and `OPENCODE_DISABLE_AUTOUPDATE`.
   A patched build must never be overwritten by an upstream release.
+- `0008-remove-opentelemetry.patch` — removes OpenTelemetry: the
+  OTLP log/trace exporters in core (`observability/otlp.ts`), the
+  `@opentelemetry/*` and `@effect/opentelemetry` dependencies, the
+  AI SDK `experimental_telemetry` tracer plumbing in the LLM and
+  agent paths, the `experimental.openTelemetry` config key, the
+  `OTEL_EXPORTER_OTLP_*` flags, and the OTEL env forwarding into
+  workspaces. Local file/console logging is unchanged.
 
 To add a patch later:
 
