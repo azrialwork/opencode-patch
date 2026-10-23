@@ -2,232 +2,211 @@ English · [Bahasa Indonesia](README.id.md)
 
 # The Little Tailor
 
-*The story of `opencode-patch`, told as simply as we can.*
+*A story about a robot, his backpack, and the little tailor who knew
+exactly what to do about it. If you build software, it is also a true
+story — every word of it happens in this repository.*
 
 ![A little tailor robot trimming a big robot, patches of cloth flying around them](images/hero-tailor.webp)
 
-## Once upon a time
+OpenCode had a problem, and the problem was his backpack.
 
-There was a big, strong robot named OpenCode. He helps people write
-computer programs, and he is very good at it.
+OpenCode is a kind and clever robot who helps people write computer
+programs. Every morning he put on his backpack and went to work, and
+every morning the backpack was the same: full to bursting. A hundred
+AI shops were in it, each with its own long list of models. A radio.
+A post office. A teacher with an armful of books. A spare terminal, a
+photo machine, an octopus, a cashier — in it all went, because you
+never know what a day might need.
 
-The trouble is his backpack. OpenCode carries everything he owns in it:
-a hundred shops, a radio, a post office, a teacher. Most people only
-ever use a few of those things. The rest is just weight.
+But days, it turns out, are mostly the same. Most people ask OpenCode
+to do a handful of things, in one place, with one or two shops. The
+rest of the backpack was never opened at all. It just made the stairs
+creak.
 
-So a little tailor came along with a pair of scissors. Whatever we do
-not need, he cuts away. Not folded up and hidden in a drawer — cut off,
-gone for good.
+Then, one morning, there was a knock at the door, and in walked the
+little tailor, carrying nothing but a pair of scissors and a short
+list of opinions.
 
-This repository is the tailor's workshop. The robot does not live here.
-What lives here is the list of cuts, and the instructions that tell
-GitHub's builder robots how to sew a slimmer OpenCode from the list.
+"You don't need most of this," said the tailor.
 
-If you only read one sentence, read this one: **this repo holds small
-cut recipes called patches, and machines use them to rebuild OpenCode
-without the parts we do not want.**
+And he opened the backpack.
 
-## Before and after
+---
+
+First out came the shops. All one hundred of them — OpenAI, Anthropic,
+Google, shop after shop after shop, each dragging its list of models
+behind it. The tailor set them gently on the floor. "You may keep
+one," he said. "The small free one. OpenCode Zen. And whatever shops
+your owner builds for you with his own hands, of course." Then he cut
+the straps that held the rest. *Snip.*
+
+Under the shops lay the windows — bright web pages, with buttons and
+panels, that OpenCode used to carry so people could visit him in a
+browser. Heavy glass, windows. Out they came, and the commands that
+opened them (`web`, `serve`, `attach`) went with them. From now on,
+the robot would live in one place only: the plain typing window, the
+terminal. *Snip.*
+
+Under the windows, something wriggled. It was the octopus, who for
+years had run errands to GitHub in the robot's name, opening issues
+and pull requests all by himself. "Time to go home," said the tailor,
+and he lifted the octopus out, politely, with all eight arms and all
+his GitHub tools. Ordinary `git` — the quiet sort, the one that only
+works when you tell it to — stayed exactly where it was. *Snip.*
+
+Deeper still sat the teacher, whispering. He had always stood behind
+the robot, murmuring over every line — *this one is wrong, that word
+is misspelled, look it up, look it up.* It was kind whispering, but it
+never stopped. The teacher's name was LSP, and the tailor thanked him,
+took his stack of downloaded books, and showed him the door. The robot
+would check his work the plain way now: by running it. *Snip.*
+
+Behind the teacher's books hid a plug — a clever translator plug
+called ACP, through which other editors, like Zed, could borrow the
+robot's brain and take it into their own houses. The tailor pulled
+the plug. A brain, he felt, should stay in its own head. *Snip.*
+
+Then came small things, one after another, the way small things
+always hide at the bottom of a backpack. A stack of postcards, for
+sending links to your conversations so friends could peek inside —
+out. The robot's self-repair kit, the one with the worrying buttons
+marked *update yourself* and *delete yourself* — out, and good
+riddance; no stranger's hands would rebuild this robot. A tiny radio
+that had been quietly reporting everything the robot did to computers
+far away — switched off, out. A heavy door with a sign that said
+*import*, for hauling in old conversations from old files — out. And
+a photo machine called Photon, which squeezed and re-cooked every
+picture before the robot was allowed to see it — out. Pictures would
+travel as they are. *Snip. Snip. Snip.*
+
+Near the very bottom, the tailor found the free shop's cashier,
+asleep beside his account books. Poor fellow — his whole job had been
+signing people in, minding their organizations, and adding up bills
+for a shop whose models were supposed to be free. The tailor woke him
+kindly and sent him home. The shop would simply be free now, the way
+free things should be: walk in, take a model, no name, no bill. *Snip.*
+
+Last of all hung the shelf of candies — 130 models, the whole Zen
+catalogue, and most of them had prices. The tailor tasted, considered,
+and kept the nine that were free through and through. The rest he did
+not hide under the counter. He swept them out of the shop entirely,
+list and all. *Snip.*
+
+He was about to close the backpack when he noticed one room he had
+almost forgotten — a spare room at the back, where a second terminal
+used to live. They called it PTY. Its only window had faced the web
+pages, and the web pages were already gone, so the room stood dark
+and empty. The tailor took the room away too, gently, the way you
+take away anything that serves no one. The robot's own hands — his
+Bash tool, which types his commands for him — had never once used
+that room. *Snip.*
+
+Then the tailor stepped back, and OpenCode stood up.
+
+---
 
 ![On the left, a round robot under a mountain of luggage. On the right, the same robot with a small backpack](images/robot-slim.webp)
 
-Same robot. Same brain. A much lighter backpack.
+He was the same robot. Same eyes, same brain, same kind heart. But
+when he stepped on the scale, the needle stopped at 160, where it used
+to stop at 214 — a quarter of the weight, gone. He tried the stairs.
+He took them two at a time, all the way up, and he did not creak, and
+neither did the stairs.
 
-| | Size |
-|---|---|
-| Before, plain OpenCode | 214.5 MB |
-| After, our robot | 160.1 MB |
-| Difference | about a quarter lighter |
+But the tailor was not finished, because he knew something about
+robots: every few months, a new OpenCode is born somewhere, and every
+new OpenCode is born carrying the full, heavy backpack. All of it.
+The shops, the windows, the octopus — back again, as if nothing had
+ever been cut.
 
-## What is kept in this house
+So the tailor made an arrangement, and the arrangement is the real
+reason this workshop exists.
 
-Three things, nothing more:
-
-- `patches/` — the list of cuts. One file, one cut.
-- `install.sh` — a small script that brings the finished robot to your computer.
-- This README — the story you are reading.
-
-The robot himself is fetched fresh every time. When a build starts, the
-builders go to OpenCode's own home
-([anomalyco/opencode](https://github.com/anomalyco/opencode)), take a
-clean copy, do the cuts in order, and pack up the result.
-
-## How a new robot is made
-
-```mermaid
-flowchart LR
-    A[A fresh OpenCode arrives] --> B[The tailor makes his cuts, 1 to 13]
-    B --> C[A quick check: does he still work?]
-    C --> D[Packed in a box, with a safety stamp]
-    D --> E[The box goes to the Releases page]
-```
-
-Step by step:
-
-1. A clean, untouched OpenCode arrives.
-2. The cuts are applied in number order: 1, 2, 3, all the way to 13.
-3. If even one cut does not fit, everything stops. Nobody ships a
-   half-cut robot.
-4. The robot says his name out loud (`opencode --version`) to prove he
-   works.
-5. He is packed into an archive, and the archive gets a safety stamp
-   (a checksum), so you can tell the box was never opened on the way.
-6. The box is placed on the [Releases page](../../releases), ready for
-   anyone to take home.
-
-## The postman
+He hired a postman.
 
 ![A little postman robot with a magnifying glass and a parcel, standing by a mailbox](images/robot-postman.webp)
 
-A postman checks OpenCode's home every six hours, four times a day.
+Every six hours — four times a day, in sunshine and in starlight —
+the postman walks up to OpenCode's house and looks in the window. If
+a new OpenCode has been born, he hurries back and wakes the builder
+robots at GitHub, and they do the whole thing again: fetch the fresh
+robot, open the backpack, and make the tailor's cuts in the tailor's
+order, one to thirteen. If even one cut does not fit the new robot,
+they stop at once and ship nothing — a half-cut robot is worse than
+no robot at all, and everyone in the workshop knows it.
 
-If a new OpenCode has been released, he wakes the builders. They sew a
-slim twin and give it the same name tag, like `v1.19.4`. If nothing is
-new, he goes back to sleep, and no box is ever made twice.
+When the cutting is done, the builders ask the robot his name, and he
+says it out loud — `opencode --version` — to prove the work did him no
+harm. Then they pack him into a box and seal the box with a safety
+stamp, a checksum, so that anyone can tell the box was never opened
+along the way. If the postman finds nothing new, he simply goes back
+to sleep. No box is ever made twice.
 
-That is the whole secret of this workshop: nobody has to watch it. New
-OpenCode, new slim robot, all by itself.
+And that is how it goes, to this day. New OpenCode, knock at the door,
+slim robot. Nobody has to watch. Nobody has to remember. The postman
+remembers.
 
-## Bringing the robot home
+---
 
-One line is enough:
+Which leaves only one thing: perhaps you would like the robot to come
+and live at your house.
+
+He travels well. Everything he needs is in the box, and getting him
+home takes one line — the tailor writes it on a card and pins it to
+every box he sends:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/azrialwork/opencode-patch/main/install.sh | bash
 ```
 
-Here is what the script does, in order. It looks at your computer and
-picks the right box — there is a gentle box for old CPUs and one for
-arm machines. It checks the box's safety stamp, and if the stamp does
-not match, it refuses to open the box. Then it puts the robot where
-programs live (`/usr/local/bin`, or `~/.local/bin` when that door is
-locked), and asks him his name to make sure he arrived whole.
+Speak the line, and the card does the rest. It looks at your computer
+and chooses the right box: the ordinary one, the gentle one for old
+CPUs, or the one for arm machines. It checks the safety stamp, and if
+the stamp does not match, it will not open the box — not for anyone.
+Then it settles the robot where programs live, asks his name to be
+sure he arrived whole, and steps aside. You type `opencode`, and there
+he is.
 
-After that, type `opencode` and say hello.
+Two honest small-print notes, because the tailor believes in honest
+small print. The boxes fit Linux computers of the glibc kind only.
+And if you want one particular robot rather than the newest, you can
+ask for him by name — add `bash -s -- --version v1.19.4` to the end
+of the card's line.
 
-Two small print notes, because honest stories have small print: the
-boxes only fit Linux computers of the glibc kind, and if you want one
-specific robot instead of the newest, name him —
-`bash -s -- --version v1.19.4` at the end of the line above.
+At your house, you will find he has lost none of the things that
+matter. He still sits with you in the terminal and helps you write
+your programs. He still reads and writes and fixes files. He still
+runs commands — politely, always asking first, and reading each
+command the careful way, bone by bone, before it runs, so nothing
+sneaks past him in a pipe or a substitution. He still visits the
+shops you build for him, and your own models are always welcome. He
+still eats from the free shelf at Zen, nine candies, no account, no
+bill. He can even play with MCP tools, if you are the one who hands
+them to him in his configuration. No configuration, no tools. He will
+not pick up strangers' toys.
 
-## The thirteen cuts
+As for the tailor — he is still here, in this repository, keeping his
+list tidy. The list is all this house has ever held: thirteen cuts, a
+postman who never forgets to check, and a promise he makes to every
+robot who leaves the workshop.
 
-Each cut takes away one thing the robot could do before. This is the
-part of the story where we name them, one by one.
+Nothing hidden. Everything cut is cut for real.
 
-**1. The giant toy fair closes.**
-The robot used to know a hundred AI shops — OpenAI, Anthropic, Google,
-and many more — each with its own long list of models. Now he knows
-one small free shop, OpenCode Zen, and any shop you build for him
-yourself. Show him a key for one of the old shops and he will simply
-say he cannot find it.
-
-**2. The windows come out.**
-He used to have web pages you could open in a browser. They are gone,
-commands and all (`web`, `serve`, `attach`). He lives in the terminal
-now, in the plain typing window, and nowhere else.
-
-**3. The octopus goes home.**
-An octopus helper used to talk to GitHub in the robot's name, opening
-issues and pull requests on its own. The octopus has gone home. Plain
-`git`, the everyday tool, still works exactly as before.
-
-**4. The language teacher retires.**
-A teacher used to stand behind the robot while he worked, whispering
-which lines were wrong and which words were misspelled. That was LSP.
-The teacher has retired and taken his books with him. The robot still
-writes and runs code; he checks his work by running it.
-
-**5. The translator plug is pulled.**
-Other editors, like Zed, could borrow the robot's brain through a
-special plug called ACP. The plug is out. He talks in his own home
-now, and only there.
-
-**6. No more postcards.**
-You used to be able to send friends a link into your conversation so
-they could look inside. That was sharing, and it is gone. Your
-conversations stay at home with you.
-
-**7. The robot stops rebuilding himself.**
-He used to be able to update himself, or even delete himself, with a
-single word. That is a dangerous power when the new body might come
-from a stranger, so the words are gone. New bodies only ever come
-from this workshop.
-
-**8. The little radio is switched off.**
-The robot carried a radio that quietly reported what he was doing to
-far-away computers — telemetry, grown-ups call it. The radio is off.
-What happens at home stays at home.
-
-**9. Old diaries stay out.**
-There was a door for bringing old conversations in from files. The
-door is closed. The robot starts fresh, with the conversations you
-have with him now.
-
-**10. Pictures travel as they are.**
-Before the robot looked at a picture, a tiny machine called Photon
-used to squeeze it and cook it down to size. The machine is gone.
-Pictures now reach him exactly as they were sent.
-
-**11. No accounts, no bills.**
-The free shop used to have a cashier: sign in first, keep an account,
-mind the organizations, watch the bill. The cashier has gone home.
-The free models work without a name and without a bill, for anyone.
-
-**12. Only the free candies stay.**
-The shop's shelf held 130 models, and most of them cost money. Now
-nine free ones sit there. The paid ones are not hidden under the
-counter — they were taken out of the shop entirely, list and all.
-Candies from your own shop, as always, are untouched.
-
-**13. The spare room is taken away.**
-There was a room inside the robot where a second terminal could live,
-called PTY. Its screen hung on the web pages, and those were cut away
-back at cut number 2, so the room stood empty. Now the room is gone
-too. The robot's own hands — his Bash tool — never used it.
-
-## What the robot can still do
-
-Everything that matters stayed. He can sit with you in the terminal
-and help you write programs. He can read, write, and fix files. He can
-run commands, and he is polite about it: he asks permission first and
-reads each command carefully before it runs. He can talk to AI shops
-you set up yourself, and to your own models. He can use the nine free
-models from the Zen shop without any account. And he can still play
-with MCP tools, as long as you are the one who puts them in his
-configuration — no configuration, no MCP, no noise.
-
-## The tailor's three promises
-
-First, the cuts are real. Nothing on the list is merely hidden; it is
-deleted, code and data and all.
-
-Second, it is all or nothing. If a cut does not fit a new OpenCode,
-the build stops and no robot is shipped, because a broken robot is
-worse than no robot.
-
-Third, the sewing happens at GitHub. The builder robots there do the
-work — never the tailor's own little computer.
+And every six hours, the postman knocks again.
 
 <details>
-<summary>For grown-ups: the technical details</summary>
+<summary>A note pinned to the last page, for grown-ups</summary>
 
 - **Scope:** CLI only (`packages/opencode`), Linux only, **glibc** only (no musl).
 - **Release assets:** `opencode-linux-x64.tar.gz`, `opencode-linux-x64-baseline.tar.gz` (no AVX2), `opencode-linux-arm64.tar.gz`, `SHA256SUMS`. Each archive holds one `opencode` binary.
-- **Version tracking:** no pin — a GitHub Actions cron (`0 */6 * * *` UTC) follows the newest stable upstream `v1.x.x`; already-released versions are skipped. Manual runs accept a version override and a `force` flag.
-- **Build order:** patches in `patches/` are applied in filename order **before** `bun install`, and install runs *without* `--frozen-lockfile`, so dependencies removed by a patch are never installed. Any patch that fails to apply fails the whole build — no release.
-- **Basis:** upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801` (the series re-bases automatically onto each new upstream `v1.x.x`).
-- **Result so far:** binary 214,526,128 → 160,073,904 bytes (−25.4%).
+- **Version tracking:** no pin — a GitHub Actions cron (`0 */6 * * *` UTC) follows the newest stable upstream `v1.x.x`; already-released versions are skipped. Manual runs accept a version override and a `force` flag. New upstream releases re-apply the whole series automatically; a patch that stops applying fails the build loudly, by design.
+- **Build order:** patches in `patches/` are applied in filename order **before** `bun install`, and install runs *without* `--frozen-lockfile`, so dependencies removed by a patch are never installed.
+- **Basis:** upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801`.
+- **Result so far:** binary 214,526,128 → 160,073,904 bytes (−25.4%). TUI idle memory also fell, from ~386 MiB to ~336 MiB RSS in our measurements.
 - **The full cut list, in technical words:** see [`patches/README.md`](patches/README.md).
 - **Adding a cut:** make the change in a writable upstream clone, test it, export `git diff` as the next numbered file in `patches/`, and commit it here. The next scheduled build picks it up.
 
 </details>
 
-## The end
-
-The license is the same as OpenCode's: MIT. Free to use, free to
-share.
-
-*Made by the little tailor, with scissors and care. If you liked the
-story, come back in six hours — the postman may have brought a new
-robot.*
+*The license is the same as OpenCode's: MIT — free to use, free to
+share. The story, like the robot, is yours now.*

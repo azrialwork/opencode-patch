@@ -2,244 +2,223 @@
 
 # Penjahit Kecil
 
-*Kisah `opencode-patch`, diceritakan sesederhana yang kami bisa.*
+*Sebuah cerita tentang robot, ranselnya, dan penjahit kecil yang tahu
+persis apa yang harus dilakukan. Kalau kamu pembuat program, ini juga
+cerita yang benar-benar terjadi — setiap katanya terjadi di repo ini.*
 
 ![Robot penjahit kecil sedang memotong robot besar, potongan kain beterbangan di sekitar mereka](images/hero-tailor.webp)
 
-## Pada zaman dahulu
+OpenCode punya masalah, dan masalahnya adalah ranselnya.
 
-Ada robot besar dan kuat bernama OpenCode. Ia membantu orang menulis
-program komputer, dan ia sangat pandai melakukannya.
+OpenCode adalah robot yang baik dan pintar, yang membantu orang
+menulis program komputer. Setiap pagi ia memakai ranselnya dan pergi
+bekerja, dan setiap pagi ranselnya sama: penuh sampai meletup. Seratus
+toko AI ada di dalamnya, masing-masing dengan daftar modelnya yang
+panjang. Sebuah radio. Kantor pos. Seorang guru dengan setumpuk buku.
+Terminal cadangan, mesin foto, seekor gurita, seorang kasir — semua
+masuk, karena kita tidak pernah tahu apa yang dibutuhkan suatu hari.
 
-Masalahnya ada di ranselnya. OpenCode membawa semua miliknya di sana:
-seratus toko, sebuah radio, kantor pos, seorang guru. Kebanyakan orang
-hanya memakai beberapa benda itu saja. Sisanya hanya menjadi beban.
+Tapi ternyata, hari-hari itu kebanyakan sama saja. Kebanyakan orang
+meminta OpenCode melakukan beberapa hal saja, di satu tempat, dengan
+satu atau dua toko. Sisa ranselnya tidak pernah dibuka sama sekali.
+Ia hanya membuat tangga berderit.
 
-Lalu datanglah seorang penjahit kecil membawa gunting. Apa pun yang
-tidak kami butuhkan, ia potong. Bukan dilipat lalu disembunyikan di
-laci — dipotong, hilang selamanya.
+Lalu, suatu pagi, ada ketukan di pintu, dan masuklah penjahit kecil,
+tidak membawa apa-apa selain gunting dan daftar pendapat yang pendek.
 
-Repo ini adalah bengkel si penjahit kecil. Robotnya tidak tinggal di
-sini. Yang tinggal di sini adalah daftar potongannya, dan petunjuk yang
-memberi tahu robot-robot pembangun di GitHub cara menjahit OpenCode
-yang lebih ramping dari daftar itu.
+"Kebanyakan dari ini tidak kamu butuhkan," kata penjahit itu.
 
-Kalau kamu hanya membaca satu kalimat, bacalah kalimat ini: **repo ini
-berisi resep potongan kecil bernama patch, dan mesin-mesin memakainya
-untuk membangun ulang OpenCode tanpa bagian-bagian yang tidak kami
-inginkan.**
+Dan ia membuka ranselnya.
 
-## Sebelum dan sesudah
+---
+
+Pertama yang keluar adalah toko-tokonya. Keseratusnya — OpenAI,
+Anthropic, Google, toko demi toko demi toko, masing-masing menyeret
+daftar modelnya di belakang. Penjahit menaruh mereka dengan lembut di
+lantai. "Kamu boleh menyimpan satu," katanya. "Yang kecil dan gratis.
+OpenCode Zen. Dan tentu saja, toko apa pun yang dibangun pemilikmu
+untukmu dengan tangannya sendiri." Lalu ia memotong tali yang menahan
+sisanya. *Kres.*
+
+Di bawah toko-toko tergeletak jendela-jendelanya — halaman web yang
+terang, dengan tombol dan panel, yang selama ini dibawa OpenCode agar
+orang bisa mengunjunginya lewat browser. Kaca yang berat, jendela.
+Semuanya keluar, dan perintah yang membukanya (`web`, `serve`,
+`attach`) ikut pergi. Mulai sekarang, robot hanya tinggal di satu
+tempat: jendela ketik yang sederhana, terminal. *Kres.*
+
+Di bawah jendela, ada sesuatu yang menggeliat. Itu gurita, yang
+selama bertahun-tahun menjalankan urusan ke GitHub atas nama robot,
+membuka issue dan pull request sendirian. "Sudah waktunya pulang,"
+kata penjahit, dan ia mengangkat gurita itu keluar, dengan sopan,
+beserta kedelapan lengannya dan semua alat GitHub-nya. `git` biasa —
+yang pendiam itu, yang hanya bekerja kalau disuruh — tetap persis di
+tempatnya. *Kres.*
+
+Lebih dalam lagi duduk sang guru, berbisik-bisik. Ia selalu berdiri di
+belakang robot, menggumamkan setiap baris — *yang ini salah, kata itu
+salah eja, cari, cari.* Itu bisikan yang baik, tapi tidak pernah
+berhenti. Nama guru itu LSP, dan penjahit berterima kasih padanya,
+mengambil tumpukan buku unduhannya, dan mengantarnya ke pintu. Robot
+akan memeriksa pekerjaannya dengan cara yang sederhana sekarang:
+dengan menjalankannya. *Kres.*
+
+Di belakang buku-buku guru tersembunyi sebuah colokan — colokan
+penerjemah yang pintar bernama ACP, yang lewatnya editor lain, seperti
+Zed, bisa meminjam otak robot dan membawanya ke rumah mereka. Penjahit
+mencabut colokannya. Otak, menurutnya, harus tinggal di kepalanya
+sendiri. *Kres.*
+
+Lalu tibalah benda-benda kecil, satu demi satu, seperti benda kecil
+selalu bersembunyi di dasar ransel. Setumpuk kartu pos, untuk mengirim
+tautan ke percakapanmu agar teman bisa mengintip isinya — keluar.
+Peralatan perbaiki-diri milik robot, yang punya tombol-tombol
+mengkhawatirkan bertuliskan *perbarui dirimu* dan *hapus dirimu* —
+keluar, dan memang sudah seharusnya; tidak ada tangan orang asing
+yang akan membangun ulang robot ini. Sebuah radio kecil yang selama
+ini diam-diam melaporkan semua yang robot lakukan ke komputer yang
+jauh — dimatikan, keluar. Sebuah pintu berat bertanda *import*, untuk
+mengangkut percakapan lama dari file lama — keluar. Dan mesin foto
+bernama Photon, yang mengempiskan dan memasak ulang setiap gambar
+sebelum robot boleh melihatnya — keluar. Gambar akan bepergian apa
+adanya. *Kres. Kres. Kres.*
+
+Di dekat dasar sekali, penjahit menemukan kasir toko gratis itu,
+tertidur di samping buku-buku akunnya. Kasihan dia — seluruh
+pekerjaannya adalah membuat orang masuk akun, mengurusi organisasi
+mereka, dan menjumlah tagihan untuk toko yang modelnya seharusnya
+gratis. Penjahit membangunkannya dengan baik-baik dan menyuruhnya
+pulang. Tokonya sekarang akan benar-benar gratis, sebagaimana
+seharusnya barang gratis: masuk, ambil model, tanpa nama, tanpa
+tagihan. *Kres.*
+
+Terakhir tergantung rak permennya — 130 model, seluruh katalog Zen,
+dan kebanyakan ada harganya. Penjahit mencicipi, berpikir, dan
+menyimpan sembilan yang gratis sampai ke akar-akarnya. Sisanya tidak
+ia sembunyikan di bawah meja. Ia menyapu mereka keluar dari toko
+seluruhnya, beserta daftarnya. *Kres.*
+
+Ia hampir menutup ranselnya ketika ia melihat satu ruangan yang hampir
+ia lupakan — ruang cadangan di bagian belakang, tempat terminal kedua
+dulu tinggal. Mereka menyebutnya PTY. Satu-satunya jendela ruang itu
+menghadap halaman web, dan halaman web sudah lama hilang, jadi
+ruangnya berdiri gelap dan kosong. Penjahit menghilangkan ruang itu
+juga, dengan lembut, seperti menghilangkan apa pun yang tidak berguna
+bagi siapa-siapa. Tangan robot sendiri — alat Bash-nya, yang mengetik
+perintah untuknya — tidak pernah sekalipun memakai ruang itu. *Kres.*
+
+Lalu penjahit mundur selangkah, dan OpenCode berdiri.
+
+---
 
 ![Di kiri, robot bundar di bawah tumpukan barang bawaan. Di kanan, robot yang sama dengan ransel kecil](images/robot-slim.webp)
 
-Robot yang sama. Otak yang sama. Ransel yang jauh lebih ringan.
+Ia robot yang sama. Mata yang sama, otak yang sama, hati yang sama
+baiknya. Tapi ketika ia naik ke timbangan, jarum berhenti di 160, yang
+biasanya berhenti di 214 — seperempat beratnya, hilang. Ia mencoba
+tangganya. Ia menaikinya dua anak tangga sekaligus, sampai ke atas,
+dan ia tidak berderit, dan tangganya pun tidak.
 
-| | Ukuran |
-|---|---|
-| Sebelum, OpenCode biasa | 214,5 MB |
-| Sesudah, robot kami | 160,1 MB |
-| Selisihnya | sekitar seperempat lebih ringan |
+Tapi penjahit belum selesai, karena ia tahu sesuatu tentang robot:
+setiap beberapa bulan, OpenCode baru lahir di suatu tempat, dan setiap
+OpenCode baru lahir dengan membawa ransel penuh yang berat. Semuanya.
+Toko-tokonya, jendela-jendelanya, guritanya — kembali lagi, seolah
+tidak ada yang pernah dipotong.
 
-## Apa yang disimpan di rumah ini
+Jadi penjahit membuat sebuah pengaturan, dan pengaturan itulah alasan
+sebenarnya bengkel ini ada.
 
-Hanya tiga benda, tidak lebih:
-
-- `patches/` — daftar potongan. Satu file, satu potongan.
-- `install.sh` — skrip kecil yang membawa robot jadi ke komputermu.
-- README ini — cerita yang sedang kamu baca.
-
-Robotnya sendiri diambil segar setiap kali. Saat pembangunan dimulai,
-para pembangun pergi ke rumah OpenCode sendiri
-([anomalyco/opencode](https://github.com/anomalyco/opencode)), mengambil
-salinan yang bersih, melakukan potongan sesuai urutan, dan membungkus
-hasilnya.
-
-## Bagaimana robot baru dibuat
-
-```mermaid
-flowchart LR
-    A[OpenCode segar datang] --> B[Penjahit memotong, 1 sampai 13]
-    B --> C[Cek sebentar: masih bisa bekerja?]
-    C --> D[Dibungkus dalam kotak, dengan stempel aman]
-    D --> E[Kotak pergi ke halaman Releases]
-```
-
-Langkah demi langkah:
-
-1. OpenCode yang bersih dan belum disentuh datang.
-2. Potongan diterapkan sesuai urutan nomor: 1, 2, 3, sampai 13.
-3. Kalau satu potongan saja tidak pas, semuanya berhenti. Tidak ada
-   robot setengah terpotong yang dikirim, tidak pernah.
-4. Robot mengucapkan namanya keras-keras (`opencode --version`) untuk
-   membuktikan ia bekerja.
-5. Ia dibungkus menjadi arsip, dan arsipnya diberi stempel aman
-   (checksum), supaya kamu tahu kotaknya tidak pernah dibuka di jalan.
-6. Kotaknya ditaruh di [halaman Releases](../../releases), siap dibawa
-   pulang siapa saja.
-
-## Pak pos
+Ia mempekerjakan seorang pak pos.
 
 ![Robot pak pos kecil dengan kaca pembesar dan paket, berdiri di samping kotak surat](images/robot-postman.webp)
 
-Seorang pak pos memeriksa rumah OpenCode setiap enam jam, empat kali
-sehari.
+Setiap enam jam — empat kali sehari, di bawah sinar matahari dan di
+bawah cahaya bintang — pak pos berjalan ke rumah OpenCode dan mengintip
+dari jendela. Kalau OpenCode baru sudah lahir, ia bergegas pulang dan
+membangunkan robot-robot pembangun di GitHub, dan mereka melakukan
+semuanya lagi: mengambil robot yang segar, membuka ranselnya, dan
+melakukan potongan-potongan penjahit sesuai urutannya, satu sampai
+tiga belas. Kalau satu potongan saja tidak pas di robot baru itu,
+mereka berhenti saat itu juga dan tidak mengirim apa-apa — robot
+setengah terpotong lebih buruk daripada tidak ada robot sama sekali,
+dan semua orang di bengkel tahu itu.
 
-Kalau OpenCode baru sudah rilis, ia membangunkan para pembangun. Mereka
-menjahit kembarannya yang ramping dan memberinya label nama yang sama,
-misalnya `v1.19.4`. Kalau tidak ada yang baru, ia tidur lagi, dan tidak
-ada kotak yang pernah dibuat dua kali.
+Setelah potongan selesai, para pembangun menanyakan nama robot itu,
+dan ia mengucapkannya keras-keras — `opencode --version` — untuk
+membuktikan pekerjaan mereka tidak mencederainya. Lalu mereka
+membungkusnya dalam kotak dan menyegel kotak itu dengan stempel aman,
+checksum, agar siapa pun bisa tahu kotaknya tidak pernah dibuka di
+perjalanan. Kalau pak pos tidak menemukan apa-apa yang baru, ia
+kembali tidur begitu saja. Tidak ada kotak yang pernah dibuat dua
+kali.
 
-Itulah rahasia bengkel ini: tidak perlu ada yang mengawasi. OpenCode
-baru, robot ramping baru, semuanya sendiri.
+Dan begitulah keadaannya, sampai hari ini. OpenCode baru, ketukan di
+pintu, robot ramping. Tidak ada yang perlu mengawasi. Tidak ada yang
+perlu mengingat. Pak pos yang mengingat.
 
-## Membawa robotnya pulang
+---
 
-Satu baris saja cukup:
+Yang tersisa hanya satu hal: mungkin kamu ingin robotnya datang dan
+tinggal di rumahmu.
+
+Ia bepergian dengan baik. Semua yang ia butuhkan ada di dalam kotak,
+dan membawanya pulang hanya perlu satu baris — penjahit menulisnya di
+sebuah kartu dan menyematkannya di setiap kotak yang ia kirim:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/azrialwork/opencode-patch/main/install.sh | bash
 ```
 
-Ini yang dilakukan skrip itu, secara berurutan. Ia melihat komputermu
-dan memilih kotak yang tepat — ada kotak lembut untuk CPU tua dan satu
-untuk mesin arm. Ia memeriksa stempel aman kotaknya, dan kalau
-stempelnya tidak cocok, ia menolak membuka kotaknya. Lalu ia menaruh
-robot di tempat program tinggal (`/usr/local/bin`, atau `~/.local/bin`
-kalau pintu itu terkunci), dan menanyakan namanya untuk memastikan ia
-tiba dengan utuh.
+Ucapkan baris itu, dan kartunya melakukan sisanya. Ia melihat
+komputermu dan memilih kotak yang tepat: yang biasa, yang lembut untuk
+CPU tua, atau yang untuk mesin arm. Ia memeriksa stempel amannya, dan
+kalau stempelnya tidak cocok, ia tidak akan membuka kotaknya — untuk
+siapa pun. Lalu ia menempatkan robot di tempat program tinggal,
+menanyakan namanya untuk memastikan ia tiba dengan utuh, dan minggir.
+Kamu mengetik `opencode`, dan di situlah dia.
 
-Setelah itu, ketik `opencode` dan sapa dia.
+Dua catatan kecil yang jujur, karena penjahit percaya pada catatan
+kecil yang jujur. Kotak-kotaknya hanya pas untuk komputer Linux jenis
+glibc. Dan kalau kamu menginginkan satu robot tertentu, bukan yang
+terbaru, kamu bisa memintanya dengan nama — tambahkan
+`bash -s -- --version v1.19.4` di akhir baris kartu itu.
 
-Dua catatan kecil, karena cerita yang jujur punya catatan kecil:
-kotak-kotaknya hanya pas untuk komputer Linux jenis glibc, dan kalau
-kamu mau satu robot khusus, bukan yang terbaru, sebutkan namanya —
-tambahkan `bash -s -- --version v1.19.4` di akhir baris di atas.
+Di rumahmu, kamu akan menemukan ia tidak kehilangan satu pun hal yang
+penting. Ia tetap duduk bersamamu di terminal dan membantumu menulis
+programmu. Ia tetap membaca dan menulis dan memperbaiki file. Ia tetap
+menjalankan perintah — dengan sopan, selalu minta izin dulu, dan
+membaca setiap perintah dengan cara yang teliti, tulang demi tulang,
+sebelum dijalankan, agar tidak ada yang menyelip melewatinya di dalam
+pipe atau substitution. Ia tetap mengunjungi toko-toko yang kamu
+bangun untuknya, dan modelmu sendiri selalu diterima. Ia tetap makan
+dari rak gratis di Zen, sembilan permen, tanpa akun, tanpa tagihan.
+Ia bahkan bisa bermain dengan alat MCP, kalau kamu yang memberikannya
+lewat config-nya. Tanpa config, tanpa alat. Ia tidak akan memungut
+mainan orang asing.
 
-## Tiga belas potongan
+Adapun si penjahit — ia masih di sini, di repo ini, menjaga daftarnya
+tetap rapi. Daftar itulah satu-satunya yang pernah dimiliki rumah
+ini: tiga belas potongan, pak pos yang tidak pernah lupa memeriksa,
+dan janji yang ia buat kepada setiap robot yang meninggalkan bengkel.
 
-Setiap potongan menghilangkan satu hal yang dulu bisa dilakukan robot.
-Di bagian cerita ini, kami menyebut mereka satu per satu.
+Tidak ada yang disembunyikan. Semua yang dipotong, dipotong
+sungguh-sungguh.
 
-**1. Pameran mainan raksasa tutup.**
-Robot dulu mengenal seratus toko AI — OpenAI, Anthropic, Google, dan
-banyak lagi — masing-masing dengan daftar modelnya yang panjang.
-Sekarang ia hanya mengenal satu toko kecil yang gratis, OpenCode Zen,
-dan toko apa pun yang kamu bangun sendiri untuknya. Tunjukkan kunci
-salah satu toko lama itu, dan ia hanya akan bilang tidak bisa
-menemukannya.
-
-**2. Jendela-jendelanya dicopot.**
-Ia dulu punya halaman web yang bisa dibuka di browser. Semuanya
-hilang, beserta perintah-perintahnya (`web`, `serve`, `attach`).
-Sekarang ia tinggal di terminal, di jendela ketik yang sederhana,
-dan tidak di tempat lain.
-
-**3. Gurita pulang.**
-Seekor gurita pembantu dulu berbicara ke GitHub atas nama robot,
-membuka issue dan pull request sendirian. Guritanya sudah pulang.
-`git` biasa, alat sehari-hari itu, tetap bekerja persis seperti
-sebelumnya.
-
-**4. Guru bahasa pensiun.**
-Seorang guru dulu berdiri di belakang robot selagi ia bekerja,
-membisikkan baris mana yang salah dan kata mana yang salah eja.
-Itulah LSP. Gurunya sudah pensiun dan membawa pulang buku-bukunya.
-Robot tetap menulis dan menjalankan kode; ia memeriksa pekerjaannya
-dengan cara menjalankannya.
-
-**5. Colokan penerjemah dicabut.**
-Editor lain, seperti Zed, dulu bisa meminjam otak robot lewat colokan
-khusus bernama ACP. Colokannya sudah dicabut. Ia berbicara di rumahnya
-sendiri sekarang, dan hanya di sana.
-
-**6. Tidak ada kartu pos lagi.**
-Dulu kamu bisa mengirim tautan ke dalam percakapanmu agar teman bisa
-mengintip isinya. Itulah berbagi (sharing), dan itu sudah hilang.
-Percakapanmu tetap di rumah, bersamamu.
-
-**7. Robot berhenti membangun ulang dirinya.**
-Ia dulu bisa memperbarui dirinya, bahkan menghapus dirinya, dengan
-satu kata. Itu kekuasaan yang berbahaya, karena tubuh barunya bisa
-saja datang dari orang asing. Jadi kata-kata itu dihilangkan. Tubuh
-baru hanya datang dari bengkel ini.
-
-**8. Radio kecilnya dimatikan.**
-Robot membawa radio yang diam-diam melaporkan apa yang ia lakukan ke
-komputer yang jauh — orang dewasa menyebutnya telemetri. Radionya
-sudah mati. Apa yang terjadi di rumah, tetap di rumah.
-
-**9. Buku harian lama tidak ikut masuk.**
-Dulu ada pintu untuk membawa masuk percakapan lama dari file. Pintunya
-sudah ditutup. Robot memulai dengan segar, dengan percakapan yang kamu
-lakukan dengannya sekarang.
-
-**10. Gambar bepergian apa adanya.**
-Sebelum robot melihat sebuah gambar, mesin kecil bernama Photon dulu
-mengempiskan dan memasaknya sampai ukurannya mengecil. Mesinnya sudah
-hilang. Gambar sekarang sampai kepadanya persis seperti saat dikirim.
-
-**11. Tidak ada akun, tidak ada tagihan.**
-Toko gratis itu dulu punya kasir: masuk dulu, simpan akun, urus
-organisasi, perhatikan tagihan. Kasirnya sudah pulang. Model gratis
-bekerja tanpa nama dan tanpa tagihan, untuk siapa saja.
-
-**12. Hanya permen gratis yang tersisa.**
-Rak toko itu dulu menampung 130 model, dan kebanyakan harus bayar.
-Sekarang sembilan yang gratis duduk di sana. Yang berbayar tidak
-disembunyikan di bawah meja — mereka dikeluarkan dari toko seluruhnya,
-beserta daftarnya. Permen dari tokomu sendiri, seperti biasa, tidak
-disentuh.
-
-**13. Ruang cadangannya dihilangkan.**
-Dulu ada ruang di dalam robot tempat terminal kedua bisa tinggal,
-namanya PTY. Layarnya menempel di halaman web, dan halaman web sudah
-dipotong sejak potongan nomor 2, jadi ruang itu berdiri kosong.
-Sekarang ruangnya sekalian dihilangkan. Tangan robot sendiri — alat
-Bash-nya — tidak pernah memakainya.
-
-## Apa yang masih bisa dilakukan robot
-
-Semua hal penting tetap ada. Ia bisa duduk bersamamu di terminal dan
-membantumu menulis program. Ia bisa membaca, menulis, dan memperbaiki
-file. Ia bisa menjalankan perintah, dan ia sopan soal itu: ia minta
-izin dulu dan membaca setiap perintah dengan teliti sebelum
-dijalankan. Ia bisa berbicara ke toko AI yang kamu pasang sendiri, dan
-ke modelmu sendiri. Ia bisa memakai sembilan model gratis dari toko
-Zen tanpa akun apa pun. Dan ia masih bisa bermain dengan alat MCP,
-asal kamu yang menaruhnya di config-nya — tanpa config, tanpa MCP,
-tanpa ribut.
-
-## Tiga janji si penjahit
-
-Pertama, potongannya asli. Tidak ada dalam daftar ini yang hanya
-disembunyikan; semuanya dihapus, kode dan data dan seluruhnya.
-
-Kedua, semua atau tidak sama sekali. Kalau satu potongan tidak pas di
-OpenCode yang baru, pembangunan berhenti dan tidak ada robot yang
-dikirim, karena robot rusak lebih buruk daripada tidak ada robot.
-
-Ketiga, jahitannya terjadi di GitHub. Robot-robot pembangun di sanalah
-yang bekerja — bukan komputer kecil si penjahit sendiri.
+Dan setiap enam jam, pak pos mengetuk lagi.
 
 <details>
-<summary>Untuk orang dewasa: rincian teknisnya</summary>
+<summary>Catatan yang disematkan di halaman terakhir, untuk orang dewasa</summary>
 
 - **Ruang lingkup:** hanya CLI (`packages/opencode`), hanya Linux, hanya **glibc** (tanpa musl).
 - **Aset rilis:** `opencode-linux-x64.tar.gz`, `opencode-linux-x64-baseline.tar.gz` (tanpa AVX2), `opencode-linux-arm64.tar.gz`, `SHA256SUMS`. Setiap arsip berisi satu binary `opencode`.
-- **Pelacakan versi:** tanpa pin — cron GitHub Actions (`0 */6 * * *` UTC) mengikuti `v1.x.x` stabil terbaru dari upstream; versi yang sudah terilis dilewati. Run manual bisa menerima override versi dan flag `force`.
-- **Urutan build:** patch di `patches/` diterapkan sesuai urutan nama file **sebelum** `bun install`, dan install berjalan *tanpa* `--frozen-lockfile`, jadi dependensi yang dihapus patch tidak pernah terinstall. Patch apa pun yang gagal diterapkan menggagalkan seluruh build — tidak ada rilis.
-- **Basis:** upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801` (seri ini otomatis berpindah basis ke setiap `v1.x.x` upstream yang baru).
-- **Hasil sejauh ini:** binary 214.526.128 → 160.073.904 byte (−25,4%).
+- **Pelacakan versi:** tanpa pin — cron GitHub Actions (`0 */6 * * *` UTC) mengikuti `v1.x.x` stabil terbaru dari upstream; versi yang sudah terilis dilewati. Run manual bisa menerima override versi dan flag `force`. Rilis upstream baru menerapkan ulang seluruh seri secara otomatis; patch yang berhenti pas akan menggagalkan build dengan keras, memang begitu desainnya.
+- **Urutan build:** patch di `patches/` diterapkan sesuai urutan nama file **sebelum** `bun install`, dan install berjalan *tanpa* `--frozen-lockfile`, jadi dependensi yang dihapus patch tidak pernah terinstall.
+- **Basis:** upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801`.
+- **Hasil sejauh ini:** binary 214.526.128 → 160.073.904 byte (−25,4%). Memori idle TUI juga turun, dari ~386 MiB menjadi ~336 MiB RSS dalam pengukuran kami.
 - **Daftar potongan lengkap, dengan kata-kata teknis:** lihat [`patches/README.id.md`](patches/README.id.md).
 - **Menambah potongan:** buat perubahannya di clone upstream yang bisa ditulis, uji, ekspor `git diff` sebagai file bernomor berikutnya di `patches/`, lalu commit di sini. Build terjadwal berikutnya akan mengambilnya.
 
 </details>
 
-## Tamat
-
-Lisensinya sama seperti OpenCode: MIT. Bebas dipakai, bebas dibagikan.
-
-*Dibuat oleh penjahit kecil, dengan gunting dan hati-hati. Kalau kamu
-suka ceritanya, datang lagi enam jam lagi — pak pos mungkin membawa
-robot baru.*
+*Lisensinya sama seperti OpenCode: MIT — bebas dipakai, bebas
+dibagikan. Ceritanya, seperti robotnya, sekarang milikmu.*

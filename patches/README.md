@@ -2,10 +2,11 @@ English · [Bahasa Indonesia](README.id.md)
 
 # The list of cuts
 
-This folder is the tailor's notebook. Every file here whose name ends
-in `.patch` is one cut recipe. When a robot is built, the builders
-read this list from number 1 to number 13, in order, and make every
-cut on a fresh copy of upstream OpenCode.
+In the storybook, the tailor keeps a short list of opinions, and this
+folder is that list, written down properly. Every file here whose
+name ends in `.patch` is one cut recipe. When a robot is built, the
+builders read this list from number 1 to number 13, in order, and
+make every cut on a fresh copy of upstream OpenCode.
 
 One rule matters more than the rest: if a recipe does not fit, the
 build stops and nothing is shipped.

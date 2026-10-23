@@ -2,11 +2,12 @@
 
 # Daftar potongan
 
-Folder ini adalah buku catatan si penjahit. Setiap file di sini yang
-namanya berakhiran `.patch` adalah satu resep potongan. Saat robot
-dibangun, para pembangun membaca daftar ini dari nomor 1 sampai 13,
-berurutan, dan melakukan setiap potongan pada salinan OpenCode
-upstream yang masih segar.
+Di buku cerita, penjahit menyimpan daftar pendapat yang pendek, dan
+folder inilah daftar itu, ditulis dengan sebenarnya. Setiap file di
+sini yang namanya berakhiran `.patch` adalah satu resep potongan.
+Saat robot dibangun, para pembangun membaca daftar ini dari nomor 1
+sampai 13, berurutan, dan melakukan setiap potongan pada salinan
+OpenCode upstream yang masih segar.
 
 Satu aturan lebih penting dari yang lain: kalau satu resep tidak pas,
 pembangunan berhenti dan tidak ada yang dikirim.
