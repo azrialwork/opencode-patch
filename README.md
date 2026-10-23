@@ -97,6 +97,23 @@ from view.
   (`@actions/github`, `@octokit/graphql`, `@octokit/rest`,
   `@octokit/webhooks-types`), plus their tests. Plain git support is
   untouched.
+- `0004-remove-lsp.patch` — removes LSP entirely. The language-server
+  subsystem (`src/lsp/`, ±3,300 lines: client, server registry and its
+  binary downloads from GitHub releases), the `lsp` tool, the
+  post-edit/write/patch LSP diagnostics feedback, the read tool's LSP
+  warm-up, and the prompt flow's LSP document-symbol lookup are
+  deleted. The `lsp` config key is dropped from both config schemas
+  (V1 and V2/core, incl. the permission rule and the V2→V1 compat
+  mapping, which now reports `lsp` as unsupported), the
+  `OPENCODE_DISABLE_LSP_DOWNLOAD` / `OPENCODE_EXPERIMENTAL_LSP_*`
+  flags are gone, the `/lsp` and `/find/symbol` server endpoints are
+  deleted, and the TUI loses its LSP status displays (sidebar plugin,
+  footer counter, status dialog, sync state) and the generated SDK
+  loses its LSP client and types. `vscode-jsonrpc` and
+  `vscode-languageserver-types` are dropped. Formatters are a separate
+  subsystem and stay. The generic extension→language map that lived in
+  `lsp/language.ts` moves to `util/filetype.ts` (its only remaining
+  consumer is the `run` renderer's syntax highlighting).
 
 To add a patch later:
 

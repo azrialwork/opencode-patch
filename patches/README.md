@@ -15,6 +15,11 @@ Current series:
 - `0003-remove-github-integration.patch` — removes the `opencode github`
   agent command, the `opencode pr` helper, and the GitHub-only
   (`@octokit/*`, `@actions/github`) dependencies and tests.
+- `0004-remove-lsp.patch` — removes LSP entirely: the language-server
+  subsystem and downloads, the `lsp` tool, post-edit diagnostics, the
+  `lsp` config keys (V1 + V2), the `/lsp` and `/find/symbol` endpoints,
+  the TUI LSP displays, the SDK LSP client/types, and the
+  `vscode-jsonrpc` / `vscode-languageserver-types` dependencies.
 
 This file is not a patch and is ignored by `scripts/apply-patches.sh`,
 which only reads `*.patch`.
