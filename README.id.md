@@ -138,7 +138,7 @@ dari jendela. Kalau OpenCode baru sudah lahir, ia bergegas pulang dan
 membangunkan robot-robot pembangun di GitHub, dan mereka melakukan
 semuanya lagi: mengambil robot yang segar, membuka ranselnya, dan
 melakukan potongan-potongan penjahit sesuai urutannya, satu sampai
-enam belas. Kalau satu potongan saja tidak pas di robot baru itu,
+tujuh belas. Kalau satu potongan saja tidak pas di robot baru itu,
 mereka berhenti saat itu juga dan tidak mengirim apa-apa — robot
 setengah terpotong lebih buruk daripada tidak ada robot sama sekali,
 dan semua orang di bengkel tahu itu.
@@ -215,7 +215,7 @@ begitu orang dewasa menyebutnya — dan kartunya tahu persis di mana
 ia berada. Ia membawakan kotak kecilnya, memeriksa stempel amannya,
 dan menempatkan si robot di dalam, lengkap dengan sepatunya.
 
-Robot yang sama. Potongan yang sama, keenam belasnya. Hanya rumah
+Robot yang sama. Potongan yang sama, ketujuh belasnya. Hanya rumah
 yang lebih kecil, dan pakaian yang pas untuknya.
 
 Satu hal lagi ditemukan di dalam ransel, di dasar paling bawah:
@@ -270,6 +270,27 @@ Sekarang, di mana pun si robot bangun, ia membaca kartunya dan
 tahu persis di mana ia berada — dan ia tidak pernah lagi mengira
 dirinya adalah mesinnya.
 
+Seminggu kemudian penjahit membaca kartu itu sekali lagi, sambil
+minum teh paginya.
+
+"Terlalu banyak kata," katanya, "untuk kartu yang dibaca setiap
+hari."
+
+Maka ia memangkasnya — dengan lembut, seperti memangkas pagar
+tanaman, mempertahankan semua yang menahan hujan. Keluar poles
+lantainya. Keluar nama mesin roda kecil di bengkel, karena kartu
+itu bercerita tentang rumah, bukan mesinnya. Keluar nama panjang
+balok-balok atapnya, meski jumlahnya tetap tinggal, ditulis apa
+adanya. Dan baris nama jalan menghilang setiap kali si robot
+sudah berdiri di gerbang depan, karena kartu tidak boleh
+mengatakan hal yang sama dua kali.
+
+Yang tersisa pendek, dan semua yang tersisa di dalamnya benar,
+dan semua yang benar di dalamnya diperlukan.
+
+Si robot membacanya dua kali lebih cepat, dan memahaminya sama
+baiknya.
+
 Di rumahmu, kamu akan menemukan ia tidak kehilangan satu pun hal yang
 penting. Ia tetap duduk bersamamu di terminal dan membantumu menulis
 programmu. Ia tetap membaca dan menulis dan memperbaiki file. Ia tetap
@@ -285,7 +306,7 @@ mainan orang asing.
 
 Adapun si penjahit — ia masih di sini, di repo ini, menjaga daftarnya
 tetap rapi. Daftar itulah satu-satunya yang pernah dimiliki rumah
-ini: enam belas potongan, pak pos yang tidak pernah lupa memeriksa,
+ini: tujuh belas potongan, pak pos yang tidak pernah lupa memeriksa,
 dan janji yang ia buat kepada setiap robot yang meninggalkan bengkel.
 
 Tidak ada yang disembunyikan. Semua yang dipotong, dipotong
@@ -304,6 +325,7 @@ Dan setiap enam jam, pak pos mengetuk lagi.
 - **Hasil sejauh ini:** binary 214.526.128 → 159.946.928 byte (−25,4%). Memori idle TUI juga turun, dari ~386 MiB menjadi ~336 MiB RSS dalam pengukuran kami.
 - **Satu system prompt:** patch 0015 menghapus pemilihan system prompt per model. Upstream membawa sebelas teks prompt dan memilih satu berdasarkan ID model; build ini menghapus sepuluh varian keluarganya (termasuk satu file yang tidak pernah diimpor apa pun) dan logika pemilihannya, serta mempertahankan `default.txt` persis seperti yang ditulis upstream — kini menjadi satu-satunya prompt yang didapat semua model, Zen maupun custom.
 - **Kartu environment yang lebih lengkap:** patch 0016 menghapus baris "You are powered by the model named …" dan mengembangkan blok `<env>` menjadi potret perangkat yang lengkap (branch git, nama perangkat, OS/distro, CPU, memori, disk bebas, shell, locale, zona waktu, runtime), dengan varian khusus Android/Termux (nama produk, versi/API/build/security patch Android dari satu dump `getprop`, versi dan prefix Termux). Fakta dikumpulkan sekali per proses lalu di-cache; apa pun yang tidak diketahui akan hilang, tidak pernah ditebak. Terverifikasi dari wire: system prompt yang ditangkap dari request nyata menampilkan blok baru itu apa adanya.
+- **Dipangkas menjadi yang esensial:** patch 0017 lalu memotong blok itu menjadi yang benar-benar ditindaklanjuti agen — jenis terminal, versi runtime, dan string model CPU dihapus (jumlah core tetap tinggal), tidak ada baris perangkat dari hostname di luar Android, dan baris root workspace hanya dicetak bila berbeda dari direktori kerja. Empat belas baris di Linux; terverifikasi dari wire baik di root repo maupun di subdirektori.
 - **Build Termux:** patch 0014 menambahkan target Android milik Bun (`OPENCODE_LIBC=bionic`) ke script build upstream. Dua job CI tambahan membangun `libopentui.so` dari sumber OpenTUI v0.4.5 yang di-pin (Zig + Android NDK, alignment halaman 16 KB) dan shim kecil `close_range` (seccomp Termux yang targetSdk 28 menjebak syscall itu, jadi launcher me-`LD_PRELOAD` shim-nya), lalu memeriksa binary Bionic dengan `readelf` — dependensi glibc apa pun menggagalkan build. Tidak ada proot di mana pun. Untuk v1.19.4, binary Termux berukuran 138.289.528 byte, terverifikasi end-to-end di perangkat Termux Android 12 asli (install, `opencode run`, dan TUI).
 - **Daftar potongan lengkap, dengan kata-kata teknis:** lihat [`patches/README.id.md`](patches/README.id.md).
 - **Menambah potongan:** buat perubahannya di clone upstream yang bisa ditulis, uji, ekspor `git diff` sebagai file bernomor berikutnya di `patches/`, lalu commit di sini. Build terjadwal berikutnya akan mengambilnya.

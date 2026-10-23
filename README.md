@@ -131,7 +131,7 @@ the postman walks up to OpenCode's house and looks in the window. If
 a new OpenCode has been born, he hurries back and wakes the builder
 robots at GitHub, and they do the whole thing again: fetch the fresh
 robot, open the backpack, and make the tailor's cuts in the tailor's
-order, one to sixteen. If even one cut does not fit the new robot,
+order, one to seventeen. If even one cut does not fit the new robot,
 they stop at once and ship nothing — a half-cut robot is worse than
 no robot at all, and everyone in the workshop knows it.
 
@@ -203,7 +203,7 @@ call it — and the card knows exactly where it is. It brings the
 small box, checks the safety stamp, and settles the robot in, shoes
 and all.
 
-Same robot. Same cuts, all sixteen of them. Just a smaller house,
+Same robot. Same cuts, all seventeen of them. Just a smaller house,
 and clothes that fit it.
 
 One more thing was found in the backpack, at the very bottom: a
@@ -255,6 +255,25 @@ Now, wherever the robot wakes, he reads his card and knows
 exactly where he is — and he never mistakes himself for his
 engine again.
 
+A week later the tailor read the card once more, over his morning
+tea.
+
+"Too many words," he said, "for a card that is read every day."
+
+So he trimmed it — kindly, the way you trim a hedge, keeping
+everything that holds the rain off. Out went the polish on the
+floor. Out went the name of the little wheel-engine in the
+workshop, for the card is about the house, not the machinery. Out
+went the long name of the roof beams, though their count stayed,
+written plain. And the street line vanished whenever the robot
+was already standing at the front gate, for a card should never
+say the same thing twice.
+
+What was left was short, and everything left in it was true, and
+everything true in it was needed.
+
+The robot read it twice as fast, and understood it just as well.
+
 At your house, you will find he has lost none of the things that
 matter. He still sits with you in the terminal and helps you write
 your programs. He still reads and writes and fixes files. He still
@@ -268,7 +287,7 @@ them to him in his configuration. No configuration, no tools. He will
 not pick up strangers' toys.
 
 As for the tailor — he is still here, in this repository, keeping his
-list tidy. The list is all this house has ever held: sixteen cuts, a
+list tidy. The list is all this house has ever held: seventeen cuts, a
 postman who never forgets to check, and a promise he makes to every
 robot who leaves the workshop.
 
@@ -287,6 +306,7 @@ And every six hours, the postman knocks again.
 - **Result so far:** binary 214,526,128 → 159,946,928 bytes (−25.4%). TUI idle memory also fell, from ~386 MiB to ~336 MiB RSS in our measurements.
 - **One system prompt:** patch 0015 removes the per-model system prompt selection. Upstream ships eleven prompt texts and picks one by model ID; this build deletes the ten family variants (including one file nothing ever imported) and the selection logic, and keeps `default.txt` exactly as upstream wrote it — now the one prompt every model gets, Zen or custom.
 - **A fuller environment card:** patch 0016 removes the "You are powered by the model named …" line and expands the `<env>` block into a complete device snapshot (git branch, device name, OS/distro, CPU, memory, free disk, shell, locale, timezone, runtime), with a dedicated Android/Termux variant (product names, Android version/API/build/security patch from one `getprop` dump, Termux version and prefix). Facts are collected once per process and cached; anything unknown is omitted, never guessed. Verified from the wire: the system prompt captured from a live request shows the new block verbatim.
+- **Trimmed to the essentials:** patch 0017 then cuts that block back to what an agent acts on — terminal type, runtime version, and CPU model string removed (the core count stays), no hostname device line outside Android, and the workspace root line printed only when it differs from the working directory. Fourteen lines on Linux; verified from the wire in both a repo root and a subdirectory.
 - **Termux build:** patch 0014 adds Bun's Android targets (`OPENCODE_LIBC=bionic`) to the upstream build script. Two extra CI jobs build `libopentui.so` from the pinned OpenTUI v0.4.5 sources (Zig + Android NDK, 16 KB page alignment) and a small `close_range` compat shim (Termux's targetSdk 28 seccomp traps that syscall, so the launcher `LD_PRELOAD`s the shim), then check the Bionic binary with `readelf` — any glibc dependency fails the build. No proot anywhere. For v1.19.4 the Termux binary measures 138,289,528 bytes, verified end-to-end on a real Android 12 Termux device (install, `opencode run`, and the TUI).
 - **The full cut list, in technical words:** see [`patches/README.md`](patches/README.md).
 - **Adding a cut:** make the change in a writable upstream clone, test it, export `git diff` as the next numbered file in `patches/`, and commit it here. The next scheduled build picks it up.
