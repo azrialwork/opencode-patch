@@ -109,6 +109,19 @@ clients and types. The terminal panel only ever existed in the
 web/desktop UI (removed by cut 2), and the agent's Bash tool does
 not use PTY.
 
+**14. `0014-android-bionic-target.patch` — a second door, for the phone.**
+This cut adds instead of removing. It teaches the upstream build
+script two Android targets (`linux-arm64-android`,
+`linux-x64-android`, selected with `--android`) so the same slimmed
+source also compiles against Android's Bionic libc, with
+`OPENCODE_LIBC=bionic` baked in and no glibc-only pieces (no FFF
+binary, no OPENTUI_LIBC define, no libc field in the embedded
+package manifest). The Linux glibc builds are untouched: without
+`--android` the target list behaves exactly as before. The Termux
+release asset pairs the binary with a natively built `libopentui.so`
+and a small `close_range` compat shim (see `termux/` in this repo);
+no proot is involved at any point.
+
 ---
 
 A note for careful readers: this README is not a patch.

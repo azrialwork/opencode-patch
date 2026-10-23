@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Install the latest opencode-patch release (patched OpenCode, Linux glibc).
+# Install the latest opencode-patch release (patched OpenCode).
+# Linux glibc (x64 / arm64), and native Termux on Android (Bionic, arm64)
+# when run inside Termux - detected automatically, no proot involved.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/azrialwork/opencode-patch/main/install.sh | bash
@@ -29,28 +31,47 @@ done
 
 fail() { echo "install.sh: $1" >&2; exit 1; }
 
-# --- Platform: Linux + glibc only, x64 / arm64 -------------------------------
-[ "$(uname -s)" = "Linux" ] || fail "only Linux is supported"
-if ldd --version 2>&1 | grep -qi musl; then
-  fail "musl libc detected; this build is glibc only"
+# --- Platform ------------------------------------------------------------------
+# Termux on Android is a separate build: a Bionic binary plus native
+# libraries and a launcher, installed under $PREFIX. Detect it first;
+# the glibc checks below would reject it (Termux has no glibc ldd).
+IS_TERMUX=0
+if [ -n "${TERMUX_VERSION:-}" ]; then
+  IS_TERMUX=1
+elif [ -n "${PREFIX:-}" ]; then
+  case "$PREFIX" in *com.termux*) IS_TERMUX=1 ;; esac
 fi
 
-case "$(uname -m)" in
-  x86_64|amd64)
-    # The baseline build drops the AVX2 requirement for older CPUs.
-    if grep -qw avx2 /proc/cpuinfo 2>/dev/null; then
-      ASSET="opencode-linux-x64.tar.gz"
-    else
-      ASSET="opencode-linux-x64-baseline.tar.gz"
-    fi
-    ;;
-  aarch64|arm64) ASSET="opencode-linux-arm64.tar.gz" ;;
-  *) fail "unsupported architecture: $(uname -m)" ;;
-esac
+[ "$(uname -s)" = "Linux" ] || fail "only Linux (incl. Android/Termux) is supported"
+
+if [ "$IS_TERMUX" = "1" ]; then
+  case "$(uname -m)" in
+    aarch64|arm64) ASSET="opencode-termux-arm64.tar.gz" ;;
+    *) fail "the Termux build is arm64 only; unsupported architecture: $(uname -m)" ;;
+  esac
+else
+  if ldd --version 2>&1 | grep -qi musl; then
+    fail "musl libc detected; this build is glibc only"
+  fi
+  case "$(uname -m)" in
+    x86_64|amd64)
+      # The baseline build drops the AVX2 requirement for older CPUs.
+      if grep -qw avx2 /proc/cpuinfo 2>/dev/null; then
+        ASSET="opencode-linux-x64.tar.gz"
+      else
+        ASSET="opencode-linux-x64-baseline.tar.gz"
+      fi
+      ;;
+    aarch64|arm64) ASSET="opencode-linux-arm64.tar.gz" ;;
+    *) fail "unsupported architecture: $(uname -m)" ;;
+  esac
+fi
 
 # --- Install dir --------------------------------------------------------------
 if [ -z "$INSTALL_DIR" ]; then
-  if [ -w /usr/local/bin ] || [ "$(id -u)" = "0" ]; then
+  if [ "$IS_TERMUX" = "1" ]; then
+    INSTALL_DIR="$PREFIX/bin"
+  elif [ -w /usr/local/bin ] || [ "$(id -u)" = "0" ]; then
     INSTALL_DIR="/usr/local/bin"
   else
     INSTALL_DIR="$HOME/.local/bin"
@@ -78,9 +99,18 @@ echo "Verifying SHA256..."
   || fail "checksum mismatch for $ASSET; refusing to install"
 
 tar -xzf "$TMP/$ASSET" -C "$TMP"
-[ -f "$TMP/opencode" ] || fail "archive did not contain an 'opencode' binary"
-
-install -m 755 "$TMP/opencode" "$INSTALL_DIR/opencode"
+if [ "$IS_TERMUX" = "1" ]; then
+  [ -f "$TMP/bin/opencode" ] || fail "archive did not contain the Termux launcher"
+  [ -f "$TMP/lib/opencode-patch/opencode" ] || fail "archive did not contain the Termux binary"
+  mkdir -p "$PREFIX/lib/opencode-patch"
+  install -m 755 "$TMP/lib/opencode-patch/opencode" "$PREFIX/lib/opencode-patch/opencode"
+  install -m 755 "$TMP/lib/opencode-patch/libopentui.so" "$PREFIX/lib/opencode-patch/libopentui.so"
+  install -m 644 "$TMP/lib/opencode-patch/libopencode-compat.so" "$PREFIX/lib/opencode-patch/libopencode-compat.so"
+  install -m 755 "$TMP/bin/opencode" "$INSTALL_DIR/opencode"
+else
+  [ -f "$TMP/opencode" ] || fail "archive did not contain an 'opencode' binary"
+  install -m 755 "$TMP/opencode" "$INSTALL_DIR/opencode"
+fi
 
 echo "Installed: $("$INSTALL_DIR/opencode" --version) -> $INSTALL_DIR/opencode"
 case ":$PATH:" in

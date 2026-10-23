@@ -108,6 +108,20 @@ prefix ID `pty`, serta client dan tipe SDK v1 dan v2. Panel terminal
 hanya pernah ada di UI web/desktop (dihapus oleh potongan 2), dan
 alat Bash milik agen tidak memakai PTY.
 
+**14. `0014-android-bionic-target.patch` — pintu kedua, untuk ponsel.**
+Potongan ini menambah, bukan mengurangi. Ia mengajari script build
+upstream dua target Android (`linux-arm64-android`,
+`linux-x64-android`, dipilih dengan `--android`) supaya sumber yang
+sudah ramping yang sama juga terkompilasi melawan libc Bionic milik
+Android, dengan `OPENCODE_LIBC=bionic` tertanam dan tanpa
+potongan khusus glibc (tanpa binary FFF, tanpa define OPENTUI_LIBC,
+tanpa field libc di manifest paket tertanam). Build Linux glibc
+tidak tersentuh: tanpa `--android`, daftar target berperilaku
+persis seperti sebelumnya. Aset rilis Termux memasangkan binary ini
+dengan `libopentui.so` yang dibangun secara native dan shim kecil
+`close_range` (lihat `termux/` di repo ini); tidak ada proot yang
+terlibat di titik mana pun.
+
 ---
 
 Catatan untuk pembaca yang teliti: README ini bukan patch.

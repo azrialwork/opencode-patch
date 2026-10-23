@@ -200,9 +200,171 @@ jobs:
           path: release-assets/*.tar.gz
           if-no-files-found: error
 
+  native-termux:
+    name: Native libs (Termux)
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+    runs-on: ubuntu-24.04
+    env:
+      OPENTUI_REPO: anomalyco/opentui
+      # Must match the @opentui/core version upstream pins (root catalog).
+      OPENTUI_TAG: v0.4.5
+      ZIG_VERSION: 0.15.2
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Checkout OpenTUI at the pinned tag
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.OPENTUI_REPO }}
+          ref: ${{ env.OPENTUI_TAG }}
+          path: opentui
+
+      - name: Patch OpenTUI for Android
+        run: git -C opentui apply "$GITHUB_WORKSPACE/termux/opentui-build-zig-android.patch"
+
+      - name: Setup Android NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ndk;${{ env.NDK_VERSION }}
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Build libopentui.so (aarch64-linux-android)
+        working-directory: opentui/packages/core/src/zig
+        run: |
+          set -euo pipefail
+          sysroot="$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          triple="aarch64-linux-android"
+          api=28
+          test -d "$sysroot/usr/include/$triple"
+          test -d "$sysroot/usr/lib/$triple/$api"
+          libc_file="$RUNNER_TEMP/android-libc.txt"
+          {
+            echo "include_dir=$sysroot/usr/include/$triple"
+            echo "sys_include_dir=$sysroot/usr/include"
+            echo "crt_dir=$sysroot/usr/lib/$triple/$api"
+            echo "msvc_lib_dir="
+            echo "kernel32_lib_dir="
+            echo "gcc_dir="
+          } > "$libc_file"
+          zig build -Dtarget=$triple -Doptimize=ReleaseFast --libc "$libc_file"
+
+      - name: Build close_range compat shim
+        run: |
+          set -euo pipefail
+          mkdir -p native
+          cc="$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang"
+          test -x "$cc"
+          "$cc" -shared -fPIC -O2 -ldl -o native/libopencode-compat.so \
+            "$GITHUB_WORKSPACE/termux/close-range-shim.c"
+          readelf -h native/libopencode-compat.so | grep -q "Machine:.*AArch64"
+          nm -D native/libopencode-compat.so | grep -Eq " (close_range|syscall)$"
+
+      - name: Stage libraries
+        run: |
+          set -euo pipefail
+          cp "opentui/packages/core/src/zig/lib/aarch64-linux-android/libopentui.so" native/
+          file native/*.so
+
+      - name: Upload native libs
+        uses: actions/upload-artifact@v4
+        with:
+          name: termux-native-arm64
+          path: native/*.so
+          if-no-files-found: error
+
+  build-termux:
+    name: Build (Termux arm64)
+    needs: [check, native-termux]
+    if: needs.check.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Checkout upstream at the pinned tag
+        uses: actions/checkout@v4
+        with:
+          repository: anomalyco/opencode
+          ref: ${{ needs.check.outputs.tag }}
+          path: upstream
+
+      - name: Verify upstream commit
+        run: |
+          actual="$(git -C upstream rev-parse HEAD)"
+          if [ "$actual" != "${{ needs.check.outputs.sha }}" ]; then
+            echo "upstream HEAD $actual != expected ${{ needs.check.outputs.sha }}" >&2
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Get Bun version from upstream
+        id: bun
+        run: echo "version=$(node -p "require('./upstream/package.json').packageManager.split('@')[1]")" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      - name: Apply patches
+        run: scripts/apply-patches.sh upstream
+
+      - name: Install upstream dependencies
+        working-directory: upstream
+        run: bun install
+
+      # @opentui/core is not in upstream's patchedDependencies, so a patch
+      # file would be ignored; rewrite the installed copies in place.
+      - name: Teach @opentui/core about Android
+        run: python3 termux/patch-opentui.py upstream
+
+      - name: Download native libs
+        uses: actions/download-artifact@v4
+        with:
+          name: termux-native-arm64
+          path: native
+
+      - name: Build CLI for Android (Bionic)
+        working-directory: upstream/packages/opencode
+        env:
+          OPENCODE_VERSION: ${{ needs.check.outputs.version }}
+        run: bun run script/build.ts --android
+
+      - name: Verify the Bionic binary
+        run: |
+          set -euo pipefail
+          ls upstream/packages/opencode/dist
+          termux/verify.sh \
+            upstream/packages/opencode/dist/opencode-linux-arm64-android/bin/opencode \
+            native/libopentui.so arm64 native/libopencode-compat.so
+
+      - name: Package Termux asset
+        run: |
+          termux/package-termux.sh \
+            upstream/packages/opencode/dist/opencode-linux-arm64-android/bin/opencode \
+            native release-assets
+
+      - name: Upload asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-termux
+          path: release-assets/*.tar.gz
+          if-no-files-found: error
+
   release:
     name: Release
-    needs: [check, build]
+    needs: [check, build, build-termux]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout this repo
@@ -220,7 +382,7 @@ jobs:
           EXPECTED: ${{ needs.check.outputs.version }}
         run: |
           set -euo pipefail
-          for name in opencode-linux-x64 opencode-linux-arm64 opencode-linux-x64-baseline; do
+          for name in opencode-linux-x64 opencode-linux-arm64 opencode-linux-x64-baseline opencode-termux-arm64; do
             [ -f "release-assets/$name.tar.gz" ] || { echo "missing asset $name.tar.gz" >&2; exit 1; }
           done
           ls -la release-assets
@@ -251,12 +413,12 @@ jobs:
           Rebuild of upstream OpenCode **$TAG** with this repo's patch series applied.
 
           - Upstream: [anomalyco/opencode $TAG](https://github.com/anomalyco/opencode/releases/tag/$TAG) (commit \`$SHA\`)
-          - Scope: CLI only, Linux only, glibc only
-          - Assets: \`opencode-linux-x64.tar.gz\`, \`opencode-linux-arm64.tar.gz\`, \`opencode-linux-x64-baseline.tar.gz\` (no-AVX2), plus \`SHA256SUMS\`
+          - Scope: CLI only; Linux glibc, plus Android (Termux) Bionic arm64
+          - Assets: \`opencode-linux-x64.tar.gz\`, \`opencode-linux-arm64.tar.gz\`, \`opencode-linux-x64-baseline.tar.gz\` (no-AVX2), \`opencode-termux-arm64.tar.gz\` (native Termux, no proot), plus \`SHA256SUMS\`
           - Patches applied:
           $patch_list
 
-          Each archive contains a single \`opencode\` binary. Extract it and put it on your \`PATH\`.
+          Each Linux archive contains a single \`opencode\` binary. Extract it and put it on your \`PATH\`. The Termux archive contains a launcher plus the Bionic binary and its native libraries under \`lib/opencode-patch/\`; on Termux, just use \`install.sh\`.
           EOF
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
