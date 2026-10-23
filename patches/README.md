@@ -39,6 +39,9 @@ Current series:
   `experimental.openTelemetry` config key, and the `OTEL_*` flags.
 - `0009-remove-import.patch` — removes the `opencode import` command
   (session JSON import) and its tests.
+- `0010-remove-photon-image.patch` — removes the Photon image
+  pipeline (`@silvia-odwyer/photon-node`, both image services, the
+  image attachment config keys); images pass through unmodified.
 
 This file is not a patch and is ignored by `scripts/apply-patches.sh`,
 which only reads `*.patch`.

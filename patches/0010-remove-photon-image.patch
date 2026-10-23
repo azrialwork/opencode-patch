@@ -1,0 +1,1173 @@
+diff --git a/packages/core/package.json b/packages/core/package.json
+index 7233a65606..d3dbb7fe87 100644
+--- a/packages/core/package.json
++++ b/packages/core/package.json
+@@ -76,7 +76,6 @@
+     "@opencode-ai/schema": "workspace:*",
+     "@opencode-ai/plugin": "workspace:*",
+     "@parcel/watcher": "2.5.1",
+-    "@silvia-odwyer/photon-node": "0.3.4",
+     "ai-gateway-provider": "3.2.0",
+     "bun-pty": "0.4.8",
+     "cross-spawn": "catalog:",
+diff --git a/packages/core/src/config.ts b/packages/core/src/config.ts
+index 61d9a72ede..4e76f28a7f 100644
+--- a/packages/core/src/config.ts
++++ b/packages/core/src/config.ts
+@@ -11,7 +11,6 @@ import { Location } from "./location"
+ import { Policy } from "./policy"
+ import { AbsolutePath } from "./schema"
+ import { ConfigAgent } from "./config/agent"
+-import { ConfigAttachments } from "./config/attachments"
+ import { ConfigCompaction } from "./config/compaction"
+ import { ConfigCommand } from "./config/command"
+ import { ConfigExperimental } from "./config/experimental"
+@@ -63,9 +62,6 @@ export class Info extends Schema.Class<Info>("Config.Info")({
+   formatter: ConfigFormatter.Info.pipe(Schema.optional).annotate({
+     description: "Enable built-in formatters or configure formatter overrides",
+   }),
+-  attachments: ConfigAttachments.Info.pipe(Schema.optional).annotate({
+-    description: "Attachment processing configuration",
+-  }),
+   tool_output: ConfigToolOutput.Info.pipe(Schema.optional).annotate({
+     description: "Tool output truncation thresholds",
+   }),
+diff --git a/packages/core/src/config/attachments.ts b/packages/core/src/config/attachments.ts
+deleted file mode 100644
+index f14775ff3f..0000000000
+--- a/packages/core/src/config/attachments.ts
++++ /dev/null
+@@ -1,15 +0,0 @@
+-export * as ConfigAttachments from "./attachments"
+-
+-import { Schema } from "effect"
+-import { PositiveInt } from "../schema"
+-
+-export class Image extends Schema.Class<Image>("ConfigV2.Attachments.Image")({
+-  auto_resize: Schema.Boolean.pipe(Schema.optional),
+-  max_width: PositiveInt.pipe(Schema.optional),
+-  max_height: PositiveInt.pipe(Schema.optional),
+-  max_base64_bytes: PositiveInt.pipe(Schema.optional),
+-}) {}
+-
+-export class Info extends Schema.Class<Info>("ConfigV2.Attachments")({
+-  image: Image.pipe(Schema.optional),
+-}) {}
+diff --git a/packages/core/src/image.ts b/packages/core/src/image.ts
+deleted file mode 100644
+index 304277669e..0000000000
+--- a/packages/core/src/image.ts
++++ /dev/null
+@@ -1,81 +0,0 @@
+-export * as Image from "./image"
+-
+-import { makeLocationNode } from "./effect/app-node"
+-import { Context, Effect, Layer, Schema } from "effect"
+-import { Config } from "./config"
+-import { FileSystem } from "./filesystem"
+-
+-export class ResizerUnavailableError extends Schema.TaggedErrorClass<ResizerUnavailableError>()(
+-  "Image.ResizerUnavailableError",
+-  {},
+-) {}
+-
+-export class DecodeError extends Schema.TaggedErrorClass<DecodeError>()("Image.DecodeError", {
+-  resource: Schema.String,
+-}) {
+-  override get message() {
+-    return `Image could not be decoded: ${this.resource}`
+-  }
+-}
+-
+-export class SizeError extends Schema.TaggedErrorClass<SizeError>()("Image.SizeError", {
+-  resource: Schema.String,
+-  width: Schema.Number,
+-  height: Schema.Number,
+-  bytes: Schema.Number,
+-  maxWidth: Schema.Number,
+-  maxHeight: Schema.Number,
+-  maxBytes: Schema.Number,
+-}) {
+-  override get message() {
+-    return `Image ${this.resource} is ${this.width}x${this.height} with base64 size ${this.bytes}, exceeding configured limits ${this.maxWidth}x${this.maxHeight}/${this.maxBytes} bytes`
+-  }
+-}
+-
+-export interface Interface {
+-  readonly normalize: (
+-    resource: string,
+-    content: FileSystem.Content & { readonly encoding: "base64" },
+-  ) => Effect.Effect<
+-    FileSystem.Content & { readonly encoding: "base64" },
+-    ResizerUnavailableError | DecodeError | SizeError
+-  >
+-}
+-
+-export class Service extends Context.Service<Service, Interface>()("@opencode/Image") {}
+-
+-const layer = Layer.effect(
+-  Service,
+-  Effect.gen(function* () {
+-    const config = yield* Config.Service
+-    const loadAdapter = yield* Effect.cached(
+-      Effect.tryPromise({
+-        try: () => import("./image/photon"),
+-        catch: () => new ResizerUnavailableError(),
+-      }).pipe(Effect.flatMap((adapter) => adapter.make)),
+-    )
+-    const normalize = Effect.fn("Image.normalize")(function* (
+-      resource: string,
+-      content: FileSystem.Content & { readonly encoding: "base64" },
+-    ) {
+-      const image = Object.assign(
+-        {},
+-        ...(yield* config.entries()).flatMap((entry) =>
+-          entry.type === "document" && entry.info.attachments?.image ? [entry.info.attachments.image] : [],
+-        ),
+-      )
+-      const normalize = yield* loadAdapter
+-      return yield* normalize(resource, content, {
+-        autoResize: image.auto_resize ?? true,
+-        maxWidth: image.max_width ?? 2_000,
+-        maxHeight: image.max_height ?? 2_000,
+-        maxBase64Bytes: image.max_base64_bytes ?? 5 * 1024 * 1024,
+-      })
+-    })
+-    return Service.of({ normalize })
+-  }),
+-)
+-
+-export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer))
+-
+-export const node = makeLocationNode({ service: Service, layer, deps: [Config.node] })
+diff --git a/packages/core/src/image/photon.ts b/packages/core/src/image/photon.ts
+deleted file mode 100644
+index e4a00ce5fc..0000000000
+--- a/packages/core/src/image/photon.ts
++++ /dev/null
+@@ -1,94 +0,0 @@
+-// @ts-ignore Bun's static file import is embedded by `bun build --compile`; some consumers also declare *.wasm.
+-import photonWasm from "@silvia-odwyer/photon-node/photon_rs_bg.wasm" with { type: "file" }
+-import { Effect } from "effect"
+-import path from "node:path"
+-import { fileURLToPath } from "node:url"
+-import { FileSystem } from "../filesystem"
+-import { DecodeError, ResizerUnavailableError, SizeError } from "../image"
+-
+-const JPEG_QUALITIES = [80, 85, 70, 55, 40]
+-
+-export const make = Effect.gen(function* () {
+-  ;(globalThis as typeof globalThis & { __OPENCODE_PHOTON_WASM_PATH?: string }).__OPENCODE_PHOTON_WASM_PATH =
+-    path.isAbsolute(photonWasm) ? photonWasm : fileURLToPath(new URL(photonWasm, import.meta.url))
+-  const loadPhoton = yield* Effect.cached(
+-    Effect.tryPromise({
+-      try: () => import("@silvia-odwyer/photon-node"),
+-      catch: () => new ResizerUnavailableError(),
+-    }),
+-  )
+-  return Effect.fn("Image.Photon.normalize")(function* (
+-    resource: string,
+-    content: FileSystem.Content & { readonly encoding: "base64" },
+-    limits: {
+-      readonly autoResize: boolean
+-      readonly maxWidth: number
+-      readonly maxHeight: number
+-      readonly maxBase64Bytes: number
+-    },
+-  ) {
+-    const photon = yield* loadPhoton
+-    const decoded = yield* Effect.try({
+-      try: () => photon.PhotonImage.new_from_byteslice(Buffer.from(content.content, "base64")),
+-      catch: () => new DecodeError({ resource }),
+-    })
+-    try {
+-      const width = decoded.get_width()
+-      const height = decoded.get_height()
+-      const bytes = Buffer.byteLength(content.content, "utf-8")
+-      if (width <= limits.maxWidth && height <= limits.maxHeight && bytes <= limits.maxBase64Bytes) return content
+-      if (!limits.autoResize)
+-        return yield* new SizeError({
+-          resource,
+-          width,
+-          height,
+-          bytes,
+-          maxWidth: limits.maxWidth,
+-          maxHeight: limits.maxHeight,
+-          maxBytes: limits.maxBase64Bytes,
+-        })
+-      const scale = Math.min(1, limits.maxWidth / width, limits.maxHeight / height)
+-      const sizes = Array.from({ length: 32 }).reduce<Array<{ width: number; height: number }>>((acc) => {
+-        const previous = acc.at(-1) ?? {
+-          width: Math.max(1, Math.round(width * scale)),
+-          height: Math.max(1, Math.round(height * scale)),
+-        }
+-        const next =
+-          acc.length === 0
+-            ? previous
+-            : {
+-                width: previous.width === 1 ? 1 : Math.max(1, Math.floor(previous.width * 0.75)),
+-                height: previous.height === 1 ? 1 : Math.max(1, Math.floor(previous.height * 0.75)),
+-              }
+-        return acc.some((item) => item.width === next.width && item.height === next.height) ? acc : [...acc, next]
+-      }, [])
+-      for (const size of sizes) {
+-        const resized = photon.resize(decoded, size.width, size.height, photon.SamplingFilter.Lanczos3)
+-        try {
+-          const encoders: Array<readonly [mime: string, encode: () => Uint8Array]> = [
+-            ["image/png", () => resized.get_bytes()],
+-            ...JPEG_QUALITIES.map((quality) => ["image/jpeg", () => resized.get_bytes_jpeg(quality)] as const),
+-          ]
+-          for (const [mime, encode] of encoders) {
+-            const candidate = Buffer.from(encode()).toString("base64")
+-            if (Buffer.byteLength(candidate, "utf-8") <= limits.maxBase64Bytes)
+-              return { ...content, content: candidate, encoding: "base64" as const, mime }
+-          }
+-        } finally {
+-          resized.free()
+-        }
+-      }
+-      return yield* new SizeError({
+-        resource,
+-        width,
+-        height,
+-        bytes,
+-        maxWidth: limits.maxWidth,
+-        maxHeight: limits.maxHeight,
+-        maxBytes: limits.maxBase64Bytes,
+-      })
+-    } finally {
+-      decoded.free()
+-    }
+-  })
+-})
+diff --git a/packages/core/src/location-services.ts b/packages/core/src/location-services.ts
+index 7da67673c3..0ea85ab0ff 100644
+--- a/packages/core/src/location-services.ts
++++ b/packages/core/src/location-services.ts
+@@ -10,7 +10,6 @@ import { FileMutation } from "./file-mutation"
+ import { FileSystem } from "./filesystem"
+ import { FileSystemSearch } from "./filesystem/search"
+ import { Watcher } from "./filesystem/watcher"
+-import { Image } from "./image"
+ import { Integration } from "./integration"
+ import { Location } from "./location"
+ import { LocationMutation } from "./location-mutation"
+@@ -66,7 +65,6 @@ export const locationServices = LayerNode.group([
+   ToolOutputStore.node,
+   ToolRegistry.node,
+   ToolRegistry.toolsNode,
+-  Image.node,
+   SkillGuidance.node,
+   ReferenceGuidance.node,
+   SessionTodo.node,
+diff --git a/packages/core/src/tool/read.ts b/packages/core/src/tool/read.ts
+index 6961a86091..69fa4c3083 100644
+--- a/packages/core/src/tool/read.ts
++++ b/packages/core/src/tool/read.ts
+@@ -4,7 +4,6 @@ import { ToolFailure } from "@opencode-ai/llm"
+ import { Effect, Layer, Schema } from "effect"
+ import { makeLocationNode } from "../effect/app-node"
+ import { FileSystem } from "../filesystem"
+-import { Image } from "../image"
+ import { LocationMutation } from "../location-mutation"
+ import { PermissionV2 } from "../permission"
+ import { AbsolutePath } from "../schema"
+@@ -32,7 +31,6 @@ const layer = Layer.effectDiscard(
+     const tools = yield* Tools.Service
+     const reader = yield* ReadToolFileSystem.Service
+     const mutation = yield* LocationMutation.Service
+-    const image = yield* Image.Service
+     const permission = yield* PermissionV2.Service
+ 
+     yield* tools
+@@ -83,11 +81,8 @@ const layer = Layer.effectDiscard(
+                 offset: input.offset,
+                 limit: input.limit,
+               })
+-              if ("encoding" in content && content.encoding === "base64" && SUPPORTED_IMAGE_MIMES.has(content.mime)) {
+-                return yield* image
+-                  .normalize(resource, { ...content, encoding: "base64" })
+-                  .pipe(Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(content)))
+-              }
++              if ("encoding" in content && content.encoding === "base64" && SUPPORTED_IMAGE_MIMES.has(content.mime))
++                return content
+               if ("encoding" in content && content.encoding === "base64")
+                 return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
+               return content
+@@ -95,9 +90,7 @@ const layer = Layer.effectDiscard(
+               Effect.mapError((error) => {
+                 const message =
+                   error instanceof ReadToolFileSystem.BinaryFileError ||
+-                  error instanceof ReadToolFileSystem.MediaIngestLimitError ||
+-                  error instanceof Image.DecodeError ||
+-                  error instanceof Image.SizeError
++                  error instanceof ReadToolFileSystem.MediaIngestLimitError
+                     ? error.message
+                     : `Unable to read ${input.path}`
+                 return new ToolFailure({ message })
+@@ -113,5 +106,5 @@ const layer = Layer.effectDiscard(
+ export const node = makeLocationNode({
+   name: "tool/read",
+   layer,
+-  deps: [ToolRegistry.node, ReadToolFileSystem.node, LocationMutation.node, Image.node, PermissionV2.node],
++  deps: [ToolRegistry.node, ReadToolFileSystem.node, LocationMutation.node, PermissionV2.node],
+ })
+diff --git a/packages/core/src/v1/config/attachment.ts b/packages/core/src/v1/config/attachment.ts
+deleted file mode 100644
+index f56a671ca7..0000000000
+--- a/packages/core/src/v1/config/attachment.ts
++++ /dev/null
+@@ -1,25 +0,0 @@
+-export * as ConfigAttachmentV1 from "./attachment"
+-
+-import { Schema } from "effect"
+-import { PositiveInt } from "../../schema"
+-
+-export const Image = Schema.Struct({
+-  auto_resize: Schema.optional(Schema.Boolean).annotate({
+-    description: "Resize images before sending them to the model when they exceed configured limits (default: true)",
+-  }),
+-  max_width: Schema.optional(PositiveInt).annotate({
+-    description: "Maximum image width before resizing or rejecting the attachment (default: 2000)",
+-  }),
+-  max_height: Schema.optional(PositiveInt).annotate({
+-    description: "Maximum image height before resizing or rejecting the attachment (default: 2000)",
+-  }),
+-  max_base64_bytes: Schema.optional(PositiveInt).annotate({
+-    description: "Maximum base64 payload bytes for an image attachment (default: 5242880)",
+-  }),
+-}).annotate({ identifier: "ImageAttachmentConfig" })
+-export type Image = Schema.Schema.Type<typeof Image>
+-
+-export const Info = Schema.Struct({
+-  image: Schema.optional(Image).annotate({ description: "Image attachment configuration" }),
+-}).annotate({ identifier: "AttachmentConfig" })
+-export type Info = Schema.Schema.Type<typeof Info>
+diff --git a/packages/core/src/v1/config/config.ts b/packages/core/src/v1/config/config.ts
+index 4a1e0b44af..b1a6fb6d1d 100644
+--- a/packages/core/src/v1/config/config.ts
++++ b/packages/core/src/v1/config/config.ts
+@@ -5,7 +5,6 @@ import { NonNegativeInt, PositiveInt, type DeepMutable } from "../../schema"
+ import { ConfigExperimental } from "../../config/experimental"
+ import { ConfigReference } from "../../config/reference"
+ import { ConfigAgentV1 } from "./agent"
+-import { ConfigAttachmentV1 } from "./attachment"
+ import { ConfigCommandV1 } from "./command"
+ import { ConfigFormatterV1 } from "./formatter"
+ import { ConfigLayoutV1 } from "./layout"
+@@ -111,9 +110,6 @@ export const Info = Schema.Struct({
+   layout: Schema.optional(ConfigLayoutV1.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
+   permission: Schema.optional(ConfigPermissionV1.Info),
+   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+-  attachment: Schema.optional(ConfigAttachmentV1.Info).annotate({
+-    description: "Attachment processing configuration, including image size limits and resizing behavior",
+-  }),
+   enterprise: Schema.optional(
+     Schema.Struct({ url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }) }),
+   ),
+diff --git a/packages/core/src/v1/config/migrate.ts b/packages/core/src/v1/config/migrate.ts
+index 27fd71a6fd..712a759dc6 100644
+--- a/packages/core/src/v1/config/migrate.ts
++++ b/packages/core/src/v1/config/migrate.ts
+@@ -22,7 +22,6 @@ const keys = new Set([
+   "provider",
+   "permission",
+   "tools",
+-  "attachment",
+   "layout",
+ ])
+ 
+@@ -44,7 +43,6 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
+     snapshots: info.snapshot,
+     watcher: info.watcher,
+     formatter: info.formatter,
+-    attachments: info.attachment,
+     tool_output: info.tool_output,
+     mcp: mcp(info),
+     compaction: info.compaction && {
+diff --git a/packages/core/test/config/config.test.ts b/packages/core/test/config/config.test.ts
+index 89d2d3f467..f1a1843198 100644
+--- a/packages/core/test/config/config.test.ts
++++ b/packages/core/test/config/config.test.ts
+@@ -391,9 +391,6 @@ describe("Config", () => {
+               prettier: { disabled: true },
+               custom: { command: ["custom-fmt", "$FILE"], extensions: [".foo"] },
+             })
+-            expect(documents[0]?.info.attachments).toEqual({
+-              image: { auto_resize: false, max_width: 1200, max_height: 900, max_base64_bytes: 1048576 },
+-            })
+             expect(documents[0]?.info.tool_output).toEqual({ max_lines: 1000, max_bytes: 32768 })
+             expect(documents[0]?.info.mcp).toEqual({
+               timeout: { startup: 5000, request: 60000 },
+@@ -596,7 +593,6 @@ describe("Config", () => {
+             expect(documents[0]?.info.references).toEqual({
+               docs: { path: "../docs", description: "Use for product documentation", hidden: true },
+             })
+-            expect(documents[0]?.info.attachments).toEqual({ image: { auto_resize: false, max_width: 1200 } })
+             expect(documents[0]?.info.providers?.custom).toMatchObject({
+               request: { body: { apiKey: "secret" } },
+               models: {
+diff --git a/packages/core/test/tool-read.test.ts b/packages/core/test/tool-read.test.ts
+index 29b32bd03d..73b2e08809 100644
+--- a/packages/core/test/tool-read.test.ts
++++ b/packages/core/test/tool-read.test.ts
+@@ -2,13 +2,11 @@ import { beforeEach, describe, expect } from "bun:test"
+ import path from "path"
+ import { Effect, Exit, Layer, PlatformError } from "effect"
+ import { Config } from "@opencode-ai/core/config"
+-import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
+ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+ import { FileSystem } from "@opencode-ai/core/filesystem"
+ import { FSUtil } from "@opencode-ai/core/fs-util"
+ import { Location } from "@opencode-ai/core/location"
+-import { Image } from "@opencode-ai/core/image"
+ import { PermissionV2 } from "@opencode-ai/core/permission"
+ import { SessionV2 } from "@opencode-ai/core/session"
+ import { AbsolutePath } from "@opencode-ai/core/schema"
+@@ -73,7 +71,6 @@ const permission = Layer.succeed(
+   }),
+ )
+ const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed(configEntries) }))
+-const imageLayer = AppNodeBuilder.build(Image.node, [[Config.node, config]])
+ const testFileSystem = Layer.effect(
+   FSUtil.Service,
+   FSUtil.Service.use((fs) =>
+@@ -125,24 +122,17 @@ const mutation = Layer.succeed(
+     },
+   }),
+ )
+-const unavailableImage = Layer.succeed(
+-  Image.Service,
+-  Image.Service.of({ normalize: () => Effect.fail(new Image.ResizerUnavailableError()) }),
+-)
+-const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
+-  AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, ReadTool.node]), [
++const readLayer = AppNodeBuilder.build(LayerNode.group([ToolRegistry.node, ToolRegistry.toolsNode, ReadTool.node]), [
+     [ReadToolFileSystem.node, reader],
+     [PermissionV2.node, permission],
+     [Config.node, config],
+-    [Image.node, imageLayer],
+     [LocationMutation.node, mutation],
+     [FSUtil.node, testFileSystem],
+     [Location.node, locationLayer],
+     [Global.node, Global.layerWith({ data: Global.Path.data })],
+     [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+   ])
+-const it = testEffect(readLayer(imageLayer))
+-const itWithoutResizer = testEffect(readLayer(unavailableImage))
++const it = testEffect(readLayer)
+ const sessionID = SessionV2.ID.make("ses_read_tool_test")
+ 
+ describe("ReadTool", () => {
+@@ -270,199 +260,6 @@ describe("ReadTool", () => {
+     }),
+   )
+ 
+-  it.effect("preserves a PNG above the generic text limit as native media", () =>
+-    Effect.gen(function* () {
+-      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+-      const pixels = Uint8Array.from({ length: 256 * 256 * 4 }, (_, index) => (index * 73 + (index >> 3)) % 256)
+-      const source = new photon.PhotonImage(pixels, 256, 256)
+-      const png = Buffer.from(source.get_bytes()).toString("base64")
+-      source.free()
+-      expect(Buffer.byteLength(png)).toBeGreaterThan(50 * 1024)
+-      readResult = {
+-        uri: "file:///large.png",
+-        name: "large.png",
+-        content: png,
+-        encoding: "base64",
+-        mime: "image/png",
+-      }
+-      const registry = yield* ToolRegistry.Service
+-
+-      const settled = yield* settleTool(registry, {
+-        sessionID,
+-        ...toolIdentity,
+-        call: { type: "tool-call", id: "call-large-image", name: "read", input: { path: "large.png" } },
+-      })
+-
+-      expect(settled.outputPaths).toBeUndefined()
+-      expect(settled.output?.structured).toMatchObject({
+-        uri: "file:///large.png",
+-        name: "large.png",
+-        mime: "image/png",
+-        encoding: "base64",
+-      })
+-      expect(settled.result).toEqual({
+-        type: "content",
+-        value: [
+-          { type: "text", text: "Image read successfully" },
+-          { type: "file", uri: `data:image/png;base64,${png}`, mime: "image/png", name: "large.png" },
+-        ],
+-      })
+-    }),
+-  )
+-
+-  itWithoutResizer.effect("returns the original image when the resizer is unavailable", () =>
+-    Effect.gen(function* () {
+-      const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+-      readResult = {
+-        uri: "file:///pixel.png",
+-        name: "pixel.png",
+-        content: png,
+-        encoding: "base64",
+-        mime: "image/png",
+-      }
+-      const registry = yield* ToolRegistry.Service
+-
+-      expect(
+-        yield* executeTool(registry, {
+-          sessionID,
+-          ...toolIdentity,
+-          call: { type: "tool-call", id: "call-image-fallback", name: "read", input: { path: "pixel.png" } },
+-        }),
+-      ).toMatchObject({
+-        type: "content",
+-        value: [{ type: "text" }, { type: "file", uri: `data:image/png;base64,${png}`, mime: "image/png" }],
+-      })
+-    }),
+-  )
+-
+-  it.effect("rejects invalid image data returned by the filesystem", () =>
+-    Effect.gen(function* () {
+-      readResult = {
+-        uri: "file:///truncated.png",
+-        name: "truncated.png",
+-        content: "iVBORw0KGgo=",
+-        encoding: "base64",
+-        mime: "image/png",
+-      }
+-      const registry = yield* ToolRegistry.Service
+-
+-      expect(
+-        yield* executeTool(registry, {
+-          sessionID,
+-          ...toolIdentity,
+-          call: { type: "tool-call", id: "call-truncated-image", name: "read", input: { path: "truncated.png" } },
+-        }),
+-      ).toEqual({ type: "error", value: "Image could not be decoded: truncated.png" })
+-    }),
+-  )
+-
+-  it.effect("rejects oversized images when resizing is disabled", () =>
+-    Effect.gen(function* () {
+-      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+-      const source = new photon.PhotonImage(new Uint8Array(Array.from({ length: 16 * 4 }, () => 255)), 16, 1)
+-      const base64 = Buffer.from(source.get_bytes()).toString("base64")
+-      source.free()
+-      readResult = {
+-        uri: "file:///wide.png",
+-        name: "wide.png",
+-        content: base64,
+-        encoding: "base64",
+-        mime: "image/png",
+-      }
+-      configEntries = [
+-        new Config.Document({
+-          type: "document",
+-          info: new Config.Info({
+-            attachments: new ConfigAttachments.Info({
+-              image: new ConfigAttachments.Image({ auto_resize: false, max_width: 4 }),
+-            }),
+-          }),
+-        }),
+-      ]
+-      const registry = yield* ToolRegistry.Service
+-      const result = yield* executeTool(registry, {
+-        sessionID,
+-        ...toolIdentity,
+-        call: { type: "tool-call", id: "call-wide-image", name: "read", input: { path: "wide.png" } },
+-      })
+-
+-      expect(result.type).toBe("error")
+-      if (result.type === "error") expect(result.value).toContain("exceeding configured limits 4x2000")
+-    }),
+-  )
+-
+-  it.effect("resizes images to configured dimensions before returning media", () =>
+-    Effect.gen(function* () {
+-      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+-      const source = new photon.PhotonImage(new Uint8Array(Array.from({ length: 16 * 4 }, () => 255)), 16, 1)
+-      const base64 = Buffer.from(source.get_bytes()).toString("base64")
+-      source.free()
+-      readResult = {
+-        uri: "file:///wide.png",
+-        name: "wide.png",
+-        content: base64,
+-        encoding: "base64",
+-        mime: "image/png",
+-      }
+-      configEntries = [
+-        new Config.Document({
+-          type: "document",
+-          info: new Config.Info({
+-            attachments: new ConfigAttachments.Info({ image: new ConfigAttachments.Image({ max_width: 4 }) }),
+-          }),
+-        }),
+-      ]
+-      const registry = yield* ToolRegistry.Service
+-      const result = yield* executeTool(registry, {
+-        sessionID,
+-        ...toolIdentity,
+-        call: { type: "tool-call", id: "call-resize-image", name: "read", input: { path: "wide.png" } },
+-      })
+-
+-      expect(result.type).toBe("content")
+-      if (result.type !== "content") return
+-      const media = result.value[1]
+-      expect(media?.type).toBe("file")
+-      if (media?.type !== "file") return
+-      const resized = photon.PhotonImage.new_from_byteslice(Buffer.from(media.uri.split(",")[1] ?? "", "base64"))
+-      expect(resized.get_width()).toBeLessThanOrEqual(4)
+-      expect(resized.get_height()).toBeLessThanOrEqual(2_000)
+-      resized.free()
+-    }),
+-  )
+-
+-  it.effect("enforces max base64 bytes after resize attempts", () =>
+-    Effect.gen(function* () {
+-      const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+-      readResult = {
+-        uri: "file:///pixel.png",
+-        name: "pixel.png",
+-        content: png,
+-        encoding: "base64",
+-        mime: "image/png",
+-      }
+-      configEntries = [
+-        new Config.Document({
+-          type: "document",
+-          info: new Config.Info({
+-            attachments: new ConfigAttachments.Info({
+-              image: new ConfigAttachments.Image({ max_base64_bytes: 1 }),
+-            }),
+-          }),
+-        }),
+-      ]
+-      const registry = yield* ToolRegistry.Service
+-      const result = yield* executeTool(registry, {
+-        sessionID,
+-        ...toolIdentity,
+-        call: { type: "tool-call", id: "call-max-bytes", name: "read", input: { path: "pixel.png" } },
+-      })
+-
+-      expect(result.type).toBe("error")
+-      if (result.type === "error") expect(result.value).toContain("/1 bytes")
+-    }),
+-  )
+-
+   it.effect("returns supported image contents despite a misleading binary extension", () =>
+     Effect.gen(function* () {
+       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+diff --git a/packages/opencode/package.json b/packages/opencode/package.json
+index 3ce67b78bc..a5f6535e0a 100644
+--- a/packages/opencode/package.json
++++ b/packages/opencode/package.json
+@@ -72,7 +72,6 @@
+     "@opentui/solid": "catalog:",
+     "@parcel/watcher": "2.5.1",
+     "@pierre/diffs": "catalog:",
+-    "@silvia-odwyer/photon-node": "0.3.4",
+     "@solid-primitives/event-bus": "1.1.2",
+     "@solid-primitives/scheduled": "1.5.2",
+     "@standard-schema/spec": "1.0.0",
+diff --git a/packages/opencode/src/config/v2-compat.ts b/packages/opencode/src/config/v2-compat.ts
+index 02a026fc38..cfb3063e3d 100644
+--- a/packages/opencode/src/config/v2-compat.ts
++++ b/packages/opencode/src/config/v2-compat.ts
+@@ -3,7 +3,6 @@ export * as ConfigV2Compat from "./v2-compat"
+ import { isDeepStrictEqual } from "node:util"
+ import { Option, Schema } from "effect"
+ import { NonNegativeInt, PositiveInt } from "@opencode-ai/core/schema"
+-import { ConfigAttachmentV1 } from "@opencode-ai/core/v1/config/attachment"
+ import { InvalidError } from "@opencode-ai/core/v1/config/error"
+ 
+ export interface Diagnostic {
+@@ -132,10 +131,6 @@ function normalizeSettings(input: Record<string, unknown>, result: Record<string
+     const value = decodeValue(Schema.Boolean, input.snapshots, ["snapshots"], diagnostics)
+     if (value !== undefined) preferLegacy(result, "snapshot", value, ["snapshots"], diagnostics)
+   }
+-  if (Object.hasOwn(input, "media")) {
+-    const value = decodeValue(ConfigAttachmentV1.Info, input.media, ["media"], diagnostics)
+-    if (value !== undefined) preferLegacy(result, "attachment", value, ["media"], diagnostics)
+-  }
+ }
+ 
+ function normalizeModel(input: Record<string, unknown>, result: Record<string, unknown>, diagnostics: Diagnostic[]) {
+diff --git a/packages/opencode/src/image/image.ts b/packages/opencode/src/image/image.ts
+deleted file mode 100644
+index 744bd3fc95..0000000000
+--- a/packages/opencode/src/image/image.ts
++++ /dev/null
+@@ -1,172 +0,0 @@
+-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+-import { Config } from "@/config/config"
+-import { SessionV1 } from "@opencode-ai/core/v1/session"
+-import type { MessageV2 } from "@/session/message-v2"
+-import photonWasm from "@silvia-odwyer/photon-node/photon_rs_bg.wasm" with { type: "file" }
+-import { Context, Effect, Layer, Schema } from "effect"
+-import path from "node:path"
+-import { fileURLToPath } from "node:url"
+-
+-const MAX_BASE64_BYTES = 5 * 1024 * 1024
+-const MAX_WIDTH = 2000
+-const MAX_HEIGHT = 2000
+-const AUTO_RESIZE = true
+-const JPEG_QUALITIES = [80, 85, 70, 55, 40]
+-export class ResizerUnavailableError extends Schema.TaggedErrorClass<ResizerUnavailableError>()(
+-  "ImageResizerUnavailableError",
+-  {},
+-) {
+-  override get message() {
+-    return "Image resizer is unavailable"
+-  }
+-}
+-
+-export class InvalidDataUrlError extends Schema.TaggedErrorClass<InvalidDataUrlError>()("ImageInvalidDataUrlError", {
+-  url: Schema.String,
+-}) {
+-  override get message() {
+-    return "Image URL must be a base64 data URL"
+-  }
+-}
+-
+-export class DecodeError extends Schema.TaggedErrorClass<DecodeError>()("ImageDecodeError", {}) {
+-  override get message() {
+-    return "Image could not be decoded"
+-  }
+-}
+-
+-export class SizeError extends Schema.TaggedErrorClass<SizeError>()("ImageSizeError", {
+-  bytes: Schema.Number,
+-  max: Schema.Number,
+-  width: Schema.Number,
+-  height: Schema.Number,
+-  max_width: Schema.Number,
+-  max_height: Schema.Number,
+-}) {
+-  override get message() {
+-    return `Image ${this.width}x${this.height} with base64 size ${this.bytes} exceeds configured limits and could not be resized below ${this.max_width}x${this.max_height}/${this.max} bytes`
+-  }
+-}
+-
+-export type Error = ResizerUnavailableError | InvalidDataUrlError | DecodeError | SizeError
+-
+-export interface Interface {
+-  readonly normalize: (input: SessionV1.FilePart) => Effect.Effect<SessionV1.FilePart, Error>
+-}
+-
+-export class Service extends Context.Service<Service, Interface>()("@opencode/Image") {}
+-
+-const layer = Layer.effect(
+-  Service,
+-  Effect.gen(function* () {
+-    const config = yield* Config.Service
+-    const loadPhoton = yield* Effect.cached(
+-      Effect.sync(() => {
+-        // Patched photon-node reads this during module init so Bun compiled binaries use the embedded wasm path.
+-        ;(globalThis as typeof globalThis & { __OPENCODE_PHOTON_WASM_PATH?: string }).__OPENCODE_PHOTON_WASM_PATH =
+-          path.isAbsolute(photonWasm) ? photonWasm : fileURLToPath(new URL(photonWasm, import.meta.url))
+-      }).pipe(
+-        Effect.andThen(() => Effect.tryPromise(() => import("@silvia-odwyer/photon-node"))),
+-        Effect.tapError((error) => Effect.logWarning("failed to load photon", { error })),
+-        Effect.mapError(() => new ResizerUnavailableError()),
+-      ),
+-    )
+-
+-    const normalize = Effect.fn("Image.normalize")(function* (input: SessionV1.FilePart) {
+-      const image = (yield* config.get()).attachment?.image
+-      const info = {
+-        autoResize: image?.auto_resize ?? AUTO_RESIZE,
+-        maxWidth: image?.max_width ?? MAX_WIDTH,
+-        maxHeight: image?.max_height ?? MAX_HEIGHT,
+-        maxBase64Bytes: image?.max_base64_bytes ?? MAX_BASE64_BYTES,
+-      }
+-      if (!input.url.startsWith("data:") || !input.url.includes(";base64,"))
+-        return yield* new InvalidDataUrlError({ url: input.url })
+-
+-      const base64 = input.url.slice(input.url.indexOf(";base64,") + ";base64,".length)
+-      const bytes = Buffer.byteLength(base64, "utf8")
+-
+-      const photon = yield* loadPhoton
+-
+-      const decoded = yield* Effect.try({
+-        try: () => photon.PhotonImage.new_from_byteslice(Buffer.from(base64, "base64")),
+-        catch: () => new DecodeError(),
+-      }).pipe(Effect.tapError((error) => Effect.logWarning("failed to decode image", { error })))
+-
+-      try {
+-        const originalWidth = decoded.get_width()
+-        const originalHeight = decoded.get_height()
+-        if (originalWidth <= info.maxWidth && originalHeight <= info.maxHeight && bytes <= info.maxBase64Bytes)
+-          return input
+-        if (!info.autoResize)
+-          return yield* new SizeError({
+-            bytes,
+-            max: info.maxBase64Bytes,
+-            width: originalWidth,
+-            height: originalHeight,
+-            max_width: info.maxWidth,
+-            max_height: info.maxHeight,
+-          })
+-
+-        const scale = Math.min(1, info.maxWidth / originalWidth, info.maxHeight / originalHeight)
+-        for (const size of Array.from({ length: 32 }).reduce<Array<{ width: number; height: number }>>((acc) => {
+-          const previous = acc.at(-1) ?? {
+-            width: Math.max(1, Math.round(originalWidth * scale)),
+-            height: Math.max(1, Math.round(originalHeight * scale)),
+-          }
+-          const next =
+-            acc.length === 0
+-              ? previous
+-              : {
+-                  width: previous.width === 1 ? 1 : Math.max(1, Math.floor(previous.width * 0.75)),
+-                  height: previous.height === 1 ? 1 : Math.max(1, Math.floor(previous.height * 0.75)),
+-                }
+-          return acc.some((item) => item.width === next.width && item.height === next.height) ? acc : [...acc, next]
+-        }, [])) {
+-          const resized = photon.resize(decoded, size.width, size.height, photon.SamplingFilter.Lanczos3)
+-          const candidate = [
+-            { data: Buffer.from(resized.get_bytes()).toString("base64"), mime: "image/png" },
+-            ...JPEG_QUALITIES.map((quality) => ({
+-              data: Buffer.from(resized.get_bytes_jpeg(quality)).toString("base64"),
+-              mime: "image/jpeg",
+-            })),
+-          ]
+-            .map((item) => ({ ...item, bytes: Buffer.byteLength(item.data, "utf8") }))
+-            .find((item) => item.bytes <= info.maxBase64Bytes)
+-          resized.free()
+-
+-          if (candidate) {
+-            yield* Effect.logInfo("using resized image", {
+-              from_mime: input.mime,
+-              to_mime: candidate.mime,
+-              from: `${originalWidth}x${originalHeight}`,
+-              to: `${size.width}x${size.height}`,
+-            })
+-            return {
+-              ...input,
+-              mime: candidate.mime,
+-              url: `data:${candidate.mime};base64,${candidate.data}`,
+-            }
+-          }
+-        }
+-
+-        return yield* new SizeError({
+-          bytes,
+-          max: info.maxBase64Bytes,
+-          width: originalWidth,
+-          height: originalHeight,
+-          max_width: info.maxWidth,
+-          max_height: info.maxHeight,
+-        })
+-      } finally {
+-        decoded.free()
+-      }
+-    })
+-
+-    return Service.of({ normalize })
+-  }),
+-)
+-
+-export const node = LayerNode.make({ service: Service, layer: layer, deps: [Config.node] })
+-
+-export * as Image from "./image"
+diff --git a/packages/opencode/src/session/processor.ts b/packages/opencode/src/session/processor.ts
+index 9f8530929c..02a39a8be4 100644
+--- a/packages/opencode/src/session/processor.ts
++++ b/packages/opencode/src/session/processor.ts
+@@ -1,6 +1,5 @@
+ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+-import { Image } from "@/image/image"
+ import { SessionV1 } from "@opencode-ai/core/v1/session"
+ import { Cause, Deferred, Effect, Exit, Layer, Context, Scope, Schema } from "effect"
+ import * as Stream from "effect/Stream"
+@@ -91,7 +90,6 @@ const layer = Layer.effect(
+     const summary = yield* SessionSummary.Service
+     const scope = yield* Scope.Scope
+     const status = yield* SessionStatus.Service
+-    const image = yield* Image.Service
+     const events = yield* EventV2Bridge.Service
+     const database = yield* Database.Service
+ 
+@@ -388,19 +386,8 @@ const layer = Layer.effect(
+               return
+             }
+             const rawOutput = toolResultOutput(value)
+-            const normalized = yield* Effect.forEach(rawOutput.attachments ?? [], (attachment) =>
+-              attachment.mime.startsWith("image/")
+-                ? image.normalize(attachment).pipe(
+-                    Effect.catchIf(
+-                      (error) => error instanceof Image.ResizerUnavailableError,
+-                      () => Effect.succeed(attachment),
+-                    ),
+-                    Effect.exit,
+-                  )
+-                : Effect.succeed(Exit.succeed<SessionV1.FilePart>(attachment)),
+-            )
+-            const omitted = normalized.filter(Exit.isFailure).length
+-            const attachments = normalized.filter(Exit.isSuccess).map((item) => item.value)
++            const omitted = 0
++            const attachments = rawOutput.attachments ?? []
+             const output = {
+               ...rawOutput,
+               output:
+@@ -723,7 +710,6 @@ export const node = LayerNode.make({
+     Plugin.node,
+     SessionSummary.node,
+     SessionStatus.node,
+-    Image.node,
+     EventV2Bridge.node,
+     Database.node,
+   ],
+diff --git a/packages/opencode/src/session/prompt.ts b/packages/opencode/src/session/prompt.ts
+index c860dc67a6..35322e28bf 100644
+--- a/packages/opencode/src/session/prompt.ts
++++ b/packages/opencode/src/session/prompt.ts
+@@ -38,7 +38,6 @@ import { Shell } from "@opencode-ai/core/shell"
+ import { ShellID } from "@/tool/shell/id"
+ import { FSUtil } from "@opencode-ai/core/fs-util"
+ import { Truncate } from "@/tool/truncate"
+-import { Image } from "@/image/image"
+ import { decodeDataUrl } from "@/util/data-url"
+ import { Process } from "@/util/process"
+ import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
+@@ -100,10 +99,10 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
+ 
+ export interface Interface {
+   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+-  readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
++  readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts>
+   readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts>
+   readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
+-  readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
++  readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts>
+   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
+ }
+ 
+@@ -126,7 +125,6 @@ const layer = Layer.effect(
+     const mcp = yield* MCP.Service
+     const registry = yield* ToolRegistry.Service
+     const truncate = yield* Truncate.Service
+-    const image = yield* Image.Service
+     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+     const scope = yield* Scope.Scope
+     const instruction = yield* Instruction.Service
+@@ -993,16 +991,7 @@ const layer = Layer.effect(
+         { message: info, parts: resolvedParts },
+       )
+ 
+-      const parts = yield* Effect.forEach(resolvedParts, (part) =>
+-        part.type === "file" && part.mime.startsWith("image/")
+-          ? image.normalize(part).pipe(
+-              Effect.catchIf(
+-                (error) => error instanceof Image.ResizerUnavailableError,
+-                () => Effect.succeed(part),
+-              ),
+-            )
+-          : Effect.succeed(part),
+-      )
++      const parts = resolvedParts
+ 
+       const parsed = decodeMessageInfo(info, { errors: "all", propertyOrder: "original" })
+       if (Exit.isFailure(parsed)) {
+@@ -1034,7 +1023,7 @@ const layer = Layer.effect(
+       return { info, parts }
+     }, Effect.scoped)
+ 
+-    const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
++    const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn(
+       "SessionPrompt.prompt",
+     )(function* (input: PromptInput) {
+       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+@@ -1598,7 +1587,6 @@ export const node = LayerNode.make({
+     MCP.node,
+     ToolRegistry.node,
+     Truncate.node,
+-    Image.node,
+     CrossSpawnSpawner.node,
+     Instruction.node,
+     SessionRunState.node,
+diff --git a/packages/opencode/test/image/fixtures/picture-5mb-base64.png b/packages/opencode/test/image/fixtures/picture-5mb-base64.png
+deleted file mode 100644
+index e8923b9e71..0000000000
+Binary files a/packages/opencode/test/image/fixtures/picture-5mb-base64.png and /dev/null differ
+diff --git a/packages/opencode/test/image/image.test.ts b/packages/opencode/test/image/image.test.ts
+deleted file mode 100644
+index 29667f6e2f..0000000000
+--- a/packages/opencode/test/image/image.test.ts
++++ /dev/null
+@@ -1,121 +0,0 @@
+-import { describe, expect } from "bun:test"
+-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+-import { Cause, Effect, Exit } from "effect"
+-import { Image } from "@/image/image"
+-import { Config } from "@/config/config"
+-import { MessageID, PartID, SessionID } from "@/session/schema"
+-import path from "node:path"
+-import { TestConfig } from "../fixture/config"
+-import { testEffect } from "../lib/effect"
+-
+-const it = testEffect(LayerNode.compile(Image.node, [[Config.node, TestConfig.layer()]]))
+-const tiny = testEffect(
+-  LayerNode.compile(Image.node, [
+-    [Config.node, TestConfig.layer({ get: () => Effect.succeed({ attachment: { image: { max_base64_bytes: 1 } } }) })],
+-  ]),
+-)
+-
+-function part(mime: string, data: string) {
+-  return {
+-    id: PartID.ascending(),
+-    messageID: MessageID.ascending(),
+-    sessionID: SessionID.make("ses_test"),
+-    type: "file" as const,
+-    mime,
+-    url: `data:${mime};base64,${data}`,
+-  }
+-}
+-
+-describe("Image", () => {
+-  it.effect("normalizes generated png and jpeg attachments", () =>
+-    Effect.gen(function* () {
+-      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+-      const source = new photon.PhotonImage(
+-        new Uint8Array(Array.from({ length: 64 * 64 * 4 }, (_, index) => (index % 4 === 3 ? 255 : index % 251))),
+-        64,
+-        64,
+-      )
+-      const image = yield* Image.Service
+-      const results = yield* Effect.all([
+-        image.normalize(part("image/png", Buffer.from(source.get_bytes()).toString("base64"))),
+-        image.normalize(part("image/jpeg", Buffer.from(source.get_bytes_jpeg(90)).toString("base64"))),
+-      ])
+-
+-      source.free()
+-      expect(results.map((result) => result.url.startsWith(`data:${result.mime};base64,`))).toEqual([true, true])
+-      expect(results.every((result) => result.mime === "image/png" || result.mime === "image/jpeg")).toBe(true)
+-    }),
+-  )
+-
+-  it.effect("accepts webp attachments that are already within limits", () =>
+-    Effect.gen(function* () {
+-      const image = yield* Image.Service
+-      const input = part("image/webp", "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA")
+-
+-      expect(yield* image.normalize(input)).toEqual(input)
+-    }),
+-  )
+-
+-  it.effect("resizes images that fit the byte limit but exceed dimension limits", () =>
+-    Effect.gen(function* () {
+-      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+-      const source = new photon.PhotonImage(new Uint8Array(Array.from({ length: 9_000 * 4 }, () => 255)), 9_000, 1)
+-      const image = yield* Image.Service
+-      const result = yield* image.normalize(part("image/png", Buffer.from(source.get_bytes()).toString("base64")))
+-      const resized = photon.PhotonImage.new_from_byteslice(
+-        Buffer.from(result.url.slice(result.url.indexOf(";base64,") + ";base64,".length), "base64"),
+-      )
+-
+-      source.free()
+-      expect(resized.get_width()).toBeLessThanOrEqual(2_000)
+-      expect(resized.get_height()).toBeLessThanOrEqual(2_000)
+-      resized.free()
+-    }),
+-  )
+-
+-  it.effect("resizes the 5MB base64 picture fixture", () =>
+-    Effect.gen(function* () {
+-      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+-      const data = Buffer.from(
+-        yield* Effect.promise(() =>
+-          Bun.file(path.join(import.meta.dir, "fixtures", "picture-5mb-base64.png")).arrayBuffer(),
+-        ),
+-      )
+-      const input = part("image/png", data.toString("base64"))
+-      const image = yield* Image.Service
+-      const result = yield* image.normalize(input)
+-      const base64 = result.url.slice(result.url.indexOf(";base64,") + ";base64,".length)
+-      const resized = photon.PhotonImage.new_from_byteslice(Buffer.from(base64, "base64"))
+-
+-      expect(input.url.slice(input.url.indexOf(";base64,") + ";base64,".length).length).toBe(5 * 1024 * 1024)
+-      expect(result.url).not.toBe(input.url)
+-      expect(base64.length).toBeLessThan(5 * 1024 * 1024)
+-      expect(resized.get_width()).toBeLessThanOrEqual(2_000)
+-      expect(resized.get_height()).toBeLessThanOrEqual(2_000)
+-      resized.free()
+-    }),
+-  )
+-
+-  tiny.effect("fails with a typed size error when no resized candidate fits", () =>
+-    Effect.gen(function* () {
+-      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+-      const source = new photon.PhotonImage(new Uint8Array(Array.from({ length: 4 }, () => 255)), 1, 1)
+-      const image = yield* Image.Service
+-      const exit = yield* image
+-        .normalize(part("image/png", Buffer.from(source.get_bytes()).toString("base64")))
+-        .pipe(Effect.exit)
+-
+-      source.free()
+-      expect(Exit.isFailure(exit)).toBe(true)
+-      if (Exit.isFailure(exit)) {
+-        const error = Cause.squash(exit.cause)
+-        expect(error).toBeInstanceOf(Image.SizeError)
+-        if (error instanceof Image.SizeError) {
+-          expect(error.width).toBe(1)
+-          expect(error.height).toBe(1)
+-          expect(error.max).toBe(1)
+-        }
+-      }
+-    }),
+-  )
+-})
+diff --git a/packages/opencode/test/session/prompt.test.ts b/packages/opencode/test/session/prompt.test.ts
+index 477c38a5c6..fd0b8bb60d 100644
+--- a/packages/opencode/test/session/prompt.test.ts
++++ b/packages/opencode/test/session/prompt.test.ts
+@@ -20,7 +20,6 @@ import { Plugin } from "../../src/plugin"
+ import { Provider as ProviderSvc } from "@/provider/provider"
+ import { Env } from "../../src/env"
+ import { Git } from "../../src/git"
+-import { Image } from "../../src/image/image"
+ 
+ import { Question } from "../../src/question"
+ import { Todo } from "../../src/session/todo"
+@@ -177,7 +176,6 @@ const promptRoot = LayerNode.group([
+   Format.node,
+   Truncate.node,
+   SessionProcessor.node,
+-  Image.node,
+   SessionCompaction.node,
+   SessionRevert.node,
+   Instruction.node,
+diff --git a/packages/sdk/js/src/v2/gen/types.gen.ts b/packages/sdk/js/src/v2/gen/types.gen.ts
+index c1cfe5f02d..f1ccddf41a 100644
+--- a/packages/sdk/js/src/v2/gen/types.gen.ts
++++ b/packages/sdk/js/src/v2/gen/types.gen.ts
+@@ -1863,17 +1863,6 @@ export type McpRemoteConfig = {
+  */
+ export type LayoutConfig = "auto" | "stretch"
+ 
+-export type ImageAttachmentConfig = {
+-  auto_resize?: boolean
+-  max_width?: number
+-  max_height?: number
+-  max_base64_bytes?: number
+-}
+-
+-export type AttachmentConfig = {
+-  image?: ImageAttachmentConfig
+-}
+-
+ export type Config = {
+   $schema?: string
+   shell?: string
+@@ -1969,7 +1958,6 @@ export type Config = {
+   tools?: {
+     [key: string]: boolean
+   }
+-  attachment?: AttachmentConfig
+   enterprise?: {
+     url?: string
+   }

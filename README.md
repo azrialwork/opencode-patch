@@ -145,6 +145,13 @@ from view.
 - `0009-remove-import.patch` — removes the `opencode import`
   command, which imported session data from exported JSON files
   (including its leftover share-URL branch), plus its tests.
+- `0010-remove-photon-image.patch` — removes the Photon image
+  processing pipeline: the `@silvia-odwyer/photon-node` WASM resizer
+  and both image services (core `Image` and the opencode session
+  image normalizer), so image attachments and image reads pass
+  through unmodified instead of being decoded, resized, and
+  re-encoded. The `attachment` / `attachments` image config keys go
+  with it.
 
 To add a patch later:
 
