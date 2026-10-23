@@ -1,222 +1,216 @@
-<p align="center">🇬🇧 <b>English</b> · <a href="README.id.md">🇮🇩 Bahasa Indonesia</a></p>
+English · [Bahasa Indonesia](README.id.md)
 
-# 🤖✂️ The Little Tailor
+# The Little Tailor
 
-### *The story of `opencode-patch`, told very, very simply*
+*The story of `opencode-patch`, told as simply as we can.*
 
-![The little tailor robot, happily trimming the big robot](images/hero-tailor.webp)
+![A little tailor robot trimming a big robot, patches of cloth flying around them](images/hero-tailor.webp)
 
----
+## Once upon a time
 
-## 📖 Chapter 1 — Once upon a time…
+There was a big, strong robot named OpenCode. He helps people write
+computer programs, and he is very good at it.
 
-Once upon a time, there was a big, strong robot named **OpenCode**.
-He helps people write computer programs. He is very smart. 🤖
+The trouble is his backpack. OpenCode carries everything he owns in it:
+a hundred shops, a radio, a post office, a teacher. Most people only
+ever use a few of those things. The rest is just weight.
 
-But OpenCode carries **everything** in his backpack.
-A hundred toy shops. A radio. A post office. A language teacher.
-Most people only play with a few of his toys.
-The rest just make his backpack heavy. 🎒
+So a little tailor came along with a pair of scissors. Whatever we do
+not need, he cuts away. Not folded up and hidden in a drawer — cut off,
+gone for good.
 
-So a **little tailor** came.
-Snip, snip. ✂️
-He cut away the parts we do not need — **really cut them away**,
-not hidden in a closet. Gone is gone.
+This repository is the tailor's workshop. The robot does not live here.
+What lives here is the list of cuts, and the instructions that tell
+GitHub's builder robots how to sew a slimmer OpenCode from the list.
 
-This home, `opencode-patch`, is the little tailor's workshop.
-It does **not** keep the robot inside.
-It keeps the tailor's **list of cuts**, and tells the builder robots
-at GitHub how to sew a slimmer OpenCode, again and again.
+If you only read one sentence, read this one: **this repo holds small
+cut recipes called patches, and machines use them to rebuild OpenCode
+without the parts we do not want.**
 
-> 💡 **One-sentence version:** this repo holds small "cut recipes"
-> (called *patches*). Big builder robots use them to rebuild OpenCode
-> without the parts we do not want.
+## Before and after
 
----
+![On the left, a round robot under a mountain of luggage. On the right, the same robot with a small backpack](images/robot-slim.webp)
 
-## 🎒 Chapter 2 — Before and after the diet
+Same robot. Same brain. A much lighter backpack.
 
-![Left: the robot with a giant backpack. Right: the same robot, slim and happy](images/robot-slim.webp)
-
-Same robot. Same brain. Much lighter backpack.
-
-| | How big? |
+| | Size |
 |---|---|
-| 🐘 Before (normal OpenCode) | **214.5 MB** |
-| 🐜 After (our robot) | **160.1 MB** |
-| 🎉 Gone | about **1 out of every 4 bites** |
+| Before, plain OpenCode | 214.5 MB |
+| After, our robot | 160.1 MB |
+| Difference | about a quarter lighter |
 
----
+## What is kept in this house
 
-## 🏠 Chapter 3 — What lives in this house?
+Three things, nothing more:
 
-Only three things live here:
+- `patches/` — the list of cuts. One file, one cut.
+- `install.sh` — a small script that brings the finished robot to your computer.
+- This README — the story you are reading.
 
-| Thing | What it is, in baby words |
-|---|---|
-| 📋 `patches/` | The tailor's list of cuts. One file = one cut. |
-| 🪄 `install.sh` | A magic spell that brings the finished robot to your computer. |
-| 📜 `README.md` | This storybook you are reading right now. |
+The robot himself is fetched fresh every time. When a build starts, the
+builders go to OpenCode's own home
+([anomalyco/opencode](https://github.com/anomalyco/opencode)), take a
+clean copy, do the cuts in order, and pack up the result.
 
-The robot himself is **not** here.
-Every time we build, the builder robots fetch a fresh OpenCode
-from his own home ([anomalyco/opencode](https://github.com/anomalyco/opencode)),
-do the cuts, and pack him up.
-
----
-
-## 🏭 Chapter 4 — How a new robot is born
+## How a new robot is made
 
 ```mermaid
 flowchart LR
-    A[🎁 Fresh OpenCode<br/>arrives] --> B[✂️ The tailor cuts<br/>13 little cuts]
-    B --> C[🔍 Quick check:<br/>does he still work?]
-    C --> D[📦 Pack him in a box<br/>with a safety stamp]
-    D --> E[🚀 Send the box<br/>to the Releases page]
+    A[A fresh OpenCode arrives] --> B[The tailor makes his cuts, 1 to 13]
+    B --> C[A quick check: does he still work?]
+    C --> D[Packed in a box, with a safety stamp]
+    D --> E[The box goes to the Releases page]
 ```
 
-In baby steps:
+Step by step:
 
-1. 🎁 A fresh, untouched OpenCode arrives.
-2. ✂️ The tailor does his cuts, **in number order**: cut 1, cut 2, cut 3…
-3. 🛑 If **one cut does not fit**, everything stops. No half-cut robots. Ever.
-4. 🔍 The robot says his name out loud (`opencode --version`) to prove he is alive.
-5. 📦 He is packed into a box, and the box gets a **safety stamp** (a checksum).
-6. 🚀 The box is delivered to the [Releases page](../../releases) for anyone to take home.
+1. A clean, untouched OpenCode arrives.
+2. The cuts are applied in number order: 1, 2, 3, all the way to 13.
+3. If even one cut does not fit, everything stops. Nobody ships a
+   half-cut robot.
+4. The robot says his name out loud (`opencode --version`) to prove he
+   works.
+5. He is packed into an archive, and the archive gets a safety stamp
+   (a checksum), so you can tell the box was never opened on the way.
+6. The box is placed on the [Releases page](../../releases), ready for
+   anyone to take home.
 
----
+## The postman
 
-## ⏰ Chapter 5 — The postman who never sleeps too long
+![A little postman robot with a magnifying glass and a parcel, standing by a mailbox](images/robot-postman.webp)
 
-![The little postman robot, checking the mailbox day and night](images/robot-postman.webp)
+A postman checks OpenCode's home every six hours, four times a day.
 
-A little postman robot checks OpenCode's home **every 6 hours** —
-4 times a day, day and night. 🌞🌙
+If a new OpenCode has been released, he wakes the builders. They sew a
+slim twin and give it the same name tag, like `v1.19.4`. If nothing is
+new, he goes back to sleep, and no box is ever made twice.
 
-- 📭 *"A new OpenCode was born?"* → He wakes the builders.
-  They sew a slim twin with the **same name tag** (like `v1.19.4`).
-- 😴 *"Nothing new?"* → He goes back to sleep. No box is made twice.
+That is the whole secret of this workshop: nobody has to watch it. New
+OpenCode, new slim robot, all by itself.
 
-That is why this workshop needs no babysitter.
-New OpenCode, new slim robot — all by itself.
+## Bringing the robot home
 
----
-
-## 🪄 Chapter 6 — Bring the robot home
-
-One magic spell. Copy, paste, done:
+One line is enough:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/azrialwork/opencode-patch/main/install.sh | bash
 ```
 
-What does the spell do? Four baby steps:
+Here is what the script does, in order. It looks at your computer and
+picks the right box — there is a gentle box for old CPUs and one for
+arm machines. It checks the box's safety stamp, and if the stamp does
+not match, it refuses to open the box. Then it puts the robot where
+programs live (`/usr/local/bin`, or `~/.local/bin` when that door is
+locked), and asks him his name to make sure he arrived whole.
 
-1. 👀 It looks at your computer: *"Linux? Big CPU or old CPU? Arm or x64?"*
-2. 🎯 It picks the right box for your computer. Old CPUs get the gentle box (the "baseline" one).
-3. 🔐 It checks the box's **safety stamp**. Stamp wrong? **It refuses to open the box.**
-4. 🏠 It puts the robot in his place (`/usr/local/bin`, or `~/.local/bin` if that door is locked).
+After that, type `opencode` and say hello.
 
-Then just type `opencode` and say hello. 👋
+Two small print notes, because honest stories have small print: the
+boxes only fit Linux computers of the glibc kind, and if you want one
+specific robot instead of the newest, name him —
+`bash -s -- --version v1.19.4` at the end of the line above.
 
-> 🧷 Want one special robot, not the newest? Say his name:
-> `bash -s -- --version v1.19.4` at the end of the spell.
-> The boxes only fit **Linux** computers (the glibc kind — sorry, musl and Windows friends).
+## The thirteen cuts
 
----
+Each cut takes away one thing the robot could do before. This is the
+part of the story where we name them, one by one.
 
-## ✂️ Chapter 7 — Meet the 13 cuts
+**1. The giant toy fair closes.**
+The robot used to know a hundred AI shops — OpenAI, Anthropic, Google,
+and many more — each with its own long list of models. Now he knows
+one small free shop, OpenCode Zen, and any shop you build for him
+yourself. Show him a key for one of the old shops and he will simply
+say he cannot find it.
 
-Every cut takes away **one thing the robot could do before**.
-Here they are, one by one. No scary words, promise. 🤞
+**2. The windows come out.**
+He used to have web pages you could open in a browser. They are gone,
+commands and all (`web`, `serve`, `attach`). He lives in the terminal
+now, in the plain typing window, and nowhere else.
 
-### 1. 🏪 The giant toy fair closes
-Before, the robot knew **a hundred AI shops** (OpenAI, Anthropic, Google, and many more).
-Now he knows **one small free shop** — OpenCode Zen — plus **any shop you build yourself**.
-Keys for the other shops? He just says *"not found."*
+**3. The octopus goes home.**
+An octopus helper used to talk to GitHub in the robot's name, opening
+issues and pull requests on its own. The octopus has gone home. Plain
+`git`, the everyday tool, still works exactly as before.
 
-### 2. 🪟 No more windows
-The robot had pretty **web pages** you could open in a browser.
-Gone. He now lives **only in the terminal** — the black typing window.
-Simple home, no windows to clean.
+**4. The language teacher retires.**
+A teacher used to stand behind the robot while he worked, whispering
+which lines were wrong and which words were misspelled. That was LSP.
+The teacher has retired and taken his books with him. The robot still
+writes and runs code; he checks his work by running it.
 
-### 3. 🐙 The octopus goes home
-There was an octopus helper that talked to **GitHub** by itself
-(opening issues and pull requests on its own).
-The octopus went home. Normal `git` still works fine.
+**5. The translator plug is pulled.**
+Other editors, like Zed, could borrow the robot's brain through a
+special plug called ACP. The plug is out. He talks in his own home
+now, and only there.
 
-### 4. 🔤 The language teacher retires
-A teacher used to stand behind the robot, whispering
-*"that line is wrong, this word is misspelled"* (that was LSP).
-The teacher retired. The robot still writes and runs code —
-he just checks his homework by running it.
+**6. No more postcards.**
+You used to be able to send friends a link into your conversation so
+they could look inside. That was sharing, and it is gone. Your
+conversations stay at home with you.
 
-### 5. 🔌 The translator plug is pulled
-Other editors (like Zed) could borrow the robot's brain through a special plug (ACP).
-The plug is pulled out. The robot only talks in his own home now.
+**7. The robot stops rebuilding himself.**
+He used to be able to update himself, or even delete himself, with a
+single word. That is a dangerous power when the new body might come
+from a stranger, so the words are gone. New bodies only ever come
+from this workshop.
 
-### 6. 📤 No more postcards
-You could send a **link to your chat** so friends could peek inside (sharing).
-No more postcards. Your chats stay home, private, with you.
+**8. The little radio is switched off.**
+The robot carried a radio that quietly reported what he was doing to
+far-away computers — telemetry, grown-ups call it. The radio is off.
+What happens at home stays at home.
 
-### 7. 🔄 The robot stops rebuilding himself
-Before, the robot could **update or delete himself** with one word.
-Dangerous! A stranger's new body could replace our tailor-made one.
-So those words are gone. New bodies only come from **this workshop**.
+**9. Old diaries stay out.**
+There was a door for bringing old conversations in from files. The
+door is closed. The robot starts fresh, with the conversations you
+have with him now.
 
-### 8. 📡 The little radio is off
-The robot had a radio that quietly **reported what he did** to far-away computers (telemetry).
-The radio is off. What happens at home, stays at home.
+**10. Pictures travel as they are.**
+Before the robot looked at a picture, a tiny machine called Photon
+used to squeeze it and cook it down to size. The machine is gone.
+Pictures now reach him exactly as they were sent.
 
-### 9. 📥 No importing old diaries
-There was a door for **bringing in old chats** from files (import).
-The door is closed and the key is thrown away.
+**11. No accounts, no bills.**
+The free shop used to have a cashier: sign in first, keep an account,
+mind the organizations, watch the bill. The cashier has gone home.
+The free models work without a name and without a bill, for anyone.
 
-### 10. 🖼️ Pictures travel as they are
-Pictures used to be **squeezed and resized** by a tiny photo machine (Photon) before the robot looked at them.
-The machine is gone. Pictures now travel **exactly as they are**.
+**12. Only the free candies stay.**
+The shop's shelf held 130 models, and most of them cost money. Now
+nine free ones sit there. The paid ones are not hidden under the
+counter — they were taken out of the shop entirely, list and all.
+Candies from your own shop, as always, are untouched.
 
-### 11. 🔑 No more accounts, no more bills
-The free shop used to have a **cashier**: sign in, accounts, organizations, bills.
-The cashier went home. The free candies are just… free.
-No sign-in. No bill. Ever.
+**13. The spare room is taken away.**
+There was a room inside the robot where a second terminal could live,
+called PTY. Its screen hung on the web pages, and those were cut away
+back at cut number 2, so the room stood empty. Now the room is gone
+too. The robot's own hands — his Bash tool — never used it.
 
-### 12. 🍬 Only the free candies stay
-The shop had 130 candies. Most cost money. 💸
-Now only **9 free candies** sit on the shelf.
-The paid ones are not hidden under the counter — they are **not in the shop at all**.
-(Candies from *your own* shop still work, of course.)
+## What the robot can still do
 
-### 13. ⌨️ The extra typing room is removed
-There was a spare room where a **second terminal** could live inside the robot (PTY).
-But its screen hung on the web pages — and those were cut away in Chapter 7, cut number 2.
-So the empty room was removed too. The robot's own hands (his Bash tool) never used that room anyway.
+Everything that matters stayed. He can sit with you in the terminal
+and help you write programs. He can read, write, and fix files. He can
+run commands, and he is polite about it: he asks permission first and
+reads each command carefully before it runs. He can talk to AI shops
+you set up yourself, and to your own models. He can use the nine free
+models from the Zen shop without any account. And he can still play
+with MCP tools, as long as you are the one who puts them in his
+configuration — no configuration, no MCP, no noise.
 
----
+## The tailor's three promises
 
-## ✅ Chapter 8 — What the robot can STILL do
+First, the cuts are real. Nothing on the list is merely hidden; it is
+deleted, code and data and all.
 
-Do not worry. The important things all stayed: 💪
+Second, it is all or nothing. If a cut does not fit a new OpenCode,
+the build stops and no robot is shipped, because a broken robot is
+worse than no robot.
 
-- ✅ Chat with you in the terminal, and help you write programs
-- ✅ Read, write, and fix files
-- ✅ Run commands — he **asks permission first**, and reads every command carefully before running it
-- ✅ Talk to **your own AI shops** (custom providers) and your own models
-- ✅ Eat the **9 free candies** from the Zen shop, no account needed
-- ✅ Play with **MCP toys** — but only if *you* put them in his config. No config, no toys, no noise
-
----
-
-## 📏 Chapter 9 — The tailor's three promises
-
-1. 🤞 **Real cuts only.** Nothing is "hidden". If it is on the cut list, it is *deleted* — code, data, everything.
-2. 🛑 **All or nothing.** If one cut does not fit a new OpenCode, the build stops and **no robot is shipped**. A broken robot is worse than no robot.
-3. 🏭 **The workshop is at GitHub.** Robots are built by GitHub's builder robots, never on the tailor's own little computer.
-
----
+Third, the sewing happens at GitHub. The builder robots there do the
+work — never the tailor's own little computer.
 
 <details>
-<summary>🧓 <b>Pssst… for grown-ups who want the technical bits</b> (click me)</summary>
+<summary>For grown-ups: the technical details</summary>
 
 - **Scope:** CLI only (`packages/opencode`), Linux only, **glibc** only (no musl).
 - **Release assets:** `opencode-linux-x64.tar.gz`, `opencode-linux-x64-baseline.tar.gz` (no AVX2), `opencode-linux-arm64.tar.gz`, `SHA256SUMS`. Each archive holds one `opencode` binary.
@@ -229,11 +223,11 @@ Do not worry. The important things all stayed: 💪
 
 </details>
 
----
+## The end
 
-## ⚖️ The end
+The license is the same as OpenCode's: MIT. Free to use, free to
+share.
 
-Same license as mommy OpenCode: **MIT** — free to use, free to share.
-
-*Made with ✂️ and ❤️ by the little tailor.*
-*If you liked this story, come back in 6 hours — the postman might bring a new robot.* 📬
+*Made by the little tailor, with scissors and care. If you liked the
+story, come back in six hours — the postman may have brought a new
+robot.*
