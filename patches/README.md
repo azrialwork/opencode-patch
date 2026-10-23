@@ -51,6 +51,13 @@ Current series:
   the Zen free tier only (zero cost on every tier, not deprecated) at
   the build embed and the runtime models.dev loader. Paid Zen models
   are removed from the data; custom providers/models are unaffected.
+- `0013-remove-pty.patch` — removes PTY (pseudo-terminal) at the
+  root: core service + `bun-pty`/`@lydell/node-pty` adapters and
+  deps, `/pty` REST + WebSocket API and ticket auth, V2 protocol
+  group + server handlers, plugin PTY-environment bridge, schema
+  Pty types/events and ID prefix, SDK v1+v2 Pty clients/types, and
+  the PTY tests/exercise cases. The terminal panel UI lived in the
+  web/desktop app (already removed); the Bash tool never used PTY.
 
 This file is not a patch and is ignored by `scripts/apply-patches.sh`,
 which only reads `*.patch`.

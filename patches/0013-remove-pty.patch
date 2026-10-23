@@ -1,0 +1,5699 @@
+diff --git a/package.json b/package.json
+index 40201a8ca8..8f0a439bb9 100644
+--- a/package.json
++++ b/package.json
+@@ -15,7 +15,6 @@
+     "lint": "oxlint",
+     "typecheck": "bun turbo typecheck",
+     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
+-    "postinstall": "bun run --cwd packages/core fix-node-pty",
+     "prepare": "husky",
+     "random": "echo 'Random script'",
+     "sso": "aws sso login --sso-session=opencode --no-browser",
+diff --git a/packages/core/package.json b/packages/core/package.json
+index d3dbb7fe87..a0be5d577c 100644
+--- a/packages/core/package.json
++++ b/packages/core/package.json
+@@ -8,7 +8,6 @@
+   "scripts": {
+     "db": "bun drizzle-kit",
+     "migration": "bun run script/migration.ts",
+-    "fix-node-pty": "bun run script/fix-node-pty.ts",
+     "test": "bun test --only-failures",
+     "typecheck": "tsgo --noEmit"
+   },
+@@ -28,11 +27,6 @@
+       "node": "./src/database/sqlite.node.ts",
+       "default": "./src/database/sqlite.bun.ts"
+     },
+-    "#pty": {
+-      "bun": "./src/pty/pty.bun.ts",
+-      "node": "./src/pty/pty.node.ts",
+-      "default": "./src/pty/pty.bun.ts"
+-    },
+     "#fff": {
+       "bun": "./src/filesystem/fff.bun.ts",
+       "node": "./src/filesystem/fff.node.ts",
+@@ -66,7 +60,6 @@
+     "@ai-sdk/provider-utils": "4.0.51",
+     "@effect/platform-node": "catalog:",
+     "@effect/sql-sqlite-bun": "catalog:",
+-    "@lydell/node-pty": "catalog:",
+     "@ff-labs/fff-bun": "0.10.5",
+     "@npmcli/arborist": "9.4.0",
+     "@npmcli/config": "10.8.1",
+@@ -77,7 +70,6 @@
+     "@opencode-ai/plugin": "workspace:*",
+     "@parcel/watcher": "2.5.1",
+     "ai-gateway-provider": "3.2.0",
+-    "bun-pty": "0.4.8",
+     "cross-spawn": "catalog:",
+     "diff": "catalog:",
+     "drizzle-orm": "catalog:",
+diff --git a/packages/core/script/fix-node-pty.ts b/packages/core/script/fix-node-pty.ts
+deleted file mode 100755
+index 93641adbdf..0000000000
+--- a/packages/core/script/fix-node-pty.ts
++++ /dev/null
+@@ -1,28 +0,0 @@
+-#!/usr/bin/env bun
+-
+-import fs from "fs/promises"
+-import path from "path"
+-import { fileURLToPath } from "url"
+-
+-const __filename = fileURLToPath(import.meta.url)
+-const __dirname = path.dirname(__filename)
+-const dir = path.resolve(__dirname, "..")
+-
+-if (process.platform !== "win32") {
+-  const root = path.join(dir, "node_modules", "node-pty", "prebuilds")
+-  const dirs = await fs.readdir(root, { withFileTypes: true }).catch(() => [])
+-  const files = dirs.filter((x) => x.isDirectory()).map((x) => path.join(root, x.name, "spawn-helper"))
+-  const result = await Promise.all(
+-    files.map(async (file) => {
+-      const stat = await fs.stat(file).catch(() => undefined)
+-      if (!stat) return
+-      if ((stat.mode & 0o111) === 0o111) return
+-      await fs.chmod(file, stat.mode | 0o755)
+-      return file
+-    }),
+-  )
+-  const fixed = result.filter(Boolean)
+-  if (fixed.length) {
+-    console.log(`fixed node-pty permissions for ${fixed.length} helper${fixed.length === 1 ? "" : "s"}`)
+-  }
+-}
+diff --git a/packages/core/src/id/id.ts b/packages/core/src/id/id.ts
+index be1efc446a..8287a85c87 100644
+--- a/packages/core/src/id/id.ts
++++ b/packages/core/src/id/id.ts
+@@ -8,7 +8,6 @@ const prefixes = {
+   permission: "per",
+   question: "que",
+   part: "prt",
+-  pty: "pty",
+   tool: "tool",
+   workspace: "wrk",
+ } as const
+diff --git a/packages/core/src/location-services.ts b/packages/core/src/location-services.ts
+index 0ea85ab0ff..4e68232126 100644
+--- a/packages/core/src/location-services.ts
++++ b/packages/core/src/location-services.ts
+@@ -19,7 +19,6 @@ import { PluginV2 } from "./plugin"
+ import { PluginInternal } from "./plugin/internal"
+ import { Policy } from "./policy"
+ import { ProjectCopy } from "./project/copy"
+-import { Pty } from "./pty"
+ import { QuestionV2 } from "./question"
+ import { Reference } from "./reference"
+ import { ReferenceGuidance } from "./reference/guidance"
+@@ -55,7 +54,6 @@ export const locationServices = LayerNode.group([
+   FileSystemSearch.node,
+   FileSystem.node,
+   Watcher.node,
+-  Pty.node,
+   SkillV2.node,
+   SystemContextRegistry.node,
+   SystemContextBuiltIns.node,
+diff --git a/packages/core/src/pty.ts b/packages/core/src/pty.ts
+deleted file mode 100644
+index e5be4d4b64..0000000000
+--- a/packages/core/src/pty.ts
++++ /dev/null
+@@ -1,318 +0,0 @@
+-export * as Pty from "./pty"
+-
+-import { makeLocationNode } from "./effect/app-node"
+-import type { Disp, Proc } from "#pty"
+-import { Context, Effect, Layer, Schema, Types } from "effect"
+-import { Pty } from "@opencode-ai/schema/pty"
+-import { Config } from "./config"
+-import { EventV2 } from "./event"
+-import { Location } from "./location"
+-import { PtyID } from "./pty/schema"
+-import { Shell } from "./shell"
+-import { lazy } from "./util/lazy"
+-
+-const BUFFER_LIMIT = 1024 * 1024 * 2
+-// Exited sessions stay observable (status, exit code, retained output) until removed explicitly.
+-// Cap retention so abandoned terminals do not accumulate unbounded buffers.
+-const EXITED_LIMIT = 25
+-const pty = lazy(() => import("#pty"))
+-
+-type Subscriber = {
+-  readonly onData: (chunk: string) => void
+-  readonly onEnd: (event: { exitCode?: number }) => void
+-  active: boolean
+-  detached: boolean
+-  pending: string[]
+-  end?: { exitCode?: number }
+-}
+-
+-type Active = {
+-  info: Info
+-  process: Proc
+-  buffer: string
+-  bufferCursor: number
+-  cursor: number
+-  subscribers: Map<object, Subscriber>
+-  listeners: Disp[]
+-}
+-
+-export const Info = Pty.Info
+-export type Info = Types.DeepMutable<typeof Info.Type>
+-
+-export const CreateInput = Pty.CreateInput
+-
+-export type CreateInput = Types.DeepMutable<typeof CreateInput.Type>
+-
+-export const UpdateInput = Pty.UpdateInput
+-
+-export type UpdateInput = Types.DeepMutable<typeof UpdateInput.Type>
+-
+-export const Event = Pty.Event
+-
+-export type AttachInput = {
+-  // Absolute output cursor to replay from. -1 tails from the current end; omitted replays the full retained buffer.
+-  readonly cursor?: number
+-  // Callbacks fire synchronously from the native PTY data path; keep them non-blocking.
+-  readonly onData: (chunk: string) => void
+-  // Fired once when the session stops producing output: process exit (exitCode set), removal, or service teardown.
+-  readonly onEnd: (event: { exitCode?: number }) => void
+-}
+-
+-export type Attachment = {
+-  // Retained output from the requested cursor to the current end.
+-  readonly replay: string
+-  // Absolute output cursor after replay.
+-  readonly cursor: number
+-  readonly write: (data: string) => void
+-  // Starts live delivery after the caller has applied replay and cursor metadata.
+-  readonly activate: () => void
+-  readonly detach: () => void
+-}
+-
+-export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Pty.NotFoundError", {
+-  ptyID: PtyID,
+-}) {}
+-
+-export class ExitedError extends Schema.TaggedErrorClass<ExitedError>()("Pty.ExitedError", {
+-  ptyID: PtyID,
+-}) {}
+-
+-export interface Interface {
+-  readonly list: () => Effect.Effect<Info[]>
+-  readonly get: (id: PtyID) => Effect.Effect<Info, NotFoundError>
+-  readonly create: (input: CreateInput) => Effect.Effect<Info>
+-  readonly update: (id: PtyID, input: UpdateInput) => Effect.Effect<Info, NotFoundError>
+-  readonly remove: (id: PtyID) => Effect.Effect<void, NotFoundError>
+-  readonly write: (id: PtyID, data: string) => Effect.Effect<void, NotFoundError>
+-  readonly attach: (id: PtyID, input: AttachInput) => Effect.Effect<Attachment, NotFoundError | ExitedError>
+-}
+-
+-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Pty") {}
+-
+-const layer = Layer.effect(
+-  Service,
+-  Effect.gen(function* () {
+-    const events = yield* EventV2.Service
+-    const location = yield* Location.Service
+-    const config = yield* Config.Service
+-    const context = yield* Effect.context()
+-    const runFork = Effect.runForkWith(context)
+-    const sessions = new Map<PtyID, Active>()
+-    const exitOrder: PtyID[] = []
+-
+-    function notifyEnd(session: Active, event: { exitCode?: number }) {
+-      for (const subscriber of session.subscribers.values()) {
+-        if (!subscriber.active) {
+-          subscriber.end = event
+-          continue
+-        }
+-        try {
+-          subscriber.onEnd(event)
+-        } catch {}
+-      }
+-      session.subscribers.clear()
+-    }
+-
+-    function teardown(session: Active) {
+-      for (const listener of session.listeners) listener.dispose()
+-      session.listeners.length = 0
+-      if (session.info.status === "running") {
+-        try {
+-          session.process.kill()
+-        } catch {}
+-      }
+-      notifyEnd(session, {})
+-    }
+-
+-    yield* Effect.addFinalizer(() =>
+-      Effect.sync(() => {
+-        for (const session of sessions.values()) teardown(session)
+-        sessions.clear()
+-        exitOrder.length = 0
+-      }),
+-    )
+-
+-    const requireSession = Effect.fn("Pty.requireSession")(function* (id: PtyID) {
+-      const session = sessions.get(id)
+-      if (!session) return yield* new NotFoundError({ ptyID: id })
+-      return session
+-    })
+-
+-    const removeSession = Effect.fnUntraced(function* (id: PtyID) {
+-      const session = sessions.get(id)
+-      if (!session) return
+-      sessions.delete(id)
+-      const index = exitOrder.indexOf(id)
+-      if (index !== -1) exitOrder.splice(index, 1)
+-      yield* Effect.logInfo("removing session", { id })
+-      teardown(session)
+-      yield* events.publish(Event.Deleted, { id: session.info.id })
+-    })
+-
+-    const remove = Effect.fn("Pty.remove")(function* (id: PtyID) {
+-      yield* requireSession(id)
+-      yield* removeSession(id)
+-    })
+-
+-    const list = Effect.fn("Pty.list")(function* () {
+-      return Array.from(sessions.values()).map((session) => session.info)
+-    })
+-
+-    const get = Effect.fn("Pty.get")(function* (id: PtyID) {
+-      return (yield* requireSession(id)).info
+-    })
+-
+-    const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
+-      const id = PtyID.ascending()
+-      const command = input.command || Shell.preferred(Config.latest(yield* config.entries(), "shell"))
+-      const args = Shell.login(command) ? [...(input.args ?? []), "-l"] : [...(input.args ?? [])]
+-      const cwd = input.cwd || location.directory
+-      const env = {
+-        ...process.env,
+-        ...input.env,
+-        TERM: "xterm-256color",
+-        OPENCODE_TERMINAL: "1",
+-      } as Record<string, string>
+-      if (process.platform === "win32") {
+-        env.LC_ALL = "C.UTF-8"
+-        env.LC_CTYPE = "C.UTF-8"
+-        env.LANG = "C.UTF-8"
+-      }
+-      yield* Effect.logInfo("creating session", { id, cmd: command, args, cwd })
+-      const { spawn } = yield* Effect.promise(() => pty())
+-      const proc = yield* Effect.sync(() => spawn(command, args, { name: "xterm-256color", cwd, env }))
+-      const info: Info = {
+-        id,
+-        title: input.title || `Terminal ${id.slice(-4)}`,
+-        command,
+-        args,
+-        cwd,
+-        status: "running",
+-        pid: proc.pid,
+-      }
+-      const session: Active = {
+-        info,
+-        process: proc,
+-        buffer: "",
+-        bufferCursor: 0,
+-        cursor: 0,
+-        subscribers: new Map(),
+-        listeners: [],
+-      }
+-      sessions.set(id, session)
+-      session.listeners.push(
+-        proc.onData((chunk) => {
+-          session.cursor += chunk.length
+-          for (const [token, subscriber] of session.subscribers.entries()) {
+-            if (!subscriber.active) {
+-              subscriber.pending.push(chunk)
+-              continue
+-            }
+-            try {
+-              subscriber.onData(chunk)
+-            } catch {
+-              session.subscribers.delete(token)
+-            }
+-          }
+-          session.buffer += chunk
+-          if (session.buffer.length <= BUFFER_LIMIT) return
+-          const excess = session.buffer.length - BUFFER_LIMIT
+-          session.buffer = session.buffer.slice(excess)
+-          session.bufferCursor += excess
+-        }),
+-        proc.onExit(({ exitCode }) => {
+-          if (session.info.status === "exited") return
+-          session.info.status = "exited"
+-          session.info.exitCode = exitCode
+-          notifyEnd(session, { exitCode })
+-          exitOrder.push(id)
+-          runFork(
+-            Effect.gen(function* () {
+-              yield* Effect.logInfo("session exited", { id, exitCode })
+-              yield* events.publish(Event.Exited, { id, exitCode })
+-              while (exitOrder.length > EXITED_LIMIT) {
+-                const oldest = exitOrder[0]
+-                if (!oldest) break
+-                yield* removeSession(oldest)
+-              }
+-            }),
+-          )
+-        }),
+-      )
+-      yield* events.publish(Event.Created, { info })
+-      return info
+-    })
+-
+-    const update = Effect.fn("Pty.update")(function* (id: PtyID, input: UpdateInput) {
+-      const session = yield* requireSession(id)
+-      if (input.title) session.info.title = input.title
+-      if (input.size && session.info.status === "running") session.process.resize(input.size.cols, input.size.rows)
+-      yield* events.publish(Event.Updated, { info: session.info })
+-      return session.info
+-    })
+-
+-    const write = Effect.fn("Pty.write")(function* (id: PtyID, data: string) {
+-      const session = yield* requireSession(id)
+-      if (session.info.status === "running") session.process.write(data)
+-    })
+-
+-    const attach = Effect.fn("Pty.attach")(function* (id: PtyID, input: AttachInput) {
+-      const session = yield* requireSession(id)
+-      if (session.info.status !== "running") return yield* new ExitedError({ ptyID: id })
+-      yield* Effect.logInfo("client attached to session", { id, directory: location.directory })
+-      const token = {}
+-      const subscriber: Subscriber = {
+-        onData: input.onData,
+-        onEnd: input.onEnd,
+-        active: false,
+-        detached: false,
+-        pending: [],
+-      }
+-      session.subscribers.set(token, subscriber)
+-      const start = session.bufferCursor
+-      const end = session.cursor
+-      const from =
+-        input.cursor === -1
+-          ? end
+-          : typeof input.cursor === "number" && Number.isSafeInteger(input.cursor)
+-            ? Math.max(0, input.cursor)
+-            : 0
+-      const replay = (() => {
+-        if (!session.buffer || from >= end) return ""
+-        const offset = Math.max(0, from - start)
+-        if (offset >= session.buffer.length) return ""
+-        return session.buffer.slice(offset)
+-      })()
+-      return {
+-        replay,
+-        cursor: end,
+-        write: (data: string) => {
+-          if (session.info.status === "running") session.process.write(data)
+-        },
+-        activate: () => {
+-          if (subscriber.active || subscriber.detached) return
+-          subscriber.active = true
+-          try {
+-            for (const chunk of subscriber.pending) subscriber.onData(chunk)
+-            subscriber.pending.length = 0
+-            if (subscriber.end) subscriber.onEnd(subscriber.end)
+-          } catch {
+-            session.subscribers.delete(token)
+-          }
+-        },
+-        detach: () => {
+-          subscriber.detached = true
+-          subscriber.pending.length = 0
+-          subscriber.end = undefined
+-          session.subscribers.delete(token)
+-        },
+-      }
+-    })
+-
+-    return Service.of({ list, get, create, update, remove, write, attach })
+-  }),
+-)
+-
+-export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer))
+-
+-export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Location.node, Config.node] })
+diff --git a/packages/core/src/pty/protocol.ts b/packages/core/src/pty/protocol.ts
+deleted file mode 100644
+index 21c6a89f73..0000000000
+--- a/packages/core/src/pty/protocol.ts
++++ /dev/null
+@@ -1,37 +0,0 @@
+-export * as PtyProtocol from "./protocol"
+-
+-// Wire protocol for PTY websocket transports. The PTY domain service is transport-free; server
+-// routes adapt Pty.attach to websockets with these helpers so every surface speaks one protocol.
+-//
+-// Outbound frames are raw UTF-8 terminal chunks. One control frame — a 0x00 byte followed by
+-// UTF-8 JSON — carries the absolute output cursor after replay so clients can resume later.
+-
+-const encoder = new TextEncoder()
+-const decoder = new TextDecoder("utf-8", { fatal: true })
+-
+-// Replay can be megabytes; send it in bounded frames.
+-export const REPLAY_CHUNK = 64 * 1024
+-
+-export function metaFrame(cursor: number) {
+-  const bytes = encoder.encode(JSON.stringify({ cursor }))
+-  const out = new Uint8Array(bytes.length + 1)
+-  out[0] = 0
+-  out.set(bytes, 1)
+-  return out
+-}
+-
+-export function chunks(data: string) {
+-  const out: string[] = []
+-  for (let i = 0; i < data.length; i += REPLAY_CHUNK) out.push(data.slice(i, i + REPLAY_CHUNK))
+-  return out
+-}
+-
+-// Inbound client frames are UTF-8 text or binary; invalid UTF-8 input is dropped.
+-export function decodeInput(message: string | Uint8Array | ArrayBuffer) {
+-  if (typeof message === "string") return message
+-  try {
+-    return decoder.decode(message instanceof ArrayBuffer ? new Uint8Array(message) : message)
+-  } catch {
+-    return undefined
+-  }
+-}
+diff --git a/packages/core/src/pty/pty.bun.ts b/packages/core/src/pty/pty.bun.ts
+deleted file mode 100644
+index 1f8ce8e454..0000000000
+--- a/packages/core/src/pty/pty.bun.ts
++++ /dev/null
+@@ -1,26 +0,0 @@
+-import { spawn as create } from "bun-pty"
+-import type { Opts, Proc } from "./pty"
+-
+-export type { Disp, Exit, Opts, Proc } from "./pty"
+-
+-export function spawn(file: string, args: string[], opts: Opts): Proc {
+-  const pty = create(file, args, opts)
+-  return {
+-    pid: pty.pid,
+-    onData(listener) {
+-      return pty.onData(listener)
+-    },
+-    onExit(listener) {
+-      return pty.onExit(listener)
+-    },
+-    write(data) {
+-      pty.write(data)
+-    },
+-    resize(cols, rows) {
+-      pty.resize(cols, rows)
+-    },
+-    kill(signal) {
+-      pty.kill(signal)
+-    },
+-  }
+-}
+diff --git a/packages/core/src/pty/pty.node.ts b/packages/core/src/pty/pty.node.ts
+deleted file mode 100644
+index 54691d1e84..0000000000
+--- a/packages/core/src/pty/pty.node.ts
++++ /dev/null
+@@ -1,29 +0,0 @@
+-import * as pty from "@lydell/node-pty"
+-import type { Opts, Proc } from "./pty"
+-
+-export type { Disp, Exit, Opts, Proc } from "./pty"
+-
+-export function spawn(file: string, args: string[], opts: Opts): Proc {
+-  const proc = pty.spawn(file, args, {
+-    ...opts,
+-    ...(process.platform === "win32" ? { useConptyDll: true } : {}),
+-  })
+-  return {
+-    pid: proc.pid,
+-    onData(listener) {
+-      return proc.onData(listener)
+-    },
+-    onExit(listener) {
+-      return proc.onExit(listener)
+-    },
+-    write(data) {
+-      proc.write(data)
+-    },
+-    resize(cols, rows) {
+-      proc.resize(cols, rows)
+-    },
+-    kill(signal) {
+-      proc.kill(signal)
+-    },
+-  }
+-}
+diff --git a/packages/core/src/pty/pty.ts b/packages/core/src/pty/pty.ts
+deleted file mode 100644
+index fbd1710e52..0000000000
+--- a/packages/core/src/pty/pty.ts
++++ /dev/null
+@@ -1,25 +0,0 @@
+-export type Disp = {
+-  dispose(): void
+-}
+-
+-export type Exit = {
+-  exitCode: number
+-  signal?: number | string
+-}
+-
+-export type Opts = {
+-  name: string
+-  cols?: number
+-  rows?: number
+-  cwd?: string
+-  env?: Record<string, string>
+-}
+-
+-export type Proc = {
+-  pid: number
+-  onData(listener: (data: string) => void): Disp
+-  onExit(listener: (event: Exit) => void): Disp
+-  write(data: string): void
+-  resize(cols: number, rows: number): void
+-  kill(signal?: string): void
+-}
+diff --git a/packages/core/src/pty/schema.ts b/packages/core/src/pty/schema.ts
+deleted file mode 100644
+index ab0c40521b..0000000000
+--- a/packages/core/src/pty/schema.ts
++++ /dev/null
+@@ -1 +0,0 @@
+-export { ID as PtyID } from "@opencode-ai/schema/pty"
+diff --git a/packages/core/src/pty/ticket.ts b/packages/core/src/pty/ticket.ts
+deleted file mode 100644
+index 07838b1415..0000000000
+--- a/packages/core/src/pty/ticket.ts
++++ /dev/null
+@@ -1,56 +0,0 @@
+-export * as PtyTicket from "./ticket"
+-
+-import { WorkspaceV2 } from "../workspace"
+-import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
+-import { PtyID } from "./schema"
+-import { Cache, Context, Duration, Effect, Layer } from "effect"
+-import { makeGlobalNode } from "../effect/app-node"
+-
+-const DEFAULT_TTL = Duration.seconds(60)
+-const CAPACITY = 10_000
+-
+-export const ConnectToken = PtyTicket.ConnectToken
+-
+-export type Scope = {
+-  readonly ptyID: PtyID
+-  readonly directory?: string
+-  readonly workspaceID?: WorkspaceV2.ID
+-}
+-
+-export interface Interface {
+-  issue(input: Scope): Effect.Effect<typeof ConnectToken.Type>
+-  consume(input: Scope & { readonly ticket: string }): Effect.Effect<boolean>
+-}
+-
+-export class Service extends Context.Service<Service, Interface>()("@opencode/PtyTicket") {}
+-
+-function matches(record: Scope, input: Scope) {
+-  return (
+-    record.ptyID === input.ptyID && record.directory === input.directory && record.workspaceID === input.workspaceID
+-  )
+-}
+-
+-// Tickets are inserted via Cache.set and removed atomically via invalidateWhen. The lookup is
+-// never invoked; it dies if it ever is, which would signal a misuse of the Service interface.
+-const noLookup = () => Effect.die("PtyTicket cache must be used via set/invalidateWhen, never get")
+-
+-// Visible for tests so the TTL can be shortened. Production uses `layer` with the default TTL.
+-export const make = (ttl: Duration.Input = DEFAULT_TTL) =>
+-  Effect.gen(function* () {
+-    const cache = yield* Cache.make<string, Scope>({ capacity: CAPACITY, lookup: noLookup, timeToLive: ttl })
+-    const expiresIn = Math.max(1, Math.round(Duration.toSeconds(Duration.fromInputUnsafe(ttl))))
+-    return Service.of({
+-      issue: Effect.fn("PtyTicket.issue")(function* (input) {
+-        const ticket = crypto.randomUUID()
+-        yield* Cache.set(cache, ticket, input)
+-        return { ticket, expires_in: expiresIn }
+-      }),
+-      consume: Effect.fn("PtyTicket.consume")(function* (input) {
+-        return yield* Cache.invalidateWhen(cache, input.ticket, (stored) => matches(stored, input))
+-      }),
+-    })
+-  })
+-
+-const layer = Layer.effect(Service, make())
+-
+-export const node = makeGlobalNode({ service: Service, layer: layer, deps: [] })
+diff --git a/packages/core/test/pty/info-schema.test.ts b/packages/core/test/pty/info-schema.test.ts
+deleted file mode 100644
+index 6cdf263a5b..0000000000
+--- a/packages/core/test/pty/info-schema.test.ts
++++ /dev/null
+@@ -1,32 +0,0 @@
+-import { describe, expect, test } from "bun:test"
+-import { Schema } from "effect"
+-import { Pty } from "@opencode-ai/core/pty"
+-
+-const sample = (pid: number) => ({
+-  id: "pty_01J5Y5H0AH4Q4NXJ6P4C3P5V2K",
+-  title: "demo",
+-  command: "cmd.exe",
+-  args: [],
+-  cwd: "C:\\",
+-  status: "running",
+-  pid,
+-})
+-
+-describe("Pty.Info", () => {
+-  test("accepts pid 0 (Windows ConPTY assigns the pid asynchronously)", () => {
+-    expect(Schema.decodeUnknownSync(Pty.Info)(sample(0)).pid).toBe(0)
+-  })
+-
+-  test("accepts a positive pid", () => {
+-    expect(Schema.decodeUnknownSync(Pty.Info)(sample(48012)).pid).toBe(48012)
+-  })
+-
+-  test("rejects a negative pid", () => {
+-    expect(() => Schema.decodeUnknownSync(Pty.Info)(sample(-1))).toThrow()
+-  })
+-
+-  test("accepts an exit code for retained exited sessions", () => {
+-    const info = Schema.decodeUnknownSync(Pty.Info)({ ...sample(48012), status: "exited", exitCode: 4 })
+-    expect(info.exitCode).toBe(4)
+-  })
+-})
+diff --git a/packages/core/test/pty/protocol.test.ts b/packages/core/test/pty/protocol.test.ts
+deleted file mode 100644
+index 2bf9610595..0000000000
+--- a/packages/core/test/pty/protocol.test.ts
++++ /dev/null
+@@ -1,27 +0,0 @@
+-import { describe, expect, test } from "bun:test"
+-import { PtyProtocol } from "@opencode-ai/core/pty/protocol"
+-
+-describe("pty protocol", () => {
+-  test("drops invalid binary input frames and decodes valid ones", () => {
+-    expect(PtyProtocol.decodeInput("ready")).toBe("ready")
+-    expect(PtyProtocol.decodeInput(new Uint8Array([0xff, 0xfe, 0xfd]))).toBeUndefined()
+-    expect(PtyProtocol.decodeInput(new TextEncoder().encode("hello"))).toBe("hello")
+-    expect(PtyProtocol.decodeInput(new TextEncoder().encode("hello").buffer)).toBe("hello")
+-  })
+-
+-  test("encodes the cursor as a 0x00-prefixed JSON control frame", () => {
+-    const frame = PtyProtocol.metaFrame(42)
+-    expect(frame[0]).toBe(0)
+-    expect(JSON.parse(new TextDecoder().decode(frame.subarray(1)))).toEqual({ cursor: 42 })
+-  })
+-
+-  test("splits replay into bounded frames", () => {
+-    expect(PtyProtocol.chunks("")).toEqual([])
+-    expect(PtyProtocol.chunks("abc")).toEqual(["abc"])
+-    const big = "x".repeat(PtyProtocol.REPLAY_CHUNK + 1)
+-    const frames = PtyProtocol.chunks(big)
+-    expect(frames.length).toBe(2)
+-    expect(frames[0].length).toBe(PtyProtocol.REPLAY_CHUNK)
+-    expect(frames.join("")).toBe(big)
+-  })
+-})
+diff --git a/packages/core/test/pty/pty-session.test.ts b/packages/core/test/pty/pty-session.test.ts
+deleted file mode 100644
+index 6d049b49ae..0000000000
+--- a/packages/core/test/pty/pty-session.test.ts
++++ /dev/null
+@@ -1,240 +0,0 @@
+-import { describe, expect } from "bun:test"
+-import { Cause, Deferred, Effect, Exit, Layer, Queue } from "effect"
+-import { Config } from "@opencode-ai/core/config"
+-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+-import { EventV2 } from "@opencode-ai/core/event"
+-import { Location } from "@opencode-ai/core/location"
+-import { Pty } from "@opencode-ai/core/pty"
+-import type { PtyID } from "@opencode-ai/core/pty/schema"
+-import { AbsolutePath } from "@opencode-ai/core/schema"
+-import { location } from "../fixture/location"
+-import { testEffect } from "../lib/effect"
+-
+-type PtyEvent = { type: "created" | "exited" | "deleted"; id: PtyID }
+-
+-const locationLayer = Layer.succeed(
+-  Location.Service,
+-  Location.Service.of(location({ directory: AbsolutePath.make("/tmp") })),
+-)
+-const configLayer = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
+-const it = testEffect(
+-  AppNodeBuilder.build(LayerNode.group([Pty.node, EventV2.node]), [
+-    [Config.node, configLayer],
+-    [Location.node, locationLayer],
+-  ]),
+-)
+-const ptyTest = process.platform === "win32" ? it.live.skip : it.live
+-
+-const subscribePtyEvents = Effect.fn("PtySessionTest.subscribePtyEvents")(function* () {
+-  const source = yield* EventV2.Service
+-  const events = yield* Queue.unbounded<PtyEvent>()
+-  const unsubscribe = yield* source.listen((event) => {
+-    if (event.type === Pty.Event.Created.type)
+-      Queue.offerUnsafe(events, { type: "created", id: (event.data as typeof Pty.Event.Created.data.Type).info.id })
+-    if (event.type === Pty.Event.Exited.type)
+-      Queue.offerUnsafe(events, { type: "exited", id: (event.data as typeof Pty.Event.Exited.data.Type).id })
+-    if (event.type === Pty.Event.Deleted.type)
+-      Queue.offerUnsafe(events, { type: "deleted", id: (event.data as typeof Pty.Event.Deleted.data.Type).id })
+-    return Effect.void
+-  })
+-  yield* Effect.addFinalizer(() => unsubscribe)
+-  return events
+-})
+-
+-const createPty = Effect.fn("PtySessionTest.createPty")(function* (command: string, args: string[] = []) {
+-  const pty = yield* Pty.Service
+-  return yield* Effect.acquireRelease(
+-    pty.create({ command, args, cwd: "/tmp", env: { TERM: "xterm-256color", OPENCODE_TERMINAL: "1" } }),
+-    (info) => pty.remove(info.id).pipe(Effect.ignore),
+-  )
+-})
+-
+-const waitForEvents = (events: Queue.Queue<PtyEvent>, id: PtyID, count: number) =>
+-  Effect.gen(function* () {
+-    const picked: Array<PtyEvent["type"]> = []
+-    while (picked.length < count) {
+-      const evt = yield* Queue.take(events)
+-      if (evt.id === id) picked.push(evt.type)
+-    }
+-    return picked
+-  }).pipe(
+-    Effect.timeoutOrElse({
+-      duration: "5 seconds",
+-      orElse: () => Effect.fail(new Error("timeout waiting for pty events")),
+-    }),
+-  )
+-
+-const attachCollecting = Effect.fn("PtySessionTest.attachCollecting")(function* (id: PtyID, cursor?: number) {
+-  const pty = yield* Pty.Service
+-  const output = yield* Queue.unbounded<string>()
+-  const ended = yield* Deferred.make<{ exitCode?: number }>()
+-  const attachment = yield* pty.attach(id, {
+-    cursor,
+-    onData: (chunk) => Queue.offerUnsafe(output, chunk),
+-    onEnd: (event) => Deferred.doneUnsafe(ended, Effect.succeed(event)),
+-  })
+-  attachment.activate()
+-  return { attachment, output, ended }
+-})
+-
+-const waitForOutput = (output: Queue.Queue<string>, text: string) =>
+-  Effect.gen(function* () {
+-    let received = ""
+-    while (!received.includes(text)) received += yield* Queue.take(output)
+-    return received
+-  }).pipe(
+-    Effect.timeoutOrElse({
+-      duration: "5 seconds",
+-      orElse: () => Effect.fail(new Error(`timeout waiting for output containing ${JSON.stringify(text)}`)),
+-    }),
+-  )
+-
+-describe("pty", () => {
+-  it.live("returns typed not found errors for missing sessions", () =>
+-    Effect.gen(function* () {
+-      const pty = yield* Pty.Service
+-      const id = "pty_missing" as PtyID
+-
+-      for (const result of [
+-        yield* pty.get(id).pipe(Effect.asVoid, Effect.exit),
+-        yield* pty.update(id, { title: "missing" }).pipe(Effect.asVoid, Effect.exit),
+-        yield* pty.remove(id).pipe(Effect.exit),
+-        yield* pty.write(id, "input").pipe(Effect.exit),
+-        yield* pty.attach(id, { onData: () => {}, onEnd: () => {} }).pipe(Effect.asVoid, Effect.exit),
+-      ]) {
+-        expect(Exit.isFailure(result)).toBe(true)
+-        if (Exit.isFailure(result))
+-          expect(Cause.squash(result.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: id })
+-      }
+-    }),
+-  )
+-
+-  ptyTest("retains exited sessions until removed", () =>
+-    Effect.gen(function* () {
+-      const pty = yield* Pty.Service
+-      const events = yield* subscribePtyEvents()
+-      const info = yield* createPty("/usr/bin/env", ["sh", "-c", "exit 3"])
+-
+-      expect(yield* waitForEvents(events, info.id, 2)).toEqual(["created", "exited"])
+-      const exited = yield* pty.get(info.id)
+-      expect(exited.status).toBe("exited")
+-      expect(exited.exitCode).toBe(3)
+-
+-      yield* pty.remove(info.id)
+-      expect(yield* waitForEvents(events, info.id, 1)).toEqual(["deleted"])
+-      const missing = yield* pty.get(info.id).pipe(Effect.exit)
+-      expect(Exit.isFailure(missing)).toBe(true)
+-    }),
+-  )
+-
+-  ptyTest("replays buffered output and streams live output to attachments", () =>
+-    Effect.gen(function* () {
+-      const pty = yield* Pty.Service
+-      const info = yield* createPty("cat")
+-      yield* pty.write(info.id, "AAA\n")
+-
+-      const first = yield* attachCollecting(info.id)
+-      expect(yield* waitForOutput(first.output, "AAA")).toContain("AAA")
+-
+-      first.attachment.write("BBB\n")
+-      yield* waitForOutput(first.output, "BBB")
+-
+-      // A later attachment replays everything already buffered.
+-      const replayed = yield* attachCollecting(info.id)
+-      expect(replayed.attachment.replay).toContain("AAA")
+-      expect(replayed.attachment.replay).toContain("BBB")
+-      expect(replayed.attachment.cursor).toBeGreaterThan(0)
+-
+-      // Tail attachments skip the buffer and only see subsequent output.
+-      const tail = yield* attachCollecting(info.id, -1)
+-      expect(tail.attachment.replay).toBe("")
+-      expect(tail.attachment.cursor).toBe(replayed.attachment.cursor)
+-    }),
+-  )
+-
+-  ptyTest("stops delivering output after detach", () =>
+-    Effect.gen(function* () {
+-      const pty = yield* Pty.Service
+-      const info = yield* createPty("cat")
+-      const attached = yield* attachCollecting(info.id, -1)
+-
+-      attached.attachment.detach()
+-      yield* pty.write(info.id, "AAA\n")
+-
+-      const verify = yield* attachCollecting(info.id)
+-      yield* waitForOutput(verify.output, "AAA")
+-      const leaked = yield* Queue.poll(attached.output)
+-      expect(leaked._tag).toBe("None")
+-    }),
+-  )
+-
+-  ptyTest("isolates output between sessions", () =>
+-    Effect.gen(function* () {
+-      const pty = yield* Pty.Service
+-      const a = yield* createPty("cat")
+-      const b = yield* createPty("cat")
+-      const attachedA = yield* attachCollecting(a.id)
+-      const attachedB = yield* attachCollecting(b.id)
+-
+-      yield* pty.write(a.id, "AAA\n")
+-      yield* waitForOutput(attachedA.output, "AAA")
+-
+-      const leaked = yield* Queue.poll(attachedB.output)
+-      expect(leaked._tag).toBe("None")
+-    }),
+-  )
+-
+-  ptyTest("notifies attachments with the exit code and rejects attach after exit", () =>
+-    Effect.gen(function* () {
+-      const pty = yield* Pty.Service
+-      const events = yield* subscribePtyEvents()
+-      const info = yield* createPty("cat")
+-      const attached = yield* attachCollecting(info.id)
+-
+-      yield* pty.write(info.id, "\u0004")
+-      expect(yield* Deferred.await(attached.ended).pipe(Effect.timeout("5 seconds"))).toEqual({ exitCode: 0 })
+-      yield* waitForEvents(events, info.id, 2)
+-
+-      const result = yield* pty.attach(info.id, { onData: () => {}, onEnd: () => {} }).pipe(Effect.exit)
+-      expect(Exit.isFailure(result)).toBe(true)
+-      if (Exit.isFailure(result))
+-        expect(Cause.squash(result.cause)).toMatchObject({ _tag: "Pty.ExitedError", ptyID: info.id })
+-    }),
+-  )
+-})
+-
+-const configuredShell = process.platform === "win32" ? undefined : Bun.which("bash")
+-const configuredIt = testEffect(
+-  AppNodeBuilder.build(LayerNode.group([Pty.node, EventV2.node]), [
+-    [
+-      Config.node,
+-      Layer.mock(Config.Service)({
+-        entries: () =>
+-          Effect.succeed(
+-            configuredShell
+-              ? [new Config.Document({ type: "document", info: new Config.Info({ shell: configuredShell }) })]
+-              : [],
+-          ),
+-      }),
+-    ],
+-    [Location.node, locationLayer],
+-  ]),
+-)
+-const configuredTest = process.platform === "win32" ? configuredIt.live.skip : configuredIt.live
+-
+-describe("pty create defaults", () => {
+-  configuredTest("defaults command, login args, and cwd from config and location", () =>
+-    Effect.gen(function* () {
+-      if (!configuredShell) return
+-      const pty = yield* Pty.Service
+-      const info = yield* Effect.acquireRelease(pty.create({ title: "configured" }), (created) =>
+-        pty.remove(created.id).pipe(Effect.ignore),
+-      )
+-      expect(info.command).toBe(configuredShell)
+-      expect(info.args).toEqual(["-l"])
+-      expect(info.cwd).toBe("/tmp")
+-      expect(info.title).toBe("configured")
+-    }),
+-  )
+-})
+diff --git a/packages/core/test/pty/ticket.test.ts b/packages/core/test/pty/ticket.test.ts
+deleted file mode 100644
+index 10849f2f61..0000000000
+--- a/packages/core/test/pty/ticket.test.ts
++++ /dev/null
+@@ -1,62 +0,0 @@
+-import { describe, expect } from "bun:test"
+-import { Effect, Layer } from "effect"
+-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+-import { PtyID } from "@opencode-ai/core/pty/schema"
+-import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+-import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+-import { testEffect } from "../lib/effect"
+-
+-const it = testEffect(LayerNode.compile(PtyTicket.node))
+-const itExpiring = testEffect(
+-  LayerNode.compile(PtyTicket.node, [[PtyTicket.node, Layer.effect(PtyTicket.Service, PtyTicket.make(5))]]),
+-)
+-
+-describe("PTY websocket tickets", () => {
+-  it.live("consumes tickets once", () =>
+-    Effect.gen(function* () {
+-      const tickets = yield* PtyTicket.Service
+-      const scope = { ptyID: PtyID.ascending(), directory: "/tmp/a" }
+-      const issued = yield* tickets.issue(scope)
+-
+-      expect(yield* tickets.consume({ ...scope, ticket: issued.ticket })).toBe(true)
+-      expect(yield* tickets.consume({ ...scope, ticket: issued.ticket })).toBe(false)
+-    }),
+-  )
+-
+-  it.live("rejects tickets scoped to a different request", () =>
+-    Effect.gen(function* () {
+-      const tickets = yield* PtyTicket.Service
+-      const ptyID = PtyID.ascending()
+-      const issued = yield* tickets.issue({ ptyID, directory: "/tmp/a" })
+-
+-      expect(yield* tickets.consume({ ptyID, directory: "/tmp/b", ticket: issued.ticket })).toBe(false)
+-      expect(yield* tickets.consume({ ptyID, directory: "/tmp/a", ticket: issued.ticket })).toBe(true)
+-    }),
+-  )
+-
+-  itExpiring.live("rejects tickets after the TTL elapses", () =>
+-    Effect.gen(function* () {
+-      const tickets = yield* PtyTicket.Service
+-      const ptyID = PtyID.ascending()
+-      const issued = yield* tickets.issue({ ptyID })
+-
+-      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 25)))
+-
+-      expect(yield* tickets.consume({ ptyID, ticket: issued.ticket })).toBe(false)
+-    }),
+-  )
+-
+-  it.live("rejects tickets scoped to a different workspace", () =>
+-    Effect.gen(function* () {
+-      const tickets = yield* PtyTicket.Service
+-      const ptyID = PtyID.ascending()
+-      const workspaceID = WorkspaceV2.ID.ascending()
+-      const issued = yield* tickets.issue({ ptyID, workspaceID })
+-
+-      expect(yield* tickets.consume({ ptyID, workspaceID: WorkspaceV2.ID.ascending(), ticket: issued.ticket })).toBe(
+-        false,
+-      )
+-      expect(yield* tickets.consume({ ptyID, workspaceID, ticket: issued.ticket })).toBe(true)
+-    }),
+-  )
+-})
+diff --git a/packages/core/test/shared-schema.test.ts b/packages/core/test/shared-schema.test.ts
+index 959024cd4a..541b6043f8 100644
+--- a/packages/core/test/shared-schema.test.ts
++++ b/packages/core/test/shared-schema.test.ts
+@@ -23,7 +23,6 @@ import { Integration } from "@opencode-ai/schema/integration"
+ import { LLM } from "@opencode-ai/schema/llm"
+ import { Permission } from "@opencode-ai/schema/permission"
+ import { Plugin } from "@opencode-ai/schema/plugin"
+-import { Pty } from "@opencode-ai/schema/pty"
+ import { Reference } from "@opencode-ai/schema/reference"
+ import { SessionTodo } from "@opencode-ai/schema/session-todo"
+ import { Skill } from "@opencode-ai/schema/skill"
+@@ -43,7 +42,6 @@ test("Core reuses the canonical shared schemas", async () => {
+     corePermission,
+     corePermissionV1,
+     coreProjectCopy,
+-    corePty,
+     coreProject,
+     coreReference,
+     coreSessionInput,
+@@ -65,7 +63,6 @@ test("Core reuses the canonical shared schemas", async () => {
+     import("@opencode-ai/core/permission"),
+     import("@opencode-ai/core/v1/permission"),
+     import("@opencode-ai/core/project/copy"),
+-    import("@opencode-ai/core/pty"),
+     import("@opencode-ai/core/project/schema"),
+     import("@opencode-ai/core/reference"),
+     import("@opencode-ai/core/session/input"),
+@@ -131,8 +128,6 @@ test("Core reuses the canonical shared schemas", async () => {
+     [coreProjectCopy.Event, ProjectDirectories.Event],
+     [PluginV2.ID, Plugin.ID],
+     [PluginV2.Event, Plugin.Event],
+-    [corePty.Info, Pty.Info],
+-    [corePty.Event, Pty.Event],
+     [coreProject.ID, Project.ID],
+     [coreReference.LocalSource, Reference.LocalSource],
+     [coreReference.GitSource, Reference.GitSource],
+diff --git a/packages/opencode/src/id/id.ts b/packages/opencode/src/id/id.ts
+index 847a5c0329..6e218a830a 100644
+--- a/packages/opencode/src/id/id.ts
++++ b/packages/opencode/src/id/id.ts
+@@ -8,7 +8,6 @@ const prefixes = {
+   permission: "per",
+   question: "que",
+   part: "prt",
+-  pty: "pty",
+   tool: "tool",
+   workspace: "wrk",
+ } as const
+diff --git a/packages/opencode/src/plugin/pty-environment.ts b/packages/opencode/src/plugin/pty-environment.ts
+deleted file mode 100644
+index 67321372f1..0000000000
+--- a/packages/opencode/src/plugin/pty-environment.ts
++++ /dev/null
+@@ -1,24 +0,0 @@
+-export * as PluginPtyEnvironment from "./pty-environment"
+-
+-import { PtyEnvironment } from "@opencode-ai/server/pty-environment"
+-import { Effect, Layer } from "effect"
+-import { InstanceStore } from "@/project/instance-store"
+-import { Plugin } from "."
+-
+-export const layer = Layer.effect(
+-  PtyEnvironment.Service,
+-  Effect.gen(function* () {
+-    const plugin = yield* Plugin.Service
+-    const instances = yield* InstanceStore.Service
+-    return PtyEnvironment.Service.of({
+-      get: Effect.fn("PtyEnvironment.get")(function* (input) {
+-        return yield* instances.provide(
+-          { directory: input.directory },
+-          plugin
+-            .trigger("shell.env", { cwd: input.cwd }, { env: {} as Record<string, string> })
+-            .pipe(Effect.map((result) => result.env)),
+-        )
+-      }),
+-    })
+-  }),
+-)
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/api.ts b/packages/opencode/src/server/routes/instance/httpapi/api.ts
+index f5076ad080..9ade9e1bee 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/api.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/api.ts
+@@ -19,7 +19,6 @@ import { PermissionApi } from "./groups/permission"
+ import { ProjectApi } from "./groups/project"
+ import { ProjectCopyApi } from "./groups/project-copy"
+ import { ProviderApi } from "./groups/provider"
+-import { PtyApi, PtyConnectApi } from "./groups/pty"
+ import { QuestionApi } from "./groups/question"
+ import { SessionApi } from "./groups/session"
+ import { SyncApi } from "./groups/sync"
+@@ -66,7 +65,6 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
+   .addHttpApi(McpApi)
+   .addHttpApi(ProjectApi)
+   .addHttpApi(ProjectCopyApi)
+-  .addHttpApi(PtyApi)
+   .addHttpApi(QuestionApi)
+   .addHttpApi(PermissionApi)
+   .addHttpApi(ProviderApi)
+@@ -81,7 +79,6 @@ export const OpenCodeHttpApi = HttpApi.make("opencode")
+   .addHttpApi(EventApi)
+   .addHttpApi(InstanceHttpApi)
+   .addHttpApi(ServerApi)
+-  .addHttpApi(PtyConnectApi)
+   .annotate(HttpApi.AdditionalSchemas, [
+     EventSchema,
+     Question.Replied,
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/errors.ts b/packages/opencode/src/server/routes/instance/httpapi/errors.ts
+index 5e35d6a79a..4f9f9f208d 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/errors.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/errors.ts
+@@ -149,23 +149,6 @@ export class McpServerNotFoundError extends Schema.TaggedErrorClass<McpServerNot
+   { httpApiStatus: 404 },
+ ) {}
+ 
+-export class PtyNotFoundError extends Schema.TaggedErrorClass<PtyNotFoundError>()(
+-  "PtyNotFoundError",
+-  {
+-    ptyID: Schema.String,
+-    message: Schema.String,
+-  },
+-  { httpApiStatus: 404 },
+-) {}
+-
+-export class PtyForbiddenError extends Schema.TaggedErrorClass<PtyForbiddenError>()(
+-  "PtyForbiddenError",
+-  {
+-    message: Schema.String,
+-  },
+-  { httpApiStatus: 403 },
+-) {}
+-
+ export class ProjectNotFoundError extends Schema.TaggedErrorClass<ProjectNotFoundError>()(
+   "ProjectNotFoundError",
+   {
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/groups/pty.ts b/packages/opencode/src/server/routes/instance/httpapi/groups/pty.ts
+deleted file mode 100644
+index 9d49009a5c..0000000000
+--- a/packages/opencode/src/server/routes/instance/httpapi/groups/pty.ts
++++ /dev/null
+@@ -1,172 +0,0 @@
+-import { Pty } from "@opencode-ai/core/pty"
+-import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+-import { PtyID } from "@opencode-ai/core/pty/schema"
+-import { PTY_CONNECT_TICKET_QUERY } from "@/server/shared/pty-ticket"
+-import { Schema } from "effect"
+-import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+-import { Authorization, PtyConnectAuthorization } from "../middleware/authorization"
+-import { InstanceContextMiddleware } from "../middleware/instance-context"
+-import {
+-  WorkspaceRoutingMiddleware,
+-  WorkspaceRoutingQuery,
+-  WorkspaceRoutingQueryFields,
+-} from "../middleware/workspace-routing"
+-import { PtyForbiddenError, PtyNotFoundError } from "../errors"
+-import { described } from "./metadata"
+-
+-const root = "/pty"
+-export const Params = Schema.Struct({ ptyID: PtyID })
+-export const CursorQuery = Schema.Struct({
+-  ...WorkspaceRoutingQueryFields,
+-  cursor: Schema.optional(Schema.String),
+-})
+-export const ShellItem = Schema.Struct({
+-  path: Schema.String,
+-  name: Schema.String,
+-  acceptable: Schema.Boolean,
+-})
+-
+-export const PtyPaths = {
+-  shells: `${root}/shells`,
+-  list: root,
+-  create: root,
+-  get: `${root}/:ptyID`,
+-  update: `${root}/:ptyID`,
+-  remove: `${root}/:ptyID`,
+-  connectToken: `${root}/:ptyID/connect-token`,
+-  connect: `${root}/:ptyID/connect`,
+-} as const
+-
+-export const PtyApi = HttpApi.make("pty")
+-  .add(
+-    HttpApiGroup.make("pty")
+-      .add(
+-        HttpApiEndpoint.get("shells", PtyPaths.shells, {
+-          query: WorkspaceRoutingQuery,
+-          success: described(Schema.Array(ShellItem), "List of shells"),
+-        }).annotateMerge(
+-          OpenApi.annotations({
+-            identifier: "pty.shells",
+-            summary: "List available shells",
+-            description: "Get a list of available shells on the system.",
+-          }),
+-        ),
+-        HttpApiEndpoint.get("list", PtyPaths.list, {
+-          query: WorkspaceRoutingQuery,
+-          success: described(Schema.Array(Pty.Info), "List of sessions"),
+-        }).annotateMerge(
+-          OpenApi.annotations({
+-            identifier: "pty.list",
+-            summary: "List PTY sessions",
+-            description: "Get a list of all active pseudo-terminal (PTY) sessions managed by OpenCode.",
+-          }),
+-        ),
+-        HttpApiEndpoint.post("create", PtyPaths.create, {
+-          query: WorkspaceRoutingQuery,
+-          payload: Pty.CreateInput,
+-          success: described(Pty.Info, "Created session"),
+-          error: HttpApiError.BadRequest,
+-        }).annotateMerge(
+-          OpenApi.annotations({
+-            identifier: "pty.create",
+-            summary: "Create PTY session",
+-            description: "Create a new pseudo-terminal (PTY) session for running shell commands and processes.",
+-          }),
+-        ),
+-        HttpApiEndpoint.get("get", PtyPaths.get, {
+-          params: { ptyID: PtyID },
+-          query: WorkspaceRoutingQuery,
+-          success: described(Pty.Info, "Session info"),
+-          error: PtyNotFoundError,
+-        }).annotateMerge(
+-          OpenApi.annotations({
+-            identifier: "pty.get",
+-            summary: "Get PTY session",
+-            description: "Retrieve detailed information about a specific pseudo-terminal (PTY) session.",
+-          }),
+-        ),
+-        HttpApiEndpoint.put("update", PtyPaths.update, {
+-          params: { ptyID: PtyID },
+-          query: WorkspaceRoutingQuery,
+-          payload: Pty.UpdateInput,
+-          success: described(Pty.Info, "Updated session"),
+-          error: [PtyNotFoundError, HttpApiError.BadRequest],
+-        }).annotateMerge(
+-          OpenApi.annotations({
+-            identifier: "pty.update",
+-            summary: "Update PTY session",
+-            description: "Update properties of an existing pseudo-terminal (PTY) session.",
+-          }),
+-        ),
+-        HttpApiEndpoint.delete("remove", PtyPaths.remove, {
+-          params: { ptyID: PtyID },
+-          query: WorkspaceRoutingQuery,
+-          success: described(Schema.Boolean, "Session removed"),
+-          error: PtyNotFoundError,
+-        }).annotateMerge(
+-          OpenApi.annotations({
+-            identifier: "pty.remove",
+-            summary: "Remove PTY session",
+-            description: "Remove and terminate a specific pseudo-terminal (PTY) session.",
+-          }),
+-        ),
+-        HttpApiEndpoint.post("connectToken", PtyPaths.connectToken, {
+-          params: { ptyID: PtyID },
+-          query: WorkspaceRoutingQuery,
+-          success: described(PtyTicket.ConnectToken, "WebSocket connect token"),
+-          error: [PtyForbiddenError, PtyNotFoundError],
+-        }).annotateMerge(
+-          OpenApi.annotations({
+-            identifier: "pty.connectToken",
+-            summary: "Create PTY WebSocket token",
+-            description: "Create a short-lived ticket for opening a PTY WebSocket connection.",
+-          }),
+-        ),
+-      )
+-      .annotateMerge(OpenApi.annotations({ title: "pty", description: "Experimental HttpApi PTY routes." }))
+-      .middleware(InstanceContextMiddleware)
+-      .middleware(WorkspaceRoutingMiddleware)
+-      .middleware(Authorization),
+-  )
+-  .annotateMerge(
+-    OpenApi.annotations({
+-      title: "opencode experimental HttpApi",
+-      version: "0.0.1",
+-      description: "Experimental HttpApi surface for selected instance routes.",
+-    }),
+-  )
+-
+-export const PtyConnectApi = HttpApi.make("pty-connect").add(
+-  HttpApiGroup.make("pty-connect")
+-    .add(
+-      // Decode PTY connection query fields in the raw handler after checking
+-      // existence, preserving the established empty-404 response ordering.
+-      HttpApiEndpoint.get("connect", PtyPaths.connect, {
+-        params: Params,
+-        success: described(Schema.Boolean, "Connected session"),
+-        error: [HttpApiError.Forbidden, HttpApiError.NotFound],
+-      }).annotateMerge(
+-        OpenApi.annotations({
+-          identifier: "pty.connect",
+-          summary: "Connect to PTY session",
+-          description:
+-            "Establish a WebSocket connection to interact with a pseudo-terminal (PTY) session in real-time.",
+-          transform: (operation) => ({
+-            ...operation,
+-            parameters: [
+-              ...(operation.parameters ?? []),
+-              ...["directory", "workspace", "cursor", PTY_CONNECT_TICKET_QUERY].map((name) => ({
+-                in: "query",
+-                name,
+-                schema: { type: "string" },
+-              })),
+-            ],
+-          }),
+-        }),
+-      ),
+-    )
+-    .annotateMerge(OpenApi.annotations({ title: "pty", description: "PTY websocket route." }))
+-    .middleware(InstanceContextMiddleware)
+-    .middleware(WorkspaceRoutingMiddleware)
+-    .middleware(PtyConnectAuthorization),
+-)
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/handlers/pty.ts b/packages/opencode/src/server/routes/instance/httpapi/handlers/pty.ts
+deleted file mode 100644
+index 8949e68131..0000000000
+--- a/packages/opencode/src/server/routes/instance/httpapi/handlers/pty.ts
++++ /dev/null
+@@ -1,272 +0,0 @@
+-import * as InstanceState from "@/effect/instance-state"
+-import { registerDisposer } from "@/effect/instance-registry"
+-import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
+-import { Plugin } from "@/plugin"
+-import { Pty } from "@opencode-ai/core/pty"
+-import { PtyProtocol } from "@opencode-ai/core/pty/protocol"
+-import { PtyID } from "@opencode-ai/core/pty/schema"
+-import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+-import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
+-import { Location } from "@opencode-ai/core/location"
+-import { AbsolutePath } from "@opencode-ai/core/schema"
+-import { Shell } from "@opencode-ai/core/shell"
+-import { CorsConfig, isAllowedRequestOrigin, type CorsOptions } from "@opencode-ai/server/cors"
+-import {
+-  PTY_CONNECT_TICKET_QUERY,
+-  PTY_CONNECT_TOKEN_HEADER,
+-  PTY_CONNECT_TOKEN_HEADER_VALUE,
+-} from "@/server/shared/pty-ticket"
+-import { Effect, Layer, Option, Queue, Schema } from "effect"
+-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+-import { HttpApiBuilder } from "effect/unstable/httpapi"
+-import * as Socket from "effect/unstable/socket/Socket"
+-import { InstanceHttpApi } from "../api"
+-import * as ApiError from "../errors"
+-import { CursorQuery, PtyConnectApi } from "../groups/pty"
+-import { WebSocketTracker } from "../websocket-tracker"
+-
+-function validOrigin(request: HttpServerRequest.HttpServerRequest, opts: CorsOptions | undefined) {
+-  return isAllowedRequestOrigin(request.headers.origin, request.headers.host, opts)
+-}
+-
+-const ticketScope = Effect.gen(function* () {
+-  const instance = yield* InstanceRef
+-  const workspaceID = yield* WorkspaceRef
+-  return { directory: instance?.directory, workspaceID }
+-})
+-
+-// Legacy surface compatibility: before exited-session retention, sessions vanished the moment
+-// their process exited. These routes preserve that observable behavior — exited sessions are
+-// invisible here — while the canonical /api/pty surface exposes them until removal.
+-export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handlers) =>
+-  Effect.gen(function* () {
+-    const tickets = yield* PtyTicket.Service
+-    const cors = yield* CorsConfig
+-    const plugin = yield* Plugin.Service
+-    const locations = yield* LocationServiceMap.Service
+-    const unregister = registerDisposer((directory) =>
+-      Effect.runPromise(locations.invalidate(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+-    )
+-    yield* Effect.addFinalizer(() => Effect.sync(unregister))
+-
+-    const pty = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
+-      return yield* effect.pipe(
+-        Effect.provide(
+-          locations.get(Location.Ref.make({ directory: AbsolutePath.make((yield* InstanceState.context).directory) })),
+-        ),
+-      )
+-    })
+-
+-    const shells = Effect.fn("PtyHttpApi.shells")(function* () {
+-      return yield* Effect.promise(() => Shell.list())
+-    })
+-
+-    const list = Effect.fn("PtyHttpApi.list")(function* () {
+-      const sessions = yield* pty(Pty.Service.use((service) => service.list()))
+-      return sessions.filter((info) => info.status === "running")
+-    })
+-
+-    const create = Effect.fn("PtyHttpApi.create")(function* (ctx: { payload: typeof Pty.CreateInput.Type }) {
+-      const cwd = ctx.payload.cwd || (yield* InstanceState.context).directory
+-      const shell = yield* plugin.trigger("shell.env", { cwd }, { env: {} as Record<string, string> })
+-      return yield* pty(
+-        Pty.Service.use((service) =>
+-          service.create({
+-            ...ctx.payload,
+-            args: ctx.payload.args ? [...ctx.payload.args] : undefined,
+-            cwd,
+-            env: { ...ctx.payload.env, ...shell.env },
+-          }),
+-        ),
+-      )
+-    })
+-
+-    const get = Effect.fn("PtyHttpApi.get")(function* (ctx: { params: { ptyID: PtyID } }) {
+-      return yield* pty(Pty.Service.use((service) => service.get(ctx.params.ptyID))).pipe(
+-        Effect.catchTag(
+-          "Pty.NotFoundError",
+-          (error) =>
+-            new ApiError.PtyNotFoundError({
+-              ptyID: error.ptyID,
+-              message: `PTY session not found: ${error.ptyID}`,
+-            }),
+-        ),
+-        Effect.flatMap((info) =>
+-          info.status === "running"
+-            ? Effect.succeed(info)
+-            : new ApiError.PtyNotFoundError({
+-                ptyID: ctx.params.ptyID,
+-                message: `PTY session not found: ${ctx.params.ptyID}`,
+-              }),
+-        ),
+-      )
+-    })
+-
+-    const update = Effect.fn("PtyHttpApi.update")(function* (ctx: {
+-      params: { ptyID: PtyID }
+-      payload: typeof Pty.UpdateInput.Type
+-    }) {
+-      yield* get(ctx)
+-      return yield* pty(
+-        Pty.Service.use((service) =>
+-          service.update(ctx.params.ptyID, {
+-            ...ctx.payload,
+-            size: ctx.payload.size ? { ...ctx.payload.size } : undefined,
+-          }),
+-        ),
+-      ).pipe(
+-        Effect.catchTag(
+-          "Pty.NotFoundError",
+-          (error) =>
+-            new ApiError.PtyNotFoundError({
+-              ptyID: error.ptyID,
+-              message: `PTY session not found: ${error.ptyID}`,
+-            }),
+-        ),
+-      )
+-    })
+-
+-    const remove = Effect.fn("PtyHttpApi.remove")(function* (ctx: { params: { ptyID: PtyID } }) {
+-      yield* get(ctx)
+-      yield* pty(Pty.Service.use((service) => service.remove(ctx.params.ptyID))).pipe(
+-        Effect.catchTag(
+-          "Pty.NotFoundError",
+-          (error) =>
+-            new ApiError.PtyNotFoundError({
+-              ptyID: error.ptyID,
+-              message: `PTY session not found: ${error.ptyID}`,
+-            }),
+-        ),
+-      )
+-      return true
+-    })
+-
+-    const connectToken = Effect.fn("PtyHttpApi.connectToken")(function* (ctx: { params: { ptyID: PtyID } }) {
+-      const request = yield* HttpServerRequest.HttpServerRequest
+-      if (request.headers[PTY_CONNECT_TOKEN_HEADER] !== PTY_CONNECT_TOKEN_HEADER_VALUE || !validOrigin(request, cors))
+-        return yield* new ApiError.PtyForbiddenError({ message: "Invalid PTY connect token request" })
+-      yield* get(ctx)
+-      return yield* tickets.issue({ ptyID: ctx.params.ptyID, ...(yield* ticketScope) })
+-    })
+-
+-    return handlers
+-      .handle("shells", shells)
+-      .handle("list", list)
+-      .handle("create", create)
+-      .handle("get", get)
+-      .handle("update", update)
+-      .handle("remove", remove)
+-      .handle("connectToken", connectToken)
+-  }),
+-).pipe(Layer.provide(locationServiceMapLayer))
+-
+-export const ptyConnectHandlers = HttpApiBuilder.group(PtyConnectApi, "pty-connect", (handlers) =>
+-  Effect.gen(function* () {
+-    const tickets = yield* PtyTicket.Service
+-    const cors = yield* CorsConfig
+-    const locations = yield* LocationServiceMap.Service
+-    const unregister = registerDisposer((directory) =>
+-      Effect.runPromise(locations.invalidate(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+-    )
+-    yield* Effect.addFinalizer(() => Effect.sync(unregister))
+-
+-    const pty = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
+-      return yield* effect.pipe(
+-        Effect.provide(
+-          locations.get(Location.Ref.make({ directory: AbsolutePath.make((yield* InstanceState.context).directory) })),
+-        ),
+-      )
+-    })
+-
+-    return handlers.handleRaw(
+-      "connect",
+-      Effect.fn("PtyHttpApi.connect")(function* (ctx: {
+-        params: { ptyID: PtyID }
+-        request: HttpServerRequest.HttpServerRequest
+-      }) {
+-        if (!validOrigin(ctx.request, cors)) return HttpServerResponse.empty({ status: 403 })
+-
+-        const ticket = new URL(ctx.request.url, "http://localhost").searchParams.get(PTY_CONNECT_TICKET_QUERY)
+-        if (ticket && !(yield* tickets.consume({ ticket, ptyID: ctx.params.ptyID, ...(yield* ticketScope) })))
+-          return HttpServerResponse.empty({ status: 403 })
+-
+-        const exists = yield* pty(Pty.Service.use((service) => service.get(ctx.params.ptyID))).pipe(
+-          Effect.map((info) => info.status === "running"),
+-          Effect.catchTag("Pty.NotFoundError", () => Effect.succeed(false)),
+-        )
+-        if (!exists) return HttpServerResponse.empty({ status: 404 })
+-
+-        const query = Schema.decodeUnknownOption(CursorQuery)(yield* HttpServerRequest.ParsedSearchParams)
+-        if (Option.isNone(query)) return HttpServerResponse.empty({ status: 400 })
+-        const parsedCursor = query.value.cursor === undefined ? undefined : Number(query.value.cursor)
+-        const cursor =
+-          parsedCursor !== undefined && Number.isSafeInteger(parsedCursor) && parsedCursor >= -1
+-            ? parsedCursor
+-            : undefined
+-        const socket = yield* Effect.orDie(ctx.request.upgrade)
+-        const write = yield* socket.writer
+-        const closeAccepted = (event: Socket.CloseEvent) =>
+-          socket
+-            .runRaw(() => Effect.void, { onOpen: write(event).pipe(Effect.catch(() => Effect.void)) })
+-            .pipe(
+-              Effect.timeout("1 second"),
+-              Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
+-              Effect.catch(() => Effect.void),
+-            )
+-        const registered = yield* WebSocketTracker.register(write(WebSocketTracker.SERVER_CLOSING_EVENT()))
+-        if (!registered) {
+-          yield* closeAccepted(WebSocketTracker.SERVER_CLOSING_EVENT())
+-          return HttpServerResponse.empty()
+-        }
+-
+-        // Outbound frames flow through one queue drained by a single writer so replay, live
+-        // output, and the close frame keep their order.
+-        const outbox = yield* Queue.unbounded<string | Uint8Array | Socket.CloseEvent>()
+-        const attachment = yield* pty(
+-          Pty.Service.use((service) =>
+-            service.attach(ctx.params.ptyID, {
+-              cursor,
+-              onData: (chunk) => Queue.offerUnsafe(outbox, chunk),
+-              onEnd: () => Queue.offerUnsafe(outbox, new Socket.CloseEvent(1000)),
+-            }),
+-          ),
+-        ).pipe(
+-          Effect.catchTags({
+-            "Pty.NotFoundError": () =>
+-              closeAccepted(new Socket.CloseEvent(4404, "session not found")).pipe(Effect.as(undefined)),
+-            "Pty.ExitedError": () =>
+-              closeAccepted(new Socket.CloseEvent(4404, "session not found")).pipe(Effect.as(undefined)),
+-          }),
+-        )
+-        if (!attachment) return HttpServerResponse.empty()
+-
+-        for (const chunk of PtyProtocol.chunks(attachment.replay)) Queue.offerUnsafe(outbox, chunk)
+-        Queue.offerUnsafe(outbox, PtyProtocol.metaFrame(attachment.cursor))
+-        attachment.activate()
+-
+-        const drain = Effect.gen(function* () {
+-          while (true) {
+-            const item = yield* Queue.take(outbox)
+-            yield* write(item)
+-            if (item instanceof Socket.CloseEvent) return
+-          }
+-        })
+-
+-        // The reader runs concurrently with the writer; whichever finishes first ends the
+-        // connection and the attachment is always released.
+-        yield* Effect.race(
+-          drain,
+-          socket.runRaw((message) => {
+-            const decoded = PtyProtocol.decodeInput(message)
+-            if (decoded !== undefined) attachment.write(decoded)
+-          }),
+-        ).pipe(
+-          Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
+-          Effect.ensuring(Effect.sync(() => attachment.detach())),
+-          Effect.orDie,
+-        )
+-        return HttpServerResponse.empty()
+-      }),
+-    )
+-  }),
+-).pipe(Layer.provide(locationServiceMapLayer))
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/middleware/authorization.ts b/packages/opencode/src/server/routes/instance/httpapi/middleware/authorization.ts
+index 61ce39ad39..4814a0c740 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/middleware/authorization.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/middleware/authorization.ts
+@@ -2,7 +2,6 @@ import { ServerAuth } from "@/server/auth"
+ import { Effect, Encoding, Layer, Redacted } from "effect"
+ import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+ import { HttpApiError, HttpApiMiddleware } from "effect/unstable/httpapi"
+-import { hasPtyConnectTicketURL } from "@/server/shared/pty-ticket"
+ import { isPublicUIPath } from "@/server/shared/public-ui"
+ export {
+   Authorization as ServerAuthorization,
+@@ -23,13 +22,6 @@ export class Authorization extends HttpApiMiddleware.Service<Authorization>()(
+   },
+ ) {}
+ 
+-export class PtyConnectAuthorization extends HttpApiMiddleware.Service<PtyConnectAuthorization>()(
+-  "@opencode/ExperimentalHttpApiPtyConnectAuthorization",
+-  {
+-    error: HttpApiError.UnauthorizedNoContent,
+-  },
+-) {}
+-
+ function emptyCredential() {
+   return {
+     username: "",
+@@ -130,21 +122,3 @@ export const authorizationLayer = Layer.effect(
+     )
+   }),
+ )
+-
+-export const ptyConnectAuthorizationLayer = Layer.effect(
+-  PtyConnectAuthorization,
+-  Effect.gen(function* () {
+-    const config = yield* ServerAuth.Config
+-    if (!ServerAuth.required(config)) return PtyConnectAuthorization.of((effect) => effect)
+-    return PtyConnectAuthorization.of((effect) =>
+-      Effect.gen(function* () {
+-        const request = yield* HttpServerRequest.HttpServerRequest
+-        const url = new URL(request.url, "http://localhost")
+-        if (hasPtyConnectTicketURL(url)) return yield* effect
+-        return yield* credentialFromURL(url, request).pipe(
+-          Effect.flatMap((credential) => validateCredential(effect, credential, config)),
+-        )
+-      }),
+-    )
+-  }),
+-)
+diff --git a/packages/opencode/src/server/routes/instance/httpapi/server.ts b/packages/opencode/src/server/routes/instance/httpapi/server.ts
+index 419bebd830..70f452ce8d 100644
+--- a/packages/opencode/src/server/routes/instance/httpapi/server.ts
++++ b/packages/opencode/src/server/routes/instance/httpapi/server.ts
+@@ -18,7 +18,6 @@ import { MCP } from "@/mcp"
+ import { McpAuth } from "@/mcp/auth"
+ import { Permission } from "@/permission"
+ import { Plugin } from "@/plugin"
+-import { PluginPtyEnvironment } from "@/plugin/pty-environment"
+ import { InstanceStore } from "@/project/instance-store"
+ import { Project } from "@/project/project"
+ import { Vcs } from "@/project/vcs"
+@@ -55,7 +54,6 @@ import { Npm } from "@opencode-ai/core/npm"
+ import { PermissionSaved } from "@opencode-ai/core/permission/saved"
+ import { ProjectV2 } from "@opencode-ai/core/project"
+ import { ProjectCopy } from "@opencode-ai/core/project/copy"
+-import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+ import { Ripgrep } from "@opencode-ai/core/ripgrep"
+ import { SessionProjector } from "@opencode-ai/core/session/projector"
+ import { SessionV2 } from "@opencode-ai/core/session"
+@@ -70,11 +68,9 @@ import { PublicApi } from "./public"
+ import {
+   authorizationLayer,
+   authorizationRouterMiddleware,
+-  ptyConnectAuthorizationLayer,
+   serverAuthorizationLayer,
+ } from "./middleware/authorization"
+ import { EventApi } from "./groups/event"
+-import { PtyConnectApi } from "./groups/pty"
+ import { eventHandlers } from "./handlers/event"
+ import { configHandlers } from "./handlers/config"
+ import { controlHandlers } from "./handlers/control"
+@@ -88,7 +84,6 @@ import { permissionHandlers } from "./handlers/permission"
+ import { projectHandlers } from "./handlers/project"
+ import { projectCopyHandlers } from "./handlers/project-copy"
+ import { providerHandlers } from "./handlers/provider"
+-import { ptyConnectHandlers, ptyHandlers } from "./handlers/pty"
+ import { questionHandlers } from "./handlers/question"
+ import { sessionHandlers } from "./handlers/session"
+ import { syncHandlers } from "./handlers/sync"
+@@ -97,7 +92,6 @@ import { handlers } from "@opencode-ai/server/handlers"
+ import { buildLocationServiceMap, LocationServiceMap } from "@opencode-ai/core/location-services"
+ import { layer as locationLayer } from "@opencode-ai/server/location"
+ import { sessionLocationLayer } from "@opencode-ai/server/middleware/session-location"
+-import { PtyEnvironment } from "@opencode-ai/server/pty-environment"
+ import { schemaErrorLayer as v2SchemaErrorLayer } from "@opencode-ai/server/middleware/schema-error"
+ import { workspaceHandlers } from "./handlers/workspace"
+ import { instanceContextLayer } from "./middleware/instance-context"
+@@ -124,11 +118,9 @@ const cors = (corsOptions?: CorsOptions) =>
+ // Route tree:
+ // - rootApiRoutes: typed /global/* and control routes; auth is declared by RootHttpApi.
+ // - eventApiRoutes: typed SSE route with instance routing context and its existing API contract.
+-// - ptyConnectApiRoutes: typed WebSocket upgrade route with ticket-aware auth.
+ // - instanceApiRoutes: remaining typed instance routes.
+ const authOnlyRouterLayer = authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuth.Config.layer))
+ const httpApiAuthLayer = authorizationLayer.pipe(Layer.provide(ServerAuth.Config.layer))
+-const ptyConnectHttpApiAuthLayer = ptyConnectAuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.layer))
+ const serverHttpApiAuthLayer = serverAuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.layer))
+ const workspaceRoutingLive = workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
+ const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
+@@ -140,10 +132,6 @@ const eventApiRoutes = HttpApiBuilder.layer(EventApi).pipe(
+   Layer.provide(eventHandlers),
+   Layer.provide([httpApiAuthLayer, workspaceRoutingLive, instanceContextLayer]),
+ )
+-const ptyConnectApiRoutes = HttpApiBuilder.layer(PtyConnectApi).pipe(
+-  Layer.provide(ptyConnectHandlers),
+-  Layer.provide([ptyConnectHttpApiAuthLayer, workspaceRoutingLive, instanceContextLayer]),
+-)
+ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
+   Layer.provide([
+     configHandlers,
+@@ -153,7 +141,6 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
+     mcpHandlers,
+     projectHandlers,
+     projectCopyHandlers,
+-    ptyHandlers,
+     questionHandlers,
+     permissionHandlers,
+     providerHandlers,
+@@ -169,7 +156,6 @@ const instanceRoutes = instanceApiRoutes.pipe(
+ )
+ const serverRoutes = HttpApiBuilder.layer(Api).pipe(
+   Layer.provide(handlers),
+-  Layer.provide(PluginPtyEnvironment.layer),
+   Layer.provide([serverHttpApiAuthLayer, v2SchemaErrorLayer]),
+ )
+ 
+@@ -242,7 +228,6 @@ const app = LayerNode.group([
+   EventV2.node,
+   ProjectV2.node,
+   ProjectCopy.node,
+-  PtyTicket.node,
+ ])
+ 
+ export function createRoutes(
+@@ -253,7 +238,6 @@ export function createRoutes(
+   return Layer.mergeAll(
+     rootApiRoutes,
+     eventApiRoutes,
+-    ptyConnectApiRoutes,
+     instanceRoutes,
+     serverRoutes,
+     docRoute,
+@@ -270,7 +254,6 @@ export function createRoutes(
+     Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
+     Layer.provide(sessionLocationLayer),
+     Layer.provide(locationLayer),
+-    Layer.provide(PtyEnvironment.layer),
+     Layer.provide(
+       AppNodeBuilderV1.build(SessionV2.node, [
+         [LocationServiceMap.node, locationServiceMapV2],
+diff --git a/packages/opencode/src/server/shared/pty-ticket.ts b/packages/opencode/src/server/shared/pty-ticket.ts
+deleted file mode 100644
+index 0efd06e6a7..0000000000
+--- a/packages/opencode/src/server/shared/pty-ticket.ts
++++ /dev/null
+@@ -1,15 +0,0 @@
+-export const PTY_CONNECT_TICKET_QUERY = "ticket"
+-export const PTY_CONNECT_TOKEN_HEADER = "x-opencode-ticket"
+-export const PTY_CONNECT_TOKEN_HEADER_VALUE = "1"
+-
+-const PTY_CONNECT_PATH = /^\/pty\/[^/]+\/connect$/
+-
+-// Auth middleware skips Basic Auth when this matches; the PTY connect handler
+-// is then responsible for validating the ticket.
+-export function isPtyConnectPath(pathname: string) {
+-  return PTY_CONNECT_PATH.test(pathname)
+-}
+-
+-export function hasPtyConnectTicketURL(url: URL) {
+-  return isPtyConnectPath(url.pathname) && !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
+-}
+diff --git a/packages/opencode/test/server/httpapi-exercise/dsl.ts b/packages/opencode/test/server/httpapi-exercise/dsl.ts
+index 60d41576f0..7bfc5ecf0b 100644
+--- a/packages/opencode/test/server/httpapi-exercise/dsl.ts
++++ b/packages/opencode/test/server/httpapi-exercise/dsl.ts
+@@ -200,11 +200,3 @@ export function route(template: string, params: Record<string, string>) {
+     template,
+   )
+ }
+-
+-export function controlledPtyInput(title: string | undefined) {
+-  return {
+-    command: "/bin/sh",
+-    args: ["-c", "sleep 30"],
+-    ...(title ? { title } : {}),
+-  }
+-}
+diff --git a/packages/opencode/test/server/httpapi-exercise/index.ts b/packages/opencode/test/server/httpapi-exercise/index.ts
+index 65ed31a718..c29cb694d0 100644
+--- a/packages/opencode/test/server/httpapi-exercise/index.ts
++++ b/packages/opencode/test/server/httpapi-exercise/index.ts
+@@ -22,7 +22,7 @@ import { OpenApi } from "effect/unstable/httpapi"
+ import { TestLLMServer } from "../../lib/llm-server"
+ import path from "path"
+ import { array, boolean, check, isRecord, message, object, stable } from "./assertions"
+-import { controlledPtyInput, http, route } from "./dsl"
++import { http, route } from "./dsl"
+ import {
+   cleanupExercisePaths,
+   exerciseConfigDirectory,
+@@ -430,55 +430,6 @@ const scenarios: Scenario[] = [
+     .mutating()
+     .at((ctx) => ({ path: route("/mcp/{name}/disconnect", { name: "httpapi-missing" }), headers: ctx.headers() }))
+     .json(404, object, "status"),
+-  http.protected.get("/pty/shells", "pty.shells").json(200, array),
+-  http.protected.get("/pty", "pty.list").json(200, array),
+-  http.protected
+-    .post("/pty", "pty.create")
+-    .mutating()
+-    .at((ctx) => ({ path: "/pty", headers: ctx.headers(), body: controlledPtyInput("HTTP API PTY") }))
+-    .json(
+-      200,
+-      (body, ctx) => {
+-        object(body)
+-        check(body.title === "HTTP API PTY", "PTY create should return requested title")
+-        check(body.command === "/bin/sh", "PTY create should use controlled shell command")
+-        check(body.cwd === ctx.directory, "PTY create should default cwd to scenario directory")
+-      },
+-      "status",
+-    ),
+-  http.protected
+-    .post("/pty", "pty.create.invalid")
+-    .at((ctx) => ({ path: "/pty", headers: ctx.headers(), body: { command: 1 } }))
+-    .status(400),
+-  http.protected
+-    .post("/pty/{ptyID}/connect-token", "pty.connectToken.invalid")
+-    .at((ctx) => ({
+-      path: route("/pty/{ptyID}/connect-token", { ptyID: "pty_httpapi_missing" }),
+-      headers: ctx.headers(),
+-    }))
+-    .status(403, undefined, "status"),
+-  http.protected
+-    .get("/pty/{ptyID}", "pty.get")
+-    .at((ctx) => ({ path: route("/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
+-    .status(404),
+-  http.protected
+-    .put("/pty/{ptyID}", "pty.update")
+-    .mutating()
+-    .at((ctx) => ({
+-      path: route("/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }),
+-      headers: ctx.headers(),
+-      body: { size: { rows: 0, cols: 0 } },
+-    }))
+-    .status(400),
+-  http.protected
+-    .delete("/pty/{ptyID}", "pty.remove")
+-    .mutating()
+-    .at((ctx) => ({ path: route("/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
+-    .json(404, object, "status"),
+-  http.protected
+-    .get("/pty/{ptyID}/connect", "pty.connect")
+-    .at((ctx) => ({ path: route("/pty/{ptyID}/connect", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
+-    .status(404, undefined, "none"),
+   http.protected.get("/experimental/console", "experimental.console.get").json(),
+   http.protected.get("/experimental/console/orgs", "experimental.console.listOrgs").json(),
+   http.protected
+@@ -760,44 +711,6 @@ const scenarios: Scenario[] = [
+     .seeded((ctx) => ctx.file("hello.txt", "hello\n"))
+     .at((ctx) => ({ path: "/api/fs/find?query=hello&type=file", headers: ctx.headers() }))
+     .json(200, locationData(array)),
+-  http.protected.get("/api/pty", "v2.pty.list").json(200, locationData(array)),
+-  http.protected
+-    .post("/api/pty", "v2.pty.create")
+-    .mutating()
+-    .at((ctx) => ({ path: "/api/pty", headers: ctx.headers(), body: controlledPtyInput("HTTP API V2 PTY") }))
+-    .json(200, locationData(object)),
+-  http.protected
+-    .get("/api/pty/{ptyID}", "v2.pty.get")
+-    .at((ctx) => ({ path: route("/api/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
+-    .json(404, object, "status"),
+-  http.protected
+-    .put("/api/pty/{ptyID}", "v2.pty.update")
+-    .mutating()
+-    .at((ctx) => ({
+-      path: route("/api/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }),
+-      headers: ctx.headers(),
+-      body: { title: "missing" },
+-    }))
+-    .json(404, object, "status"),
+-  http.protected
+-    .delete("/api/pty/{ptyID}", "v2.pty.remove")
+-    .mutating()
+-    .at((ctx) => ({ path: route("/api/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
+-    .json(404, object, "status"),
+-  http.protected
+-    .post("/api/pty/{ptyID}/connect-token", "v2.pty.connectToken")
+-    .at((ctx) => ({
+-      path: route("/api/pty/{ptyID}/connect-token", { ptyID: "pty_httpapi_missing" }),
+-      headers: { ...ctx.headers(), "x-opencode-ticket": "1" },
+-    }))
+-    .json(404, object, "status"),
+-  http.protected
+-    .get("/api/pty/{ptyID}/connect", "v2.pty.connect")
+-    .at((ctx) => ({
+-      path: route("/api/pty/{ptyID}/connect", { ptyID: "pty_httpapi_missing" }),
+-      headers: ctx.headers(),
+-    }))
+-    .status(404, undefined, "none"),
+   http.protected.get("/api/reference", "v2.reference.list").json(200, object),
+   http.protected
+     .get("/api/provider/{providerID}", "v2.provider.get")
+diff --git a/packages/opencode/test/server/httpapi-instance-route-auth.test.ts b/packages/opencode/test/server/httpapi-instance-route-auth.test.ts
+index 95bb9cc14b..9979a12976 100644
+--- a/packages/opencode/test/server/httpapi-instance-route-auth.test.ts
++++ b/packages/opencode/test/server/httpapi-instance-route-auth.test.ts
+@@ -2,10 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test"
+ import { ConfigProvider, Layer } from "effect"
+ import { HttpRouter } from "effect/unstable/http"
+ import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
+-import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
+ import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
+ import { ServerAuth } from "../../src/server/auth"
+-import { PtyID } from "@opencode-ai/core/pty/schema"
+ import { resetDatabase } from "../fixture/db"
+ import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+ 
+@@ -62,20 +60,4 @@ describe("HttpApi instance route authorization", () => {
+     expect(authed.status).toBe(200)
+   })
+ 
+-  test("requires configured auth before resolving the PTY websocket route", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-    const server = app({ password: "secret" })
+-    const route = PtyPaths.connect.replace(":ptyID", PtyID.ascending())
+-    const headers = { "x-opencode-directory": tmp.path }
+-
+-    const missing = await server.request(route, { headers })
+-    await cancelBody(missing)
+-    expect(missing.status).toBe(401)
+-
+-    const authed = await server.request(route, {
+-      headers: { ...headers, authorization: basic("opencode", "secret") },
+-    })
+-    await cancelBody(authed)
+-    expect(authed.status).toBe(404)
+-  })
+ })
+diff --git a/packages/opencode/test/server/httpapi-listen.test.ts b/packages/opencode/test/server/httpapi-listen.test.ts
+index 6e2849a4d5..d7f326ca51 100644
+--- a/packages/opencode/test/server/httpapi-listen.test.ts
++++ b/packages/opencode/test/server/httpapi-listen.test.ts
+@@ -4,7 +4,6 @@ import path from "node:path"
+ import { pathToFileURL } from "node:url"
+ import { Flag } from "@opencode-ai/core/flag/flag"
+ import { Server } from "../../src/server/server"
+-import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
+ import { withTimeout } from "../../src/util/timeout"
+ import { resetDatabase } from "../fixture/db"
+ import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+@@ -16,7 +15,6 @@ const original = {
+   envUsername: process.env.OPENCODE_SERVER_USERNAME,
+ }
+ const auth = { username: "opencode", password: "listen-secret" }
+-const testPty = process.platform === "win32" ? test.skip : test
+ 
+ afterEach(async () => {
+   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
+@@ -49,238 +47,21 @@ function authorization() {
+   return `Basic ${btoa(`${auth.username}:${auth.password}`)}`
+ }
+ 
+-function socketURL(listener: Awaited<ReturnType<typeof startListener>>, id: string, dir: string, ticket?: string) {
+-  const url = new URL(PtyPaths.connect.replace(":ptyID", id), listener.url)
+-  url.protocol = "ws:"
+-  url.searchParams.set("directory", dir)
+-  url.searchParams.set("cursor", "-1")
+-  if (ticket) url.searchParams.set("ticket", ticket)
+-  return url
+-}
+-
+-async function requestTicket(
+-  listener: Awaited<ReturnType<typeof startListener>>,
+-  id: string,
+-  dir: string,
+-  options?: { ticketHeader?: boolean; origin?: string },
+-) {
+-  const response = await fetch(new URL(PtyPaths.connectToken.replace(":ptyID", id), listener.url), {
+-    method: "POST",
+-    headers: {
+-      authorization: authorization(),
+-      "x-opencode-directory": dir,
+-      ...(options?.ticketHeader === false ? {} : { "x-opencode-ticket": "1" }),
+-      ...(options?.origin ? { origin: options.origin } : {}),
+-    },
+-  })
+-
+-  return response
+-}
+-
+-async function connectTicket(listener: Awaited<ReturnType<typeof startListener>>, id: string, dir: string) {
+-  const response = await requestTicket(listener, id, dir)
+-  expect(response.status).toBe(200)
+-  return (await response.json()) as { ticket: string; expires_in: number }
+-}
+-
+-async function createCat(listener: Awaited<ReturnType<typeof startListener>>, dir: string) {
+-  const response = await fetch(new URL(PtyPaths.create, listener.url), {
+-    method: "POST",
+-    headers: {
+-      authorization: authorization(),
+-      "x-opencode-directory": dir,
+-      "content-type": "application/json",
+-    },
+-    body: JSON.stringify({ command: "/bin/cat", title: "listen-smoke" }),
+-  })
+-  expect(response.status).toBe(200)
+-  return (await response.json()) as { id: string }
+-}
+-
+-async function openSocket(url: URL) {
+-  const ws = new WebSocket(url)
+-  ws.binaryType = "arraybuffer"
+-  await withTimeout(
+-    new Promise<void>((resolve, reject) => {
+-      ws.addEventListener("open", () => resolve(), { once: true })
+-      ws.addEventListener("error", () => reject(new Error("websocket failed before open")), { once: true })
+-    }),
+-    5_000,
+-    "timed out waiting for websocket open",
+-  )
+-  return ws
+-}
+-
+-async function expectSocketRejected(url: URL, init?: { headers?: Record<string, string> }) {
+-  // Bun's WebSocket accepts an init object with headers; standard DOM types don't reflect that.
+-  const Ctor = WebSocket as unknown as new (url: URL, init?: { headers?: Record<string, string> }) => WebSocket
+-  const ws = new Ctor(url, init)
+-  await withTimeout(
+-    new Promise<void>((resolve, reject) => {
+-      ws.addEventListener(
+-        "open",
+-        () => {
+-          ws.close(1000)
+-          reject(new Error("websocket opened"))
+-        },
+-        { once: true },
+-      )
+-      ws.addEventListener("error", () => resolve(), { once: true })
+-      ws.addEventListener("close", () => resolve(), { once: true })
+-    }),
+-    5_000,
+-    "timed out waiting for websocket rejection",
+-  )
+-}
+-
+ function stop(listener: Awaited<ReturnType<typeof startListener>>, label: string) {
+   return withTimeout(listener.stop(true), 10_000, label)
+ }
+ 
+-function waitForMessage(ws: WebSocket, predicate: (message: string) => boolean) {
+-  const decoder = new TextDecoder()
+-  let onMessage: ((event: MessageEvent) => void) | undefined
+-  return withTimeout(
+-    new Promise<string>((resolve) => {
+-      onMessage = (event: MessageEvent) => {
+-        const message = typeof event.data === "string" ? event.data : decoder.decode(event.data as ArrayBuffer)
+-        if (!predicate(message)) return
+-        resolve(message)
+-      }
+-      ws.addEventListener("message", onMessage)
+-    }),
+-    5_000,
+-    "timed out waiting for websocket message",
+-  ).finally(() => {
+-    if (onMessage) ws.removeEventListener("message", onMessage)
+-  })
+-}
+-
+-async function openPtySocket(listener: Awaited<ReturnType<typeof startListener>>, dir: string) {
+-  const info = await createCat(listener, dir)
+-  const ticket = await connectTicket(listener, info.id, dir)
+-  const ws = await openSocket(socketURL(listener, info.id, dir, ticket.ticket))
+-  return {
+-    ws,
+-    closed: new Promise<void>((resolve) => ws.addEventListener("close", () => resolve(), { once: true })),
+-  }
+-}
+-
+ describe("HttpApi Server.listen", () => {
+-  testPty("serves HTTP routes and upgrades PTY websocket through Server.listen", async () => {
+-    await using tmp = await tmpdir({ config: { formatter: false } })
+-    const listener = await startListener()
+-    let stopped = false
+-    try {
+-      const response = await fetch(new URL(PtyPaths.shells, listener.url), {
+-        headers: { authorization: authorization(), "x-opencode-directory": tmp.path },
+-      })
+-      expect(response.status).toBe(200)
+-      expect(await response.json()).toEqual(
+-        expect.arrayContaining([
+-          expect.objectContaining({
+-            path: expect.any(String),
+-            name: expect.any(String),
+-            acceptable: expect.any(Boolean),
+-          }),
+-        ]),
+-      )
+-
+-      const info = await createCat(listener, tmp.path)
+-      const ticket = await connectTicket(listener, info.id, tmp.path)
+-      expect(ticket.expires_in).toBeGreaterThan(0)
+-      const ws = await openSocket(socketURL(listener, info.id, tmp.path, ticket.ticket))
+-      const closed = new Promise<void>((resolve) => ws.addEventListener("close", () => resolve(), { once: true }))
+-
+-      const message = waitForMessage(ws, (message) => message.includes("ping-listen"))
+-      ws.send("ping-listen\n")
+-      expect(await message).toContain("ping-listen")
+-
+-      await stop(listener, "timed out waiting for listener.stop(true)")
+-      stopped = true
+-      await withTimeout(closed, 5_000, "timed out waiting for websocket close")
+-      expect(ws.readyState).toBe(WebSocket.CLOSED)
+-
+-      const restarted = await startListener()
+-      try {
+-        const nextInfo = await createCat(restarted, tmp.path)
+-        const nextTicket = await connectTicket(restarted, nextInfo.id, tmp.path)
+-        const nextWs = await openSocket(socketURL(restarted, nextInfo.id, tmp.path, nextTicket.ticket))
+-        const nextMessage = waitForMessage(nextWs, (message) => message.includes("ping-restarted"))
+-        nextWs.send("ping-restarted\n")
+-        expect(await nextMessage).toContain("ping-restarted")
+-        nextWs.close(1000)
+-      } finally {
+-        await stop(restarted, "timed out waiting for restarted listener.stop(true)")
+-      }
+-    } finally {
+-      if (!stopped) await stop(listener, "timed out cleaning up listener").catch(() => undefined)
+-    }
+-  })
+-
+-  testPty("stop(true) is safe when called concurrently and repeatedly", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-    const listener = await startListener()
+-    let stopped = false
+-    try {
+-      const socket = await openPtySocket(listener, tmp.path)
+-
+-      await withTimeout(
+-        Promise.all([listener.stop(true), listener.stop(true)]).then(() => undefined),
+-        10_000,
+-        "timed out waiting for concurrent listener.stop(true)",
+-      )
+-      await withTimeout(socket.closed, 5_000, "timed out waiting for websocket close after concurrent stop")
+-      await withTimeout(listener.stop(true), 5_000, "timed out waiting for repeated listener.stop(true)")
+-      stopped = true
+-    } finally {
+-      if (!stopped) await stop(listener, "timed out cleaning up concurrent stop listener").catch(() => undefined)
+-    }
+-  })
+ 
+-  testPty("stop(true) can force a graceful stop already in progress", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-    const listener = await startListener()
+-    let stopped = false
+-    try {
+-      const socket = await openPtySocket(listener, tmp.path)
+ 
+-      const graceful = listener.stop()
+-      const forced = listener.stop(true)
+-      await withTimeout(
+-        Promise.all([graceful, forced]).then(() => undefined),
+-        10_000,
+-        "timed out waiting for forced listener stop",
+-      )
+-      await withTimeout(socket.closed, 5_000, "timed out waiting for websocket close after forced stop")
+-      stopped = true
+-    } finally {
+-      if (!stopped) await stop(listener, "timed out cleaning up forced stop listener").catch(() => undefined)
+-    }
+-  })
+ 
+-  testPty("graceful stop waits for an overlapping forced stop", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-    const listener = await startListener()
+-    let stopped = false
+-    try {
+-      const socket = await openPtySocket(listener, tmp.path)
+-      const forced = listener.stop(true)
+-      await withTimeout(listener.stop(), 10_000, "timed out waiting for graceful stop after forced stop")
+-      stopped = true
+-      await withTimeout(forced, 5_000, "timed out waiting for overlapping forced stop")
+-      await withTimeout(socket.closed, 5_000, "timed out waiting for websocket close before graceful stop resolved")
+-    } finally {
+-      if (!stopped) await stop(listener, "timed out cleaning up overlapping stop listener").catch(() => undefined)
+-    }
+-  })
+ 
+   test("stop() gracefully closes an idle listener and is repeat-safe", async () => {
+     const listener = await startListener()
+     await withTimeout(listener.stop(), 10_000, "timed out waiting for graceful listener.stop()")
+     await withTimeout(listener.stop(), 5_000, "timed out waiting for repeated graceful listener.stop()")
+     await expect(
+-      fetch(new URL(PtyPaths.shells, listener.url), { headers: { authorization: authorization() } }),
++      fetch(listener.url, { headers: { authorization: authorization() } }),
+     ).rejects.toThrow()
+   })
+ 
+@@ -379,72 +160,7 @@ describe("HttpApi Server.listen", () => {
+     }
+   })
+ 
+-  testPty("rejects unsafe PTY ticket mint and connect requests", async () => {
+-    await using tmp = await tmpdir({ config: { formatter: false } })
+-    const listener = await startListener()
+-    try {
+-      const info = await createCat(listener, tmp.path)
+-
+-      expect((await requestTicket(listener, info.id, tmp.path, { ticketHeader: false })).status).toBe(403)
+-      expect((await requestTicket(listener, info.id, tmp.path, { origin: "https://evil.example" })).status).toBe(403)
+-
+-      // Regression for #25698: minting without a directory uses the server cwd
+-      // and cannot find a PTY registered in a project directory.
+-      const ambiguous = await fetch(new URL(PtyPaths.connectToken.replace(":ptyID", info.id), listener.url), {
+-        method: "POST",
+-        headers: { authorization: authorization(), "x-opencode-ticket": "1" },
+-      })
+-      expect(ambiguous.status).toBe(404)
+-
+-      const directoryScoped = await fetch(
+-        new URL(
+-          `${PtyPaths.connectToken.replace(":ptyID", info.id)}?directory=${encodeURIComponent(tmp.path)}`,
+-          listener.url,
+-        ),
+-        {
+-          method: "POST",
+-          headers: { authorization: authorization(), "x-opencode-ticket": "1" },
+-        },
+-      )
+-      expect(directoryScoped.status).toBe(200)
+-      const mint = (await directoryScoped.json()) as { ticket: string }
+-      const scopedWs = await openSocket(socketURL(listener, info.id, tmp.path, mint.ticket))
+-      scopedWs.close(1000)
+-
+-      await expectSocketRejected(socketURL(listener, info.id, tmp.path, "not-a-ticket"))
+-
+-      const reusable = await connectTicket(listener, info.id, tmp.path)
+-      const ws = await openSocket(socketURL(listener, info.id, tmp.path, reusable.ticket))
+-      await expectSocketRejected(socketURL(listener, info.id, tmp.path, reusable.ticket))
+-      ws.close(1000)
+-
+-      const other = await createCat(listener, tmp.path)
+-      const scoped = await connectTicket(listener, info.id, tmp.path)
+-      await expectSocketRejected(socketURL(listener, other.id, tmp.path, scoped.ticket))
+ 
+-      const crossOrigin = await connectTicket(listener, info.id, tmp.path)
+-      await expectSocketRejected(socketURL(listener, info.id, tmp.path, crossOrigin.ticket), {
+-        headers: { origin: "https://evil.example" },
+-      })
+-    } finally {
+-      await stop(listener, "timed out cleaning up rejected ticket listener").catch(() => undefined)
+-    }
+-  })
+-
+-  testPty("keeps PTY websocket tickets optional when server auth is disabled", async () => {
+-    await using tmp = await tmpdir({ config: { formatter: false } })
+-    const listener = await startNoAuthListener()
+-    try {
+-      const info = await createCat(listener, tmp.path)
+-      const ws = await openSocket(socketURL(listener, info.id, tmp.path))
+-      const message = waitForMessage(ws, (message) => message.includes("ping-no-auth"))
+-      ws.send("ping-no-auth\n")
+-      expect(await message).toContain("ping-no-auth")
+-      ws.close(1000)
+-    } finally {
+-      await stop(listener, "timed out cleaning up no-auth listener").catch(() => undefined)
+-    }
+-  })
+ })
+ 
+ function isPortFree(port: number) {
+diff --git a/packages/opencode/test/server/httpapi-pty.test.ts b/packages/opencode/test/server/httpapi-pty.test.ts
+deleted file mode 100644
+index 5920b066b9..0000000000
+--- a/packages/opencode/test/server/httpapi-pty.test.ts
++++ /dev/null
+@@ -1,299 +0,0 @@
+-import { afterEach, describe, expect, test } from "bun:test"
+-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+-import { PtyID } from "@opencode-ai/core/pty/schema"
+-import { Server } from "../../src/server/server"
+-import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
+-import { resetDatabase } from "../fixture/db"
+-import { disposeAllInstances, tmpdir, tmpdirScoped } from "../fixture/fixture"
+-import { Config, Effect, Layer, Queue, Schema } from "effect"
+-import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
+-import * as Socket from "effect/unstable/socket/Socket"
+-import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
+-import { Pty } from "@opencode-ai/core/pty"
+-import { testEffect } from "../lib/effect"
+-
+-const testPty = process.platform === "win32" ? test.skip : test
+-
+-const testStateLayer = Layer.effectDiscard(
+-  Effect.gen(function* () {
+-    yield* Effect.promise(() => resetDatabase())
+-    yield* Effect.addFinalizer(() =>
+-      Effect.promise(async () => {
+-        await resetDatabase()
+-      }),
+-    )
+-  }),
+-)
+-
+-const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
+-  HttpApiApp.routes,
+-  { disableListenLog: true, disableLogger: true },
+-)
+-
+-const effectIt = testEffect(
+-  Layer.mergeAll(
+-    testStateLayer,
+-    Socket.layerWebSocketConstructorGlobal,
+-    servedRoutes.pipe(
+-      Layer.provide(Socket.layerWebSocketConstructorGlobal),
+-      Layer.provideMerge(NodeHttpServer.layerTest),
+-      Layer.provideMerge(NodeServices.layer),
+-    ),
+-  ),
+-)
+-
+-function app() {
+-  return Server.Default().app
+-}
+-
+-function serverUrl() {
+-  return HttpServer.HttpServer.use((server) => Effect.succeed(HttpServer.formatAddress(server.address)))
+-}
+-
+-const directoryHeader = (dir: string) => HttpClientRequest.setHeader("x-opencode-directory", dir)
+-
+-afterEach(async () => {
+-  await disposeAllInstances()
+-  await resetDatabase()
+-})
+-
+-describe("pty HttpApi bridge", () => {
+-  test("serves available shell list through experimental Effect routes", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-    const response = await app().request(PtyPaths.shells, { headers: { "x-opencode-directory": tmp.path } })
+-
+-    expect(response.status).toBe(200)
+-    expect(await response.json()).toEqual(
+-      expect.arrayContaining([
+-        expect.objectContaining({
+-          path: expect.any(String),
+-          name: expect.any(String),
+-          acceptable: expect.any(Boolean),
+-        }),
+-      ]),
+-    )
+-  })
+-
+-  testPty("serves PTY JSON routes through experimental Effect routes", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-    const headers = { "x-opencode-directory": tmp.path }
+-    const list = await app().request(PtyPaths.list, { headers })
+-    expect(list.status).toBe(200)
+-    expect(await list.json()).toEqual([])
+-
+-    const created = await app().request(PtyPaths.create, {
+-      method: "POST",
+-      headers: { ...headers, "content-type": "application/json" },
+-      body: JSON.stringify({ command: "/usr/bin/env", args: ["sh", "-c", "sleep 5"], title: "demo" }),
+-    })
+-    expect(created.status).toBe(200)
+-    const info = await created.json()
+-
+-    try {
+-      expect(info).toMatchObject({ title: "demo", command: "/usr/bin/env", status: "running" })
+-
+-      const found = await app().request(PtyPaths.get.replace(":ptyID", info.id), { headers })
+-      expect(found.status).toBe(200)
+-      expect(await found.json()).toMatchObject({ id: info.id, title: "demo" })
+-
+-      const updated = await app().request(PtyPaths.update.replace(":ptyID", info.id), {
+-        method: "PUT",
+-        headers: { ...headers, "content-type": "application/json" },
+-        body: JSON.stringify({ title: "renamed", size: { cols: 80, rows: 24 } }),
+-      })
+-      expect(updated.status).toBe(200)
+-      expect(await updated.json()).toMatchObject({ id: info.id, title: "renamed" })
+-    } finally {
+-      await app().request(PtyPaths.remove.replace(":ptyID", info.id), { method: "DELETE", headers })
+-    }
+-
+-    const missing = await app().request(PtyPaths.get.replace(":ptyID", info.id), { headers })
+-    expect(missing.status).toBe(404)
+-    expect(await missing.json()).toEqual({
+-      _tag: "PtyNotFoundError",
+-      ptyID: info.id,
+-      message: `PTY session not found: ${info.id}`,
+-    })
+-
+-    const missingUpdate = await app().request(PtyPaths.update.replace(":ptyID", info.id), {
+-      method: "PUT",
+-      headers: { ...headers, "content-type": "application/json" },
+-      body: JSON.stringify({ title: "missing" }),
+-    })
+-    expect(missingUpdate.status).toBe(404)
+-    expect(await missingUpdate.json()).toEqual({
+-      _tag: "PtyNotFoundError",
+-      ptyID: info.id,
+-      message: `PTY session not found: ${info.id}`,
+-    })
+-
+-    const missingRemove = await app().request(PtyPaths.remove.replace(":ptyID", info.id), { method: "DELETE", headers })
+-    expect(missingRemove.status).toBe(404)
+-    expect(await missingRemove.json()).toEqual({
+-      _tag: "PtyNotFoundError",
+-      ptyID: info.id,
+-      message: `PTY session not found: ${info.id}`,
+-    })
+-  })
+-
+-  testPty("hides exited sessions on the legacy surface", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-    const headers = { "x-opencode-directory": tmp.path }
+-    const created = await app().request(PtyPaths.create, {
+-      method: "POST",
+-      headers: { ...headers, "content-type": "application/json" },
+-      body: JSON.stringify({ command: "/usr/bin/env", args: ["sh", "-c", "exit 0"] }),
+-    })
+-    expect(created.status).toBe(200)
+-    const info = await created.json()
+-
+-    // Exited sessions are retained by core for the canonical surface, but the legacy
+-    // routes preserve pre-retention behavior: exited sessions are invisible here.
+-    const deadline = Date.now() + 5_000
+-    while (Date.now() < deadline) {
+-      const found = await app().request(PtyPaths.get.replace(":ptyID", info.id), { headers })
+-      if (found.status === 404) break
+-      await new Promise((resolve) => setTimeout(resolve, 50))
+-    }
+-    const found = await app().request(PtyPaths.get.replace(":ptyID", info.id), { headers })
+-    expect(found.status).toBe(404)
+-
+-    const list = await app().request(PtyPaths.list, { headers })
+-    expect(list.status).toBe(200)
+-    expect(await list.json()).toEqual([])
+-  })
+-
+-  testPty("disposes PTY sessions with their legacy instance", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-    const headers = { "x-opencode-directory": tmp.path }
+-    const created = await app().request(PtyPaths.create, {
+-      method: "POST",
+-      headers: { ...headers, "content-type": "application/json" },
+-      body: JSON.stringify({ command: "/usr/bin/env", args: ["sh", "-c", "sleep 5"] }),
+-    })
+-    expect(created.status).toBe(200)
+-
+-    await disposeAllInstances()
+-
+-    const list = await app().request(PtyPaths.list, { headers })
+-    expect(list.status).toBe(200)
+-    expect(await list.json()).toEqual([])
+-  })
+-
+-  test("returns 404 for missing PTY websocket before upgrade", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-    const response = await app().request(PtyPaths.connect.replace(":ptyID", PtyID.ascending()), {
+-      headers: { "x-opencode-directory": tmp.path },
+-    })
+-    expect(response.status).toBe(404)
+-  })
+-
+-  test("returns 404 for missing PTY websocket before decoding cursor query", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-    const response = await app().request(`${PtyPaths.connect.replace(":ptyID", PtyID.ascending())}?cursor=a&cursor=b`, {
+-      headers: { "x-opencode-directory": tmp.path },
+-    })
+-    expect(response.status).toBe(404)
+-  })
+-
+-  test("returns typed not found errors for missing PTY HTTP resources", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-    const headers = { "x-opencode-directory": tmp.path }
+-    const missingID = String(PtyID.ascending())
+-    const expected = {
+-      _tag: "PtyNotFoundError",
+-      ptyID: missingID,
+-      message: `PTY session not found: ${missingID}`,
+-    }
+-
+-    const found = await app().request(PtyPaths.get.replace(":ptyID", missingID), { headers })
+-    expect(found.status).toBe(404)
+-    expect(await found.json()).toEqual(expected)
+-
+-    const updated = await app().request(PtyPaths.update.replace(":ptyID", missingID), {
+-      method: "PUT",
+-      headers: { ...headers, "content-type": "application/json" },
+-      body: JSON.stringify({ title: "missing" }),
+-    })
+-    expect(updated.status).toBe(404)
+-    expect(await updated.json()).toEqual(expected)
+-
+-    const removed = await app().request(PtyPaths.remove.replace(":ptyID", missingID), { method: "DELETE", headers })
+-    expect(removed.status).toBe(404)
+-    expect(await removed.json()).toEqual(expected)
+-  })
+-
+-  test("returns typed errors for PTY connect token failures", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-    const headers = { "x-opencode-directory": tmp.path }
+-    const missingID = String(PtyID.ascending())
+-
+-    const forbidden = await app().request(PtyPaths.connectToken.replace(":ptyID", missingID), {
+-      method: "POST",
+-      headers,
+-    })
+-    expect(forbidden.status).toBe(403)
+-    expect(await forbidden.json()).toEqual({
+-      _tag: "PtyForbiddenError",
+-      message: "Invalid PTY connect token request",
+-    })
+-
+-    const missing = await app().request(PtyPaths.connectToken.replace(":ptyID", missingID), {
+-      method: "POST",
+-      headers: {
+-        ...headers,
+-        "x-opencode-ticket": "1",
+-      },
+-    })
+-    expect(missing.status).toBe(404)
+-    expect(await missing.json()).toEqual({
+-      _tag: "PtyNotFoundError",
+-      ptyID: missingID,
+-      message: `PTY session not found: ${missingID}`,
+-    })
+-  })
+-  ;(process.platform === "win32" ? effectIt.live.skip : effectIt.live)(
+-    "serves PTY websocket output and input through Effect routes",
+-    () =>
+-      Effect.gen(function* () {
+-        const dir = yield* tmpdirScoped({ git: true, config: { formatter: false } })
+-        const created = yield* HttpClientRequest.post(PtyPaths.create).pipe(
+-          directoryHeader(dir),
+-          HttpClientRequest.bodyJson({ command: "/bin/cat", title: "websocket" }),
+-          Effect.flatMap(HttpClient.execute),
+-        )
+-        expect(created.status).toBe(200)
+-        const info = yield* Schema.decodeUnknownEffect(Pty.Info)(yield* created.json)
+-
+-        const socket = yield* Socket.makeWebSocket(
+-          `${(yield* serverUrl()).replace(/^http/, "ws")}${PtyPaths.connect.replace(":ptyID", info.id)}?cursor=-1&directory=${encodeURIComponent(dir)}`,
+-          { closeCodeIsError: () => false },
+-        )
+-        const messages = yield* Queue.unbounded<string>()
+-        yield* socket
+-          .runRaw((message) =>
+-            Queue.offer(messages, typeof message === "string" ? message : new TextDecoder().decode(message)),
+-          )
+-          .pipe(Effect.catch(() => Effect.void))
+-          .pipe(Effect.forkScoped)
+-        const write = yield* socket.writer
+-
+-        const takeUntil = (expected: string, seen = ""): Effect.Effect<string, unknown> =>
+-          Effect.gen(function* () {
+-            const next = seen + (yield* Queue.take(messages).pipe(Effect.timeout("5 seconds")))
+-            if (next.includes(expected)) return next
+-            return yield* takeUntil(expected, next)
+-          })
+-
+-        yield* write("ping-route\n")
+-        expect(yield* takeUntil("ping-route")).toContain("ping-route")
+-        yield* write(new Socket.CloseEvent(1000, "done")).pipe(Effect.catch(() => Effect.void))
+-
+-        const removed = yield* HttpClientRequest.delete(PtyPaths.remove.replace(":ptyID", info.id)).pipe(
+-          directoryHeader(dir),
+-          HttpClient.execute,
+-        )
+-        expect(removed.status).toBe(200)
+-      }),
+-  )
+-})
+diff --git a/packages/opencode/test/server/httpapi-public-openapi.test.ts b/packages/opencode/test/server/httpapi-public-openapi.test.ts
+index 310ebae595..134a98a147 100644
+--- a/packages/opencode/test/server/httpapi-public-openapi.test.ts
++++ b/packages/opencode/test/server/httpapi-public-openapi.test.ts
+@@ -317,29 +317,6 @@ describe("PublicApi OpenAPI v2 errors", () => {
+     }
+   })
+ 
+-  test("documents PTY resource and ticket errors", () => {
+-    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+-
+-    for (const route of [
+-      ["get", "/pty/{ptyID}"],
+-      ["put", "/pty/{ptyID}"],
+-      ["delete", "/pty/{ptyID}"],
+-      ["post", "/pty/{ptyID}/connect-token"],
+-    ] as const) {
+-      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
+-        "PtyNotFoundError",
+-      )
+-    }
+-    expect(componentName(responseRef(spec.paths["/pty/{ptyID}/connect-token"]?.post?.responses?.["403"]) ?? "")).toBe(
+-      "PtyForbiddenError",
+-    )
+-    expect(
+-      spec.paths["/pty/{ptyID}/connect"]?.get?.parameters
+-        ?.filter((parameter) => parameter.in === "query")
+-        .map((parameter) => parameter.name),
+-    ).toEqual(["directory", "workspace", "cursor", "ticket"])
+-  })
+-
+   test("documents project not-found errors", () => {
+     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+ 
+diff --git a/packages/opencode/test/server/httpapi-query-schema-drift.test.ts b/packages/opencode/test/server/httpapi-query-schema-drift.test.ts
+index 0cade54845..398b133435 100644
+--- a/packages/opencode/test/server/httpapi-query-schema-drift.test.ts
++++ b/packages/opencode/test/server/httpapi-query-schema-drift.test.ts
+@@ -23,7 +23,6 @@ import {
+   MessagesQuery,
+   SessionPaths,
+ } from "../../src/server/routes/instance/httpapi/groups/session"
+-import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
+ import { SessionMessagesQuery } from "@opencode-ai/protocol/groups/message"
+ import { QueryBoolean, QueryBooleanOpenApi } from "../../src/server/routes/instance/httpapi/groups/query"
+ import { resetDatabase } from "../fixture/db"
+@@ -90,7 +89,6 @@ const pathParamPatterns = [
+   { method: "post", path: SessionPaths.permissions, name: "permissionID", pattern: "^per" },
+   { method: "post", path: "/permission/:requestID/reply", name: "requestID", pattern: "^per" },
+   { method: "post", path: "/question/:requestID/reply", name: "requestID", pattern: "^que" },
+-  { method: "put", path: PtyPaths.update, name: "ptyID", pattern: "^pty" },
+   { method: "delete", path: WorkspacePaths.remove, name: "id", pattern: "^wrk" },
+ ] satisfies Array<{ method: Method; path: string; name: string; pattern: string }>
+ 
+diff --git a/packages/opencode/test/server/httpapi-v2-pty.test.ts b/packages/opencode/test/server/httpapi-v2-pty.test.ts
+deleted file mode 100644
+index c6c2ee9c9e..0000000000
+--- a/packages/opencode/test/server/httpapi-v2-pty.test.ts
++++ /dev/null
+@@ -1,250 +0,0 @@
+-import { afterEach, describe, expect, test } from "bun:test"
+-import { Context, Config as EffectConfig, Effect, Layer, Queue, Schema } from "effect"
+-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+-import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
+-import * as Socket from "effect/unstable/socket/Socket"
+-import path from "path"
+-import { pathToFileURL } from "url"
+-import { mkdir } from "fs/promises"
+-import { Location } from "@opencode-ai/core/location"
+-import { Pty } from "@opencode-ai/core/pty"
+-import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+-import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
+-import { resetDatabase } from "../fixture/db"
+-import { disposeAllInstances, tmpdir, tmpdirScoped } from "../fixture/fixture"
+-import { testEffect } from "../lib/effect"
+-
+-const context = Context.empty() as Context.Context<unknown>
+-const testPty = process.platform === "win32" ? test.skip : test
+-
+-function request(route: string, directory: string, init: RequestInit = {}) {
+-  const headers = new Headers(init.headers)
+-  headers.set("x-opencode-directory", directory)
+-  return HttpApiApp.webHandler().handler(
+-    new Request(`http://localhost${route}`, {
+-      ...init,
+-      headers,
+-    }),
+-    context,
+-  )
+-}
+-
+-const testStateLayer = Layer.effectDiscard(
+-  Effect.gen(function* () {
+-    yield* Effect.promise(() => resetDatabase())
+-    yield* Effect.addFinalizer(() => Effect.promise(() => resetDatabase()))
+-  }),
+-)
+-
+-const servedRoutes: Layer.Layer<never, EffectConfig.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
+-  HttpApiApp.routes,
+-  { disableListenLog: true, disableLogger: true },
+-)
+-
+-const effectIt = testEffect(
+-  Layer.mergeAll(
+-    testStateLayer,
+-    Socket.layerWebSocketConstructorGlobal,
+-    servedRoutes.pipe(
+-      Layer.provide(Socket.layerWebSocketConstructorGlobal),
+-      Layer.provideMerge(NodeHttpServer.layerTest),
+-      Layer.provideMerge(NodeServices.layer),
+-    ),
+-  ),
+-)
+-
+-const directoryHeader = (dir: string) => HttpClientRequest.setHeader("x-opencode-directory", dir)
+-
+-const serverUrl = () => HttpServer.HttpServer.use((server) => Effect.succeed(HttpServer.formatAddress(server.address)))
+-
+-afterEach(async () => {
+-  await disposeAllInstances()
+-  await resetDatabase()
+-})
+-
+-describe("v2 pty HttpApi", () => {
+-  testPty("serves location-wrapped PTY routes and retains exited sessions", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-
+-    const empty = await request("/api/pty", tmp.path)
+-    expect(empty.status).toBe(200)
+-    expect(Schema.decodeUnknownSync(Location.response(Schema.Array(Pty.Info)))(await empty.json()).data).toEqual([])
+-
+-    const created = await request("/api/pty", tmp.path, {
+-      method: "POST",
+-      headers: { "content-type": "application/json" },
+-      body: JSON.stringify({ command: "/usr/bin/env", args: ["sh", "-c", "exit 4"], title: "v2" }),
+-    })
+-    expect(created.status).toBe(200)
+-    const body = Schema.decodeUnknownSync(Location.response(Pty.Info))(await created.json())
+-    expect(String(body.location.directory)).toBe(tmp.path)
+-    expect(body.data.title).toBe("v2")
+-
+-    // The canonical surface keeps exited sessions observable with their exit code.
+-    const deadline = Date.now() + 20_000
+-    let info: { status: string; exitCode?: number } | undefined
+-    while (Date.now() < deadline) {
+-      const found = await request(`/api/pty/${body.data.id}`, tmp.path)
+-      expect(found.status).toBe(200)
+-      info = Schema.decodeUnknownSync(Location.response(Pty.Info))(await found.json()).data
+-      if (info.status === "exited") break
+-      await new Promise((resolve) => setTimeout(resolve, 50))
+-    }
+-    expect(info).toMatchObject({ status: "exited", exitCode: 4 })
+-
+-    const removed = await request(`/api/pty/${body.data.id}`, tmp.path, { method: "DELETE" })
+-    expect(removed.status).toBe(204)
+-
+-    const missing = await request(`/api/pty/${body.data.id}`, tmp.path)
+-    expect(missing.status).toBe(404)
+-    expect(await missing.json()).toMatchObject({ _tag: "PtyNotFoundError", ptyID: body.data.id })
+-  })
+-
+-  testPty("rejects connect tokens without the CSRF header and connects with a valid ticket", async () => {
+-    await using tmp = await tmpdir({ git: true, config: { formatter: false } })
+-    const created = await request("/api/pty", tmp.path, {
+-      method: "POST",
+-      headers: { "content-type": "application/json" },
+-      body: JSON.stringify({ command: "/usr/bin/env", args: ["sh", "-c", "sleep 5"] }),
+-    })
+-    expect(created.status).toBe(200)
+-    const info = Schema.decodeUnknownSync(Location.response(Pty.Info))(await created.json()).data
+-
+-    try {
+-      const forbidden = await request(`/api/pty/${info.id}/connect-token`, tmp.path, { method: "POST" })
+-      expect(forbidden.status).toBe(403)
+-      expect(await forbidden.json()).toMatchObject({ _tag: "ForbiddenError" })
+-
+-      const token = await request(`/api/pty/${info.id}/connect-token`, tmp.path, {
+-        method: "POST",
+-        headers: { "x-opencode-ticket": "1" },
+-      })
+-      expect(token.status).toBe(200)
+-      const ticket = Schema.decodeUnknownSync(Location.response(PtyTicket.ConnectToken))(await token.json()).data.ticket
+-      expect(ticket).toBeTruthy()
+-
+-      const invalid = await request(`/api/pty/${info.id}/connect?ticket=not-a-ticket`, tmp.path)
+-      expect(invalid.status).toBe(403)
+-    } finally {
+-      await request(`/api/pty/${info.id}`, tmp.path, { method: "DELETE" })
+-    }
+-  })
+-  ;(process.platform === "win32" ? effectIt.live.skip : effectIt.live)(
+-    "serves PTY websocket output and input through the canonical route",
+-    () =>
+-      Effect.gen(function* () {
+-        const dir = yield* tmpdirScoped({ git: true, config: { formatter: false } })
+-        const created = yield* HttpClientRequest.post("/api/pty").pipe(
+-          directoryHeader(dir),
+-          HttpClientRequest.bodyJson({ command: "/bin/cat", title: "v2-websocket" }),
+-          Effect.flatMap(HttpClient.execute),
+-        )
+-        expect(created.status).toBe(200)
+-        const body = yield* Schema.decodeUnknownEffect(Location.response(Pty.Info))(yield* created.json)
+-        const info = body.data
+-
+-        const socket = yield* Socket.makeWebSocket(
+-          `${(yield* serverUrl()).replace(/^http/, "ws")}/api/pty/${info.id}/connect?cursor=-1&location[directory]=${encodeURIComponent(dir)}`,
+-          { closeCodeIsError: () => false },
+-        )
+-        const messages = yield* Queue.unbounded<string>()
+-        yield* socket
+-          .runRaw((message) =>
+-            Queue.offer(messages, typeof message === "string" ? message : new TextDecoder().decode(message)),
+-          )
+-          .pipe(Effect.catch(() => Effect.void))
+-          .pipe(Effect.forkScoped)
+-        const write = yield* socket.writer
+-
+-        const takeUntil = (expected: string, seen = ""): Effect.Effect<string, unknown> =>
+-          Effect.gen(function* () {
+-            const next = seen + (yield* Queue.take(messages).pipe(Effect.timeout("5 seconds")))
+-            if (next.includes(expected)) return next
+-            return yield* takeUntil(expected, next)
+-          })
+-
+-        yield* write("ping-v2\n")
+-        expect(yield* takeUntil("ping-v2")).toContain("ping-v2")
+-        yield* write(new Socket.CloseEvent(1000, "done")).pipe(Effect.catch(() => Effect.void))
+-
+-        const removed = yield* HttpClientRequest.delete(`/api/pty/${info.id}`).pipe(
+-          directoryHeader(dir),
+-          HttpClient.execute,
+-        )
+-        expect(removed.status).toBe(204)
+-      }),
+-  )
+-  ;(process.platform === "win32" ? effectIt.live.skip : effectIt.live)(
+-    "applies plugin shell environment before forced PTY values",
+-    () =>
+-      Effect.gen(function* () {
+-        const dir = yield* tmpdirScoped({ git: true, config: { formatter: false } })
+-        const plugin = path.join(dir, "plugin.ts")
+-        const cwd = path.join(dir, "child")
+-        yield* Effect.promise(() => mkdir(cwd))
+-        yield* Effect.promise(() =>
+-          Bun.write(
+-            plugin,
+-            [
+-              "export default async () => ({",
+-              '  "shell.env": (input, output) => {',
+-              '    output.env.SHARED = "plugin"',
+-              '    output.env.PLUGIN = "plugin"',
+-              '    output.env.TERM = "plugin"',
+-              "    output.env.HOOK_CWD = input.cwd",
+-              "  },",
+-              "})",
+-              "",
+-            ].join("\n"),
+-          ),
+-        )
+-        yield* Effect.promise(() =>
+-          Bun.write(
+-            path.join(dir, "opencode.json"),
+-            JSON.stringify({ plugin: [pathToFileURL(plugin).href], formatter: false }),
+-          ),
+-        )
+-
+-        const created = yield* HttpClientRequest.post("/api/pty").pipe(
+-          directoryHeader(dir),
+-          HttpClientRequest.bodyJson({
+-            command: "/bin/sh",
+-            args: ["-c", 'printf "%s|%s|%s|%s|%s\\n" "$CALLER" "$SHARED" "$PLUGIN" "$TERM" "$HOOK_CWD"; sleep 5'],
+-            cwd,
+-            env: { CALLER: "caller", SHARED: "caller", TERM: "caller" },
+-          }),
+-          Effect.flatMap(HttpClient.execute),
+-        )
+-        expect(created.status).toBe(200)
+-        const info = (yield* Schema.decodeUnknownEffect(Location.response(Pty.Info))(yield* created.json)).data
+-
+-        const socket = yield* Socket.makeWebSocket(
+-          `${(yield* serverUrl()).replace(/^http/, "ws")}/api/pty/${info.id}/connect?cursor=0&location[directory]=${encodeURIComponent(dir)}`,
+-          { closeCodeIsError: () => false },
+-        )
+-        const messages = yield* Queue.unbounded<string>()
+-        yield* socket
+-          .runRaw((message) =>
+-            Queue.offer(messages, typeof message === "string" ? message : new TextDecoder().decode(message)),
+-          )
+-          .pipe(
+-            Effect.catch(() => Effect.void),
+-            Effect.forkScoped,
+-          )
+-        const write = yield* socket.writer
+-
+-        const takeUntil = (expected: string, seen = ""): Effect.Effect<string, unknown> =>
+-          Effect.gen(function* () {
+-            const next = seen + (yield* Queue.take(messages).pipe(Effect.timeout("5 seconds")))
+-            if (next.includes(expected)) return next
+-            return yield* takeUntil(expected, next)
+-          })
+-
+-        expect(yield* takeUntil(`caller|plugin|plugin|xterm-256color|${cwd}`)).toContain(
+-          `caller|plugin|plugin|xterm-256color|${cwd}`,
+-        )
+-        yield* write(new Socket.CloseEvent(1000, "done")).pipe(Effect.catch(() => Effect.void))
+-        yield* HttpClientRequest.delete(`/api/pty/${info.id}`).pipe(directoryHeader(dir), HttpClient.execute)
+-      }),
+-  )
+-})
+diff --git a/packages/protocol/src/api.ts b/packages/protocol/src/api.ts
+index 7b422d0600..5e7cdcc2c8 100644
+--- a/packages/protocol/src/api.ts
++++ b/packages/protocol/src/api.ts
+@@ -13,7 +13,6 @@ import { EventGroup, makeEventGroup } from "./groups/event"
+ import type { Definition } from "@opencode-ai/schema/event"
+ import { AgentGroup } from "./groups/agent"
+ import { HealthGroup } from "./groups/health"
+-import { PtyGroup } from "./groups/pty"
+ import { makeQuestionGroup } from "./groups/question"
+ import { ReferenceGroup } from "./groups/reference"
+ import { Authorization } from "./middleware/authorization"
+@@ -49,7 +48,6 @@ const makeApiFromGroup = <
+     .add(CommandGroup.middleware(locationMiddleware))
+     .add(SkillGroup.middleware(locationMiddleware))
+     .add(eventGroup)
+-    .add(PtyGroup.middleware(locationMiddleware))
+     .add(makeQuestionGroup(locationMiddleware, sessionLocationMiddleware))
+     .add(ReferenceGroup.middleware(locationMiddleware))
+     .add(ProjectCopyGroup.middleware(locationMiddleware))
+diff --git a/packages/protocol/src/errors.ts b/packages/protocol/src/errors.ts
+index 3b1eced63a..7673bd8374 100644
+--- a/packages/protocol/src/errors.ts
++++ b/packages/protocol/src/errors.ts
+@@ -100,12 +100,3 @@ export class ForbiddenError extends Schema.TaggedErrorClass<ForbiddenError>()(
+   { message: Schema.String },
+   { httpApiStatus: 403 },
+ ) {}
+-
+-export class PtyNotFoundError extends Schema.TaggedErrorClass<PtyNotFoundError>()(
+-  "PtyNotFoundError",
+-  {
+-    ptyID: Schema.String,
+-    message: Schema.String,
+-  },
+-  { httpApiStatus: 404 },
+-) {}
+diff --git a/packages/protocol/src/groups/pty.ts b/packages/protocol/src/groups/pty.ts
+deleted file mode 100644
+index a40b6c4b53..0000000000
+--- a/packages/protocol/src/groups/pty.ts
++++ /dev/null
+@@ -1,143 +0,0 @@
+-import { Pty } from "@opencode-ai/schema/pty"
+-import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
+-import { Location } from "@opencode-ai/schema/location"
+-import { Schema } from "effect"
+-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+-import { ForbiddenError, PtyNotFoundError } from "../errors"
+-import { LocationQuery, locationQueryOpenApi } from "./location"
+-
+-export const PTY_CONNECT_TICKET_QUERY = "ticket"
+-export const PTY_CONNECT_TOKEN_HEADER = "x-opencode-ticket"
+-export const PTY_CONNECT_TOKEN_HEADER_VALUE = "1"
+-
+-const PTY_CONNECT_PATH = /^\/api\/pty\/[^/]+\/connect$/
+-
+-// Authorization middleware skips credential checks when this matches; the PTY connect handler
+-// is then responsible for consuming and validating the ticket.
+-export function hasPtyConnectTicketURL(url: URL) {
+-  return PTY_CONNECT_PATH.test(url.pathname) && !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
+-}
+-
+-export const PtyGroup = HttpApiGroup.make("server.pty")
+-  .add(
+-    HttpApiEndpoint.get("pty.list", "/api/pty", {
+-      query: LocationQuery,
+-      success: Location.response(Schema.Array(Pty.Info)),
+-    })
+-      .annotateMerge(locationQueryOpenApi)
+-      .annotateMerge(
+-        OpenApi.annotations({
+-          identifier: "v2.pty.list",
+-          summary: "List PTY sessions",
+-          description: "List PTY sessions for a location, including exited sessions retained until removal.",
+-        }),
+-      ),
+-  )
+-  .add(
+-    HttpApiEndpoint.post("pty.create", "/api/pty", {
+-      query: LocationQuery,
+-      payload: Pty.CreateInput,
+-      success: Location.response(Pty.Info),
+-    })
+-      .annotateMerge(locationQueryOpenApi)
+-      .annotateMerge(
+-        OpenApi.annotations({
+-          identifier: "v2.pty.create",
+-          summary: "Create PTY session",
+-          description: "Create a pseudo-terminal session for a location.",
+-        }),
+-      ),
+-  )
+-  .add(
+-    HttpApiEndpoint.get("pty.get", "/api/pty/:ptyID", {
+-      params: { ptyID: Pty.ID },
+-      query: LocationQuery,
+-      success: Location.response(Pty.Info),
+-      error: PtyNotFoundError,
+-    })
+-      .annotateMerge(locationQueryOpenApi)
+-      .annotateMerge(
+-        OpenApi.annotations({
+-          identifier: "v2.pty.get",
+-          summary: "Get PTY session",
+-          description: "Get one PTY session, including its exit code once exited.",
+-        }),
+-      ),
+-  )
+-  .add(
+-    HttpApiEndpoint.put("pty.update", "/api/pty/:ptyID", {
+-      params: { ptyID: Pty.ID },
+-      query: LocationQuery,
+-      payload: Pty.UpdateInput,
+-      success: Location.response(Pty.Info),
+-      error: PtyNotFoundError,
+-    })
+-      .annotateMerge(locationQueryOpenApi)
+-      .annotateMerge(
+-        OpenApi.annotations({
+-          identifier: "v2.pty.update",
+-          summary: "Update PTY session",
+-          description: "Update the title or viewport size of one PTY session.",
+-        }),
+-      ),
+-  )
+-  .add(
+-    HttpApiEndpoint.delete("pty.remove", "/api/pty/:ptyID", {
+-      params: { ptyID: Pty.ID },
+-      query: LocationQuery,
+-      success: HttpApiSchema.NoContent,
+-      error: PtyNotFoundError,
+-    })
+-      .annotateMerge(locationQueryOpenApi)
+-      .annotateMerge(
+-        OpenApi.annotations({
+-          identifier: "v2.pty.remove",
+-          summary: "Remove PTY session",
+-          description: "Terminate and remove one PTY session.",
+-        }),
+-      ),
+-  )
+-  .add(
+-    HttpApiEndpoint.post("pty.connectToken", "/api/pty/:ptyID/connect-token", {
+-      params: { ptyID: Pty.ID },
+-      query: LocationQuery,
+-      success: Location.response(PtyTicket.ConnectToken),
+-      error: [ForbiddenError, PtyNotFoundError],
+-    })
+-      .annotateMerge(locationQueryOpenApi)
+-      .annotateMerge(
+-        OpenApi.annotations({
+-          identifier: "v2.pty.connectToken",
+-          summary: "Create PTY WebSocket token",
+-          description: "Create a short-lived single-use ticket for opening a PTY WebSocket connection.",
+-        }),
+-      ),
+-  )
+-  .add(
+-    // Query fields are decoded in the raw handler after the existence check so a missing
+-    // session responds with an empty 404 before any upgrade work.
+-    HttpApiEndpoint.get("pty.connect", "/api/pty/:ptyID/connect", {
+-      params: { ptyID: Pty.ID },
+-      success: Schema.Boolean,
+-      error: [ForbiddenError, PtyNotFoundError],
+-    }).annotateMerge(
+-      OpenApi.annotations({
+-        identifier: "v2.pty.connect",
+-        summary: "Connect to PTY session",
+-        description: "Establish a WebSocket connection streaming PTY output and accepting terminal input.",
+-        transform: (operation) => ({
+-          ...operation,
+-          "x-websocket": true,
+-          parameters: [
+-            ...(operation.parameters ?? []),
+-            ...["location[directory]", "location[workspace]", "cursor", PTY_CONNECT_TICKET_QUERY].map((name) => ({
+-              in: "query",
+-              name,
+-              schema: { type: "string" },
+-            })),
+-          ],
+-        }),
+-      }),
+-    ),
+-  )
+-  .annotateMerge(OpenApi.annotations({ title: "pty", description: "Experimental location-scoped PTY routes." }))
+diff --git a/packages/schema/src/event-manifest.ts b/packages/schema/src/event-manifest.ts
+index b681362e83..dfc581ed4e 100644
+--- a/packages/schema/src/event-manifest.ts
++++ b/packages/schema/src/event-manifest.ts
+@@ -16,7 +16,6 @@ import { PermissionV1 } from "./permission-v1"
+ import { Plugin } from "./plugin"
+ import { Project } from "./project"
+ import { ProjectDirectories } from "./project-directories"
+-import { Pty } from "./pty"
+ import { Question } from "./question"
+ import { QuestionV1 } from "./question-v1"
+ import { Reference } from "./reference"
+@@ -50,7 +49,6 @@ const featureDefinitions = Event.inventory(
+   ...Plugin.Event.Definitions,
+   ...ProjectDirectories.Event.Definitions,
+   ...FileSystemWatcher.Event.Definitions,
+-  ...Pty.Event.Definitions,
+   ...Question.Event.Definitions,
+ )
+ 
+diff --git a/packages/schema/src/index.ts b/packages/schema/src/index.ts
+index b7c8e5110f..1ded4cfa7d 100644
+--- a/packages/schema/src/index.ts
++++ b/packages/schema/src/index.ts
+@@ -19,8 +19,6 @@ export { Session } from "./session"
+ export { SessionInput } from "./session-input"
+ export { SessionMessage } from "./session-message"
+ export { Skill } from "./skill"
+-export { Pty } from "./pty"
+-export { PtyTicket } from "./pty-ticket"
+ export { Question } from "./question"
+ export { Workspace } from "./workspace"
+ export { Prompt, Source, FileAttachment, AgentAttachment } from "./prompt"
+diff --git a/packages/schema/src/pty-ticket.ts b/packages/schema/src/pty-ticket.ts
+deleted file mode 100644
+index 9b258575a9..0000000000
+--- a/packages/schema/src/pty-ticket.ts
++++ /dev/null
+@@ -1,10 +0,0 @@
+-export * as PtyTicket from "./pty-ticket"
+-
+-import { Schema } from "effect"
+-import { PositiveInt } from "./schema"
+-
+-export const ConnectToken = Schema.Struct({
+-  ticket: Schema.String,
+-  expires_in: PositiveInt,
+-}).annotate({ identifier: "PtyTicket.ConnectToken" })
+-export interface ConnectToken extends Schema.Schema.Type<typeof ConnectToken> {}
+diff --git a/packages/schema/src/pty.ts b/packages/schema/src/pty.ts
+deleted file mode 100644
+index 1392ece55f..0000000000
+--- a/packages/schema/src/pty.ts
++++ /dev/null
+@@ -1,58 +0,0 @@
+-export * as Pty from "./pty"
+-
+-import { Schema } from "effect"
+-import { optional } from "./schema"
+-import { define, inventory } from "./event"
+-import { ascending } from "./identifier"
+-import { NonNegativeInt, PositiveInt, statics } from "./schema"
+-
+-const IDSchema = Schema.String.check(Schema.isStartsWith("pty")).pipe(Schema.brand("PtyID"))
+-
+-export const ID = IDSchema.pipe(
+-  statics((schema: typeof IDSchema) => {
+-    const create = () => schema.make("pty_" + ascending())
+-    return {
+-      create,
+-      ascending: (id?: string) => (id === undefined ? create() : schema.make(id)),
+-    }
+-  }),
+-)
+-export type ID = typeof ID.Type
+-
+-export const Info = Schema.Struct({
+-  id: ID,
+-  title: Schema.String,
+-  command: Schema.String,
+-  args: Schema.Array(Schema.String),
+-  cwd: Schema.String,
+-  status: Schema.Literals(["running", "exited"]),
+-  pid: NonNegativeInt,
+-  exitCode: optional(NonNegativeInt),
+-}).annotate({ identifier: "Pty" })
+-export interface Info extends Schema.Schema.Type<typeof Info> {}
+-
+-const Created = define({ type: "pty.created", schema: { info: Info } })
+-const Updated = define({ type: "pty.updated", schema: { info: Info } })
+-const Exited = define({ type: "pty.exited", schema: { id: ID, exitCode: NonNegativeInt } })
+-const Deleted = define({ type: "pty.deleted", schema: { id: ID } })
+-export const Event = { Created, Updated, Exited, Deleted, Definitions: inventory(Created, Updated, Exited, Deleted) }
+-
+-export const CreateInput = Schema.Struct({
+-  command: optional(Schema.String),
+-  args: optional(Schema.Array(Schema.String)),
+-  cwd: optional(Schema.String),
+-  title: optional(Schema.String),
+-  env: optional(Schema.Record(Schema.String, Schema.String)),
+-})
+-export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}
+-
+-export const UpdateInput = Schema.Struct({
+-  title: optional(Schema.String),
+-  size: optional(
+-    Schema.Struct({
+-      rows: PositiveInt,
+-      cols: PositiveInt,
+-    }),
+-  ),
+-})
+-export interface UpdateInput extends Schema.Schema.Type<typeof UpdateInput> {}
+diff --git a/packages/schema/test/contract-hygiene.test.ts b/packages/schema/test/contract-hygiene.test.ts
+index cf83dbb288..cbf6132917 100644
+--- a/packages/schema/test/contract-hygiene.test.ts
++++ b/packages/schema/test/contract-hygiene.test.ts
+@@ -4,7 +4,6 @@ import { Agent } from "../src/agent"
+ import { FileSystem } from "../src/filesystem"
+ import { Model } from "../src/model"
+ import { Project } from "../src/project"
+-import { Pty } from "../src/pty"
+ import { Question } from "../src/question"
+ import { Session } from "../src/session"
+ import { SessionEvent } from "../src/session-event"
+@@ -30,7 +29,6 @@ describe("contract hygiene", () => {
+ 
+   test("current ID constructors expose create", () => {
+     expect(Question.ID.create()).toStartWith("que_")
+-    expect(Pty.ID.create()).toStartWith("pty_")
+   })
+ 
+   test("reusable public identifiers are stable and unique", () => {
+@@ -45,7 +43,6 @@ describe("contract hygiene", () => {
+       Project.Commands,
+       Project.Time,
+       Project.Info,
+-      Pty.Info,
+       Session.ListAnchor,
+     ].map((schema) => schema.ast.annotations?.identifier)
+ 
+diff --git a/packages/sdk/js/src/gen/sdk.gen.ts b/packages/sdk/js/src/gen/sdk.gen.ts
+index 2a8c30ae1f..e3794832b1 100644
+--- a/packages/sdk/js/src/gen/sdk.gen.ts
++++ b/packages/sdk/js/src/gen/sdk.gen.ts
+@@ -8,23 +8,6 @@ import type {
+   ProjectListResponses,
+   ProjectCurrentData,
+   ProjectCurrentResponses,
+-  PtyListData,
+-  PtyListResponses,
+-  PtyCreateData,
+-  PtyCreateResponses,
+-  PtyCreateErrors,
+-  PtyRemoveData,
+-  PtyRemoveResponses,
+-  PtyRemoveErrors,
+-  PtyGetData,
+-  PtyGetResponses,
+-  PtyGetErrors,
+-  PtyUpdateData,
+-  PtyUpdateResponses,
+-  PtyUpdateErrors,
+-  PtyConnectData,
+-  PtyConnectResponses,
+-  PtyConnectErrors,
+   ConfigGetData,
+   ConfigGetResponses,
+   ConfigUpdateData,
+@@ -254,76 +237,6 @@ class Project extends _HeyApiClient {
+   }
+ }
+ 
+-class Pty extends _HeyApiClient {
+-  /**
+-   * List all PTY sessions
+-   */
+-  public list<ThrowOnError extends boolean = false>(options?: Options<PtyListData, ThrowOnError>) {
+-    return (options?.client ?? this._client).get<PtyListResponses, unknown, ThrowOnError>({
+-      url: "/pty",
+-      ...options,
+-    })
+-  }
+-
+-  /**
+-   * Create a new PTY session
+-   */
+-  public create<ThrowOnError extends boolean = false>(options?: Options<PtyCreateData, ThrowOnError>) {
+-    return (options?.client ?? this._client).post<PtyCreateResponses, PtyCreateErrors, ThrowOnError>({
+-      url: "/pty",
+-      ...options,
+-      headers: {
+-        "Content-Type": "application/json",
+-        ...options?.headers,
+-      },
+-    })
+-  }
+-
+-  /**
+-   * Remove a PTY session
+-   */
+-  public remove<ThrowOnError extends boolean = false>(options: Options<PtyRemoveData, ThrowOnError>) {
+-    return (options.client ?? this._client).delete<PtyRemoveResponses, PtyRemoveErrors, ThrowOnError>({
+-      url: "/pty/{id}",
+-      ...options,
+-    })
+-  }
+-
+-  /**
+-   * Get PTY session info
+-   */
+-  public get<ThrowOnError extends boolean = false>(options: Options<PtyGetData, ThrowOnError>) {
+-    return (options.client ?? this._client).get<PtyGetResponses, PtyGetErrors, ThrowOnError>({
+-      url: "/pty/{id}",
+-      ...options,
+-    })
+-  }
+-
+-  /**
+-   * Update PTY session
+-   */
+-  public update<ThrowOnError extends boolean = false>(options: Options<PtyUpdateData, ThrowOnError>) {
+-    return (options.client ?? this._client).put<PtyUpdateResponses, PtyUpdateErrors, ThrowOnError>({
+-      url: "/pty/{id}",
+-      ...options,
+-      headers: {
+-        "Content-Type": "application/json",
+-        ...options.headers,
+-      },
+-    })
+-  }
+-
+-  /**
+-   * Connect to a PTY session
+-   */
+-  public connect<ThrowOnError extends boolean = false>(options: Options<PtyConnectData, ThrowOnError>) {
+-    return (options.client ?? this._client).get<PtyConnectResponses, PtyConnectErrors, ThrowOnError>({
+-      url: "/pty/{id}/connect",
+-      ...options,
+-    })
+-  }
+-}
+-
+ class Config extends _HeyApiClient {
+   /**
+    * Get config info
+@@ -1125,7 +1038,6 @@ export class OpencodeClient extends _HeyApiClient {
+   }
+   global = new Global({ client: this._client })
+   project = new Project({ client: this._client })
+-  pty = new Pty({ client: this._client })
+   config = new Config({ client: this._client })
+   tool = new Tool({ client: this._client })
+   instance = new Instance({ client: this._client })
+diff --git a/packages/sdk/js/src/gen/types.gen.ts b/packages/sdk/js/src/gen/types.gen.ts
+index 1e27453f4d..65b56620df 100644
+--- a/packages/sdk/js/src/gen/types.gen.ts
++++ b/packages/sdk/js/src/gen/types.gen.ts
+@@ -622,45 +622,6 @@ export type EventTuiToastShow = {
+   }
+ }
+ 
+-export type Pty = {
+-  id: string
+-  title: string
+-  command: string
+-  args: Array<string>
+-  cwd: string
+-  status: "running" | "exited"
+-  pid: number
+-}
+-
+-export type EventPtyCreated = {
+-  type: "pty.created"
+-  properties: {
+-    info: Pty
+-  }
+-}
+-
+-export type EventPtyUpdated = {
+-  type: "pty.updated"
+-  properties: {
+-    info: Pty
+-  }
+-}
+-
+-export type EventPtyExited = {
+-  type: "pty.exited"
+-  properties: {
+-    id: string
+-    exitCode: number
+-  }
+-}
+-
+-export type EventPtyDeleted = {
+-  type: "pty.deleted"
+-  properties: {
+-    id: string
+-  }
+-}
+-
+ export type EventServerConnected = {
+   type: "server.connected"
+   properties: {
+@@ -692,10 +653,6 @@ export type Event =
+   | EventTuiPromptAppend
+   | EventTuiCommandExecute
+   | EventTuiToastShow
+-  | EventPtyCreated
+-  | EventPtyUpdated
+-  | EventPtyExited
+-  | EventPtyDeleted
+   | EventServerConnected
+ 
+ export type GlobalEvent = {
+@@ -1644,181 +1601,6 @@ export type ProjectCurrentResponses = {
+ 
+ export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses]
+ 
+-export type PtyListData = {
+-  body?: never
+-  path?: never
+-  query?: {
+-    directory?: string
+-  }
+-  url: "/pty"
+-}
+-
+-export type PtyListResponses = {
+-  /**
+-   * List of sessions
+-   */
+-  200: Array<Pty>
+-}
+-
+-export type PtyListResponse = PtyListResponses[keyof PtyListResponses]
+-
+-export type PtyCreateData = {
+-  body?: {
+-    command?: string
+-    args?: Array<string>
+-    cwd?: string
+-    title?: string
+-    env?: {
+-      [key: string]: string
+-    }
+-  }
+-  path?: never
+-  query?: {
+-    directory?: string
+-  }
+-  url: "/pty"
+-}
+-
+-export type PtyCreateErrors = {
+-  /**
+-   * Bad request
+-   */
+-  400: BadRequestError
+-}
+-
+-export type PtyCreateError = PtyCreateErrors[keyof PtyCreateErrors]
+-
+-export type PtyCreateResponses = {
+-  /**
+-   * Created session
+-   */
+-  200: Pty
+-}
+-
+-export type PtyCreateResponse = PtyCreateResponses[keyof PtyCreateResponses]
+-
+-export type PtyRemoveData = {
+-  body?: never
+-  path: {
+-    id: string
+-  }
+-  query?: {
+-    directory?: string
+-  }
+-  url: "/pty/{id}"
+-}
+-
+-export type PtyRemoveErrors = {
+-  /**
+-   * Not found
+-   */
+-  404: NotFoundError
+-}
+-
+-export type PtyRemoveError = PtyRemoveErrors[keyof PtyRemoveErrors]
+-
+-export type PtyRemoveResponses = {
+-  /**
+-   * Session removed
+-   */
+-  200: boolean
+-}
+-
+-export type PtyRemoveResponse = PtyRemoveResponses[keyof PtyRemoveResponses]
+-
+-export type PtyGetData = {
+-  body?: never
+-  path: {
+-    id: string
+-  }
+-  query?: {
+-    directory?: string
+-  }
+-  url: "/pty/{id}"
+-}
+-
+-export type PtyGetErrors = {
+-  /**
+-   * Not found
+-   */
+-  404: NotFoundError
+-}
+-
+-export type PtyGetError = PtyGetErrors[keyof PtyGetErrors]
+-
+-export type PtyGetResponses = {
+-  /**
+-   * Session info
+-   */
+-  200: Pty
+-}
+-
+-export type PtyGetResponse = PtyGetResponses[keyof PtyGetResponses]
+-
+-export type PtyUpdateData = {
+-  body?: {
+-    title?: string
+-    size?: {
+-      rows: number
+-      cols: number
+-    }
+-  }
+-  path: {
+-    id: string
+-  }
+-  query?: {
+-    directory?: string
+-  }
+-  url: "/pty/{id}"
+-}
+-
+-export type PtyUpdateErrors = {
+-  /**
+-   * Bad request
+-   */
+-  400: BadRequestError
+-}
+-
+-export type PtyUpdateError = PtyUpdateErrors[keyof PtyUpdateErrors]
+-
+-export type PtyUpdateResponses = {
+-  /**
+-   * Updated session
+-   */
+-  200: Pty
+-}
+-
+-export type PtyUpdateResponse = PtyUpdateResponses[keyof PtyUpdateResponses]
+-
+-export type PtyConnectData = {
+-  body?: never
+-  path: {
+-    id: string
+-  }
+-  query?: {
+-    directory?: string
+-  }
+-  url: "/pty/{id}/connect"
+-}
+-
+-export type PtyConnectErrors = {
+-  /**
+-   * Not found
+-   */
+-  404: NotFoundError
+-}
+-
+-export type PtyConnectError = PtyConnectErrors[keyof PtyConnectErrors]
+-
+-export type PtyConnectResponses = {
+-  /**
+-   * Connected session
+-   */
+-  200: boolean
+-}
+-
+-export type PtyConnectResponse = PtyConnectResponses[keyof PtyConnectResponses]
+-
+ export type ConfigGetData = {
+   body?: never
+   path?: never
+diff --git a/packages/sdk/js/src/v2/gen/sdk.gen.ts b/packages/sdk/js/src/v2/gen/sdk.gen.ts
+index d6e7df5342..7caed1aa60 100644
+--- a/packages/sdk/js/src/v2/gen/sdk.gen.ts
++++ b/packages/sdk/js/src/v2/gen/sdk.gen.ts
+@@ -140,22 +140,6 @@ import type {
+   ProviderOauthAuthorizeResponses,
+   ProviderOauthCallbackErrors,
+   ProviderOauthCallbackResponses,
+-  PtyConnectErrors,
+-  PtyConnectResponses,
+-  PtyConnectTokenErrors,
+-  PtyConnectTokenResponses,
+-  PtyCreateErrors,
+-  PtyCreateResponses,
+-  PtyGetErrors,
+-  PtyGetResponses,
+-  PtyListErrors,
+-  PtyListResponses,
+-  PtyRemoveErrors,
+-  PtyRemoveResponses,
+-  PtyShellsErrors,
+-  PtyShellsResponses,
+-  PtyUpdateErrors,
+-  PtyUpdateResponses,
+   QuestionAnswer,
+   QuestionListErrors,
+   QuestionListResponses,
+@@ -300,20 +284,6 @@ import type {
+   V2ProviderGetResponses,
+   V2ProviderListErrors,
+   V2ProviderListResponses,
+-  V2PtyConnectErrors,
+-  V2PtyConnectResponses,
+-  V2PtyConnectTokenErrors,
+-  V2PtyConnectTokenResponses,
+-  V2PtyCreateErrors,
+-  V2PtyCreateResponses,
+-  V2PtyGetErrors,
+-  V2PtyGetResponses,
+-  V2PtyListErrors,
+-  V2PtyListResponses,
+-  V2PtyRemoveErrors,
+-  V2PtyRemoveResponses,
+-  V2PtyUpdateErrors,
+-  V2PtyUpdateResponses,
+   V2QuestionRequestListErrors,
+   V2QuestionRequestListResponses,
+   V2ReferenceListErrors,
+@@ -2479,291 +2449,6 @@ export class Project extends HeyApiClient {
+   }
+ }
+ 
+-export class Pty extends HeyApiClient {
+-  /**
+-   * List available shells
+-   *
+-   * Get a list of available shells on the system.
+-   */
+-  public shells<ThrowOnError extends boolean = false>(
+-    parameters?: {
+-      directory?: string
+-      workspace?: string
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "query", key: "directory" },
+-            { in: "query", key: "workspace" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).get<PtyShellsResponses, PtyShellsErrors, ThrowOnError>({
+-      url: "/pty/shells",
+-      ...options,
+-      ...params,
+-    })
+-  }
+-
+-  /**
+-   * List PTY sessions
+-   *
+-   * Get a list of all active pseudo-terminal (PTY) sessions managed by OpenCode.
+-   */
+-  public list<ThrowOnError extends boolean = false>(
+-    parameters?: {
+-      directory?: string
+-      workspace?: string
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "query", key: "directory" },
+-            { in: "query", key: "workspace" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).get<PtyListResponses, PtyListErrors, ThrowOnError>({
+-      url: "/pty",
+-      ...options,
+-      ...params,
+-    })
+-  }
+-
+-  /**
+-   * Create PTY session
+-   *
+-   * Create a new pseudo-terminal (PTY) session for running shell commands and processes.
+-   */
+-  public create<ThrowOnError extends boolean = false>(
+-    parameters?: {
+-      directory?: string
+-      workspace?: string
+-      command?: string
+-      args?: Array<string>
+-      cwd?: string
+-      title?: string
+-      env?: {
+-        [key: string]: string
+-      }
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "query", key: "directory" },
+-            { in: "query", key: "workspace" },
+-            { in: "body", key: "command" },
+-            { in: "body", key: "args" },
+-            { in: "body", key: "cwd" },
+-            { in: "body", key: "title" },
+-            { in: "body", key: "env" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).post<PtyCreateResponses, PtyCreateErrors, ThrowOnError>({
+-      url: "/pty",
+-      ...options,
+-      ...params,
+-      headers: {
+-        "Content-Type": "application/json",
+-        ...options?.headers,
+-        ...params.headers,
+-      },
+-    })
+-  }
+-
+-  /**
+-   * Remove PTY session
+-   *
+-   * Remove and terminate a specific pseudo-terminal (PTY) session.
+-   */
+-  public remove<ThrowOnError extends boolean = false>(
+-    parameters: {
+-      ptyID: string
+-      directory?: string
+-      workspace?: string
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "path", key: "ptyID" },
+-            { in: "query", key: "directory" },
+-            { in: "query", key: "workspace" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).delete<PtyRemoveResponses, PtyRemoveErrors, ThrowOnError>({
+-      url: "/pty/{ptyID}",
+-      ...options,
+-      ...params,
+-    })
+-  }
+-
+-  /**
+-   * Get PTY session
+-   *
+-   * Retrieve detailed information about a specific pseudo-terminal (PTY) session.
+-   */
+-  public get<ThrowOnError extends boolean = false>(
+-    parameters: {
+-      ptyID: string
+-      directory?: string
+-      workspace?: string
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "path", key: "ptyID" },
+-            { in: "query", key: "directory" },
+-            { in: "query", key: "workspace" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).get<PtyGetResponses, PtyGetErrors, ThrowOnError>({
+-      url: "/pty/{ptyID}",
+-      ...options,
+-      ...params,
+-    })
+-  }
+-
+-  /**
+-   * Update PTY session
+-   *
+-   * Update properties of an existing pseudo-terminal (PTY) session.
+-   */
+-  public update<ThrowOnError extends boolean = false>(
+-    parameters: {
+-      ptyID: string
+-      directory?: string
+-      workspace?: string
+-      title?: string
+-      size?: {
+-        rows: number
+-        cols: number
+-      }
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "path", key: "ptyID" },
+-            { in: "query", key: "directory" },
+-            { in: "query", key: "workspace" },
+-            { in: "body", key: "title" },
+-            { in: "body", key: "size" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).put<PtyUpdateResponses, PtyUpdateErrors, ThrowOnError>({
+-      url: "/pty/{ptyID}",
+-      ...options,
+-      ...params,
+-      headers: {
+-        "Content-Type": "application/json",
+-        ...options?.headers,
+-        ...params.headers,
+-      },
+-    })
+-  }
+-
+-  /**
+-   * Create PTY WebSocket token
+-   *
+-   * Create a short-lived ticket for opening a PTY WebSocket connection.
+-   */
+-  public connectToken<ThrowOnError extends boolean = false>(
+-    parameters: {
+-      ptyID: string
+-      directory?: string
+-      workspace?: string
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "path", key: "ptyID" },
+-            { in: "query", key: "directory" },
+-            { in: "query", key: "workspace" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).post<PtyConnectTokenResponses, PtyConnectTokenErrors, ThrowOnError>({
+-      url: "/pty/{ptyID}/connect-token",
+-      ...options,
+-      ...params,
+-    })
+-  }
+-
+-  /**
+-   * Connect to PTY session
+-   *
+-   * Establish a WebSocket connection to interact with a pseudo-terminal (PTY) session in real-time.
+-   */
+-  public connect<ThrowOnError extends boolean = false>(
+-    parameters: {
+-      ptyID: string
+-      directory?: string
+-      workspace?: string
+-      cursor?: string
+-      ticket?: string
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "path", key: "ptyID" },
+-            { in: "query", key: "directory" },
+-            { in: "query", key: "workspace" },
+-            { in: "query", key: "cursor" },
+-            { in: "query", key: "ticket" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).get<PtyConnectResponses, PtyConnectErrors, ThrowOnError>({
+-      url: "/pty/{ptyID}/connect",
+-      ...options,
+-      ...params,
+-    })
+-  }
+-}
+-
+ export class Question extends HeyApiClient {
+   /**
+    * List pending questions
+@@ -6283,258 +5968,6 @@ export class Event2 extends HeyApiClient {
+   }
+ }
+ 
+-export class Pty2 extends HeyApiClient {
+-  /**
+-   * List PTY sessions
+-   *
+-   * List PTY sessions for a location, including exited sessions retained until removal.
+-   */
+-  public list<ThrowOnError extends boolean = false>(
+-    parameters?: {
+-      location?: {
+-        directory?: string
+-        workspace?: string
+-      }
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+-    return (options?.client ?? this.client).get<V2PtyListResponses, V2PtyListErrors, ThrowOnError>({
+-      url: "/api/pty",
+-      ...options,
+-      ...params,
+-    })
+-  }
+-
+-  /**
+-   * Create PTY session
+-   *
+-   * Create a pseudo-terminal session for a location.
+-   */
+-  public create<ThrowOnError extends boolean = false>(
+-    parameters?: {
+-      location?: {
+-        directory?: string
+-        workspace?: string
+-      }
+-      command?: string
+-      args?: Array<string>
+-      cwd?: string
+-      title?: string
+-      env?: {
+-        [key: string]: string
+-      }
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "query", key: "location" },
+-            { in: "body", key: "command" },
+-            { in: "body", key: "args" },
+-            { in: "body", key: "cwd" },
+-            { in: "body", key: "title" },
+-            { in: "body", key: "env" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).post<V2PtyCreateResponses, V2PtyCreateErrors, ThrowOnError>({
+-      url: "/api/pty",
+-      ...options,
+-      ...params,
+-      headers: {
+-        "Content-Type": "application/json",
+-        ...options?.headers,
+-        ...params.headers,
+-      },
+-    })
+-  }
+-
+-  /**
+-   * Remove PTY session
+-   *
+-   * Terminate and remove one PTY session.
+-   */
+-  public remove<ThrowOnError extends boolean = false>(
+-    parameters: {
+-      ptyID: string
+-      location?: {
+-        directory?: string
+-        workspace?: string
+-      }
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "path", key: "ptyID" },
+-            { in: "query", key: "location" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).delete<V2PtyRemoveResponses, V2PtyRemoveErrors, ThrowOnError>({
+-      url: "/api/pty/{ptyID}",
+-      ...options,
+-      ...params,
+-    })
+-  }
+-
+-  /**
+-   * Get PTY session
+-   *
+-   * Get one PTY session, including its exit code once exited.
+-   */
+-  public get<ThrowOnError extends boolean = false>(
+-    parameters: {
+-      ptyID: string
+-      location?: {
+-        directory?: string
+-        workspace?: string
+-      }
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "path", key: "ptyID" },
+-            { in: "query", key: "location" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).get<V2PtyGetResponses, V2PtyGetErrors, ThrowOnError>({
+-      url: "/api/pty/{ptyID}",
+-      ...options,
+-      ...params,
+-    })
+-  }
+-
+-  /**
+-   * Update PTY session
+-   *
+-   * Update the title or viewport size of one PTY session.
+-   */
+-  public update<ThrowOnError extends boolean = false>(
+-    parameters: {
+-      ptyID: string
+-      location?: {
+-        directory?: string
+-        workspace?: string
+-      }
+-      title?: string
+-      size?: {
+-        rows: number
+-        cols: number
+-      }
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "path", key: "ptyID" },
+-            { in: "query", key: "location" },
+-            { in: "body", key: "title" },
+-            { in: "body", key: "size" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).put<V2PtyUpdateResponses, V2PtyUpdateErrors, ThrowOnError>({
+-      url: "/api/pty/{ptyID}",
+-      ...options,
+-      ...params,
+-      headers: {
+-        "Content-Type": "application/json",
+-        ...options?.headers,
+-        ...params.headers,
+-      },
+-    })
+-  }
+-
+-  /**
+-   * Create PTY WebSocket token
+-   *
+-   * Create a short-lived single-use ticket for opening a PTY WebSocket connection.
+-   */
+-  public connectToken<ThrowOnError extends boolean = false>(
+-    parameters: {
+-      ptyID: string
+-      location?: {
+-        directory?: string
+-        workspace?: string
+-      }
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "path", key: "ptyID" },
+-            { in: "query", key: "location" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).post<V2PtyConnectTokenResponses, V2PtyConnectTokenErrors, ThrowOnError>({
+-      url: "/api/pty/{ptyID}/connect-token",
+-      ...options,
+-      ...params,
+-    })
+-  }
+-
+-  /**
+-   * Connect to PTY session
+-   *
+-   * Establish a WebSocket connection streaming PTY output and accepting terminal input.
+-   */
+-  public connect<ThrowOnError extends boolean = false>(
+-    parameters: {
+-      ptyID: string
+-      "location[directory]"?: string
+-      "location[workspace]"?: string
+-      cursor?: string
+-      ticket?: string
+-    },
+-    options?: Options<never, ThrowOnError>,
+-  ) {
+-    const params = buildClientParams(
+-      [parameters],
+-      [
+-        {
+-          args: [
+-            { in: "path", key: "ptyID" },
+-            { in: "query", key: "location[directory]" },
+-            { in: "query", key: "location[workspace]" },
+-            { in: "query", key: "cursor" },
+-            { in: "query", key: "ticket" },
+-          ],
+-        },
+-      ],
+-    )
+-    return (options?.client ?? this.client).get<V2PtyConnectResponses, V2PtyConnectErrors, ThrowOnError>({
+-      url: "/api/pty/{ptyID}/connect",
+-      ...options,
+-      ...params,
+-    })
+-  }
+-}
+-
+ export class Request2 extends HeyApiClient {
+   /**
+    * List pending question requests
+@@ -6776,11 +6209,6 @@ export class V2 extends HeyApiClient {
+     return (this._event ??= new Event2({ client: this.client }))
+   }
+ 
+-  private _pty?: Pty2
+-  get pty(): Pty2 {
+-    return (this._pty ??= new Pty2({ client: this.client }))
+-  }
+-
+   private _question?: Question3
+   get question(): Question3 {
+     return (this._question ??= new Question3({ client: this.client }))
+@@ -6890,11 +6318,6 @@ export class OpencodeClient extends HeyApiClient {
+     return (this._project ??= new Project({ client: this.client }))
+   }
+ 
+-  private _pty?: Pty
+-  get pty(): Pty {
+-    return (this._pty ??= new Pty({ client: this.client }))
+-  }
+-
+   private _question?: Question
+   get question(): Question {
+     return (this._question ??= new Question({ client: this.client }))
+diff --git a/packages/sdk/js/src/v2/gen/types.gen.ts b/packages/sdk/js/src/v2/gen/types.gen.ts
+index 385987c710..7bfd4addfe 100644
+--- a/packages/sdk/js/src/v2/gen/types.gen.ts
++++ b/packages/sdk/js/src/v2/gen/types.gen.ts
+@@ -58,10 +58,6 @@ export type Event =
+   | EventPluginAdded
+   | EventProjectDirectoriesUpdated
+   | EventFileWatcherUpdated
+-  | EventPtyCreated
+-  | EventPtyUpdated
+-  | EventPtyExited
+-  | EventPtyDeleted
+   | EventQuestionV2Asked
+   | EventQuestionV2Replied
+   | EventQuestionV2Rejected
+@@ -638,17 +634,6 @@ export type Prompt = {
+   agents?: Array<PromptAgentAttachment>
+ }
+ 
+-export type Pty = {
+-  id: string
+-  title: string
+-  command: string
+-  args: Array<string>
+-  cwd: string
+-  status: "running" | "exited"
+-  pid: number
+-  exitCode?: number
+-}
+-
+ export type Todo = {
+   /**
+    * Brief description of the task
+@@ -1279,35 +1264,6 @@ export type GlobalEvent = {
+           event: "add" | "change" | "unlink"
+         }
+       }
+-    | {
+-        id: string
+-        type: "pty.created"
+-        properties: {
+-          info: Pty
+-        }
+-      }
+-    | {
+-        id: string
+-        type: "pty.updated"
+-        properties: {
+-          info: Pty
+-        }
+-      }
+-    | {
+-        id: string
+-        type: "pty.exited"
+-        properties: {
+-          id: string
+-          exitCode: number
+-        }
+-      }
+-    | {
+-        id: string
+-        type: "pty.deleted"
+-        properties: {
+-          id: string
+-        }
+-      }
+     | {
+         id: string
+         type: "question.v2.asked"
+@@ -2375,17 +2331,6 @@ export type ProjectNotFoundError = {
+   message: string
+ }
+ 
+-export type PtyNotFoundError = {
+-  _tag: "PtyNotFoundError"
+-  ptyID: string
+-  message: string
+-}
+-
+-export type PtyForbiddenError = {
+-  _tag: "PtyForbiddenError"
+-  message: string
+-}
+-
+ export type QuestionRequest = {
+   id: string
+   sessionID: string
+@@ -2842,10 +2787,6 @@ export type V2Event =
+   | PluginAdded
+   | ProjectDirectoriesUpdated
+   | FileWatcherUpdated
+-  | PtyCreated
+-  | PtyUpdated
+-  | PtyExited
+-  | PtyDeleted
+   | QuestionV2Asked
+   | QuestionV2Replied
+   | QuestionV2Rejected
+@@ -3781,11 +3722,6 @@ export type ProjectDirectories = Array<{
+   strategy?: string
+ }>
+ 
+-export type PtyTicketConnectToken = {
+-  ticket: string
+-  expires_in: number
+-}
+-
+ export type WorkspaceEventConnectionStatus = {
+   workspaceID: string
+   status: "connected" | "connecting" | "disconnected" | "error"
+@@ -5427,75 +5363,6 @@ export type FileWatcherUpdated = {
+   }
+ }
+ 
+-export type PtyCreated = {
+-  id: string
+-  metadata?: {
+-    [key: string]: unknown
+-  }
+-  type: "pty.created"
+-  durable?: {
+-    aggregateID: string
+-    seq: number
+-    version: number
+-  }
+-  location?: LocationRef
+-  data: {
+-    info: Pty
+-  }
+-}
+-
+-export type PtyUpdated = {
+-  id: string
+-  metadata?: {
+-    [key: string]: unknown
+-  }
+-  type: "pty.updated"
+-  durable?: {
+-    aggregateID: string
+-    seq: number
+-    version: number
+-  }
+-  location?: LocationRef
+-  data: {
+-    info: Pty
+-  }
+-}
+-
+-export type PtyExited = {
+-  id: string
+-  metadata?: {
+-    [key: string]: unknown
+-  }
+-  type: "pty.exited"
+-  durable?: {
+-    aggregateID: string
+-    seq: number
+-    version: number
+-  }
+-  location?: LocationRef
+-  data: {
+-    id: string
+-    exitCode: number
+-  }
+-}
+-
+-export type PtyDeleted = {
+-  id: string
+-  metadata?: {
+-    [key: string]: unknown
+-  }
+-  type: "pty.deleted"
+-  durable?: {
+-    aggregateID: string
+-    seq: number
+-    version: number
+-  }
+-  location?: LocationRef
+-  data: {
+-    id: string
+-  }
+-}
+-
+ export type QuestionV2Asked = {
+   id: string
+   metadata?: {
+@@ -6637,39 +6504,6 @@ export type EventFileWatcherUpdated = {
+   }
+ }
+ 
+-export type EventPtyCreated = {
+-  id: string
+-  type: "pty.created"
+-  properties: {
+-    info: Pty
+-  }
+-}
+-
+-export type EventPtyUpdated = {
+-  id: string
+-  type: "pty.updated"
+-  properties: {
+-    info: Pty
+-  }
+-}
+-
+-export type EventPtyExited = {
+-  id: string
+-  type: "pty.exited"
+-  properties: {
+-    id: string
+-    exitCode: number
+-  }
+-}
+-
+-export type EventPtyDeleted = {
+-  id: string
+-  type: "pty.deleted"
+-  properties: {
+-    id: string
+-  }
+-}
+-
+ export type EventQuestionV2Asked = {
+   id: string
+   type: "question.v2.asked"
+@@ -8563,479 +8397,237 @@ export type ExperimentalProjectCopyGenerateNameResponses = {
+ export type ExperimentalProjectCopyGenerateNameResponse =
+   ExperimentalProjectCopyGenerateNameResponses[keyof ExperimentalProjectCopyGenerateNameResponses]
+ 
+-export type PtyShellsData = {
+-  body?: never
+-  path?: never
+-  query?: {
+-    directory?: string
+-    workspace?: string
+-  }
+-  url: "/pty/shells"
+-}
+-
+-export type PtyShellsErrors = {
+-  /**
+-   * Bad request
+-   */
+-  400: BadRequestError
+-}
+-
+-export type PtyShellsError = PtyShellsErrors[keyof PtyShellsErrors]
+-
+-export type PtyShellsResponses = {
+-  /**
+-   * List of shells
+-   */
+-  200: Array<{
+-    path: string
+-    name: string
+-    acceptable: boolean
+-  }>
+-}
+-
+-export type PtyShellsResponse = PtyShellsResponses[keyof PtyShellsResponses]
+-
+-export type PtyListData = {
++export type QuestionListData = {
+   body?: never
+   path?: never
+   query?: {
+     directory?: string
+     workspace?: string
+   }
+-  url: "/pty"
++  url: "/question"
+ }
+ 
+-export type PtyListErrors = {
++export type QuestionListErrors = {
+   /**
+    * Bad request
+    */
+   400: BadRequestError
+ }
+ 
+-export type PtyListError = PtyListErrors[keyof PtyListErrors]
++export type QuestionListError = QuestionListErrors[keyof QuestionListErrors]
+ 
+-export type PtyListResponses = {
++export type QuestionListResponses = {
+   /**
+-   * List of sessions
++   * List of pending questions
+    */
+-  200: Array<Pty>
++  200: Array<QuestionRequest>
+ }
+ 
+-export type PtyListResponse = PtyListResponses[keyof PtyListResponses]
++export type QuestionListResponse = QuestionListResponses[keyof QuestionListResponses]
+ 
+-export type PtyCreateData = {
++export type QuestionReplyData = {
+   body?: {
+-    command?: string
+-    args?: Array<string>
+-    cwd?: string
+-    title?: string
+-    env?: {
+-      [key: string]: string
+-    }
++    /**
++     * User answers in order of questions (each answer is an array of selected labels)
++     */
++    answers: Array<QuestionAnswer>
++  }
++  path: {
++    requestID: string
+   }
+-  path?: never
+   query?: {
+     directory?: string
+     workspace?: string
+   }
+-  url: "/pty"
++  url: "/question/{requestID}/reply"
+ }
+ 
+-export type PtyCreateErrors = {
++export type QuestionReplyErrors = {
+   /**
+    * BadRequest | InvalidRequestError
+    */
+   400: EffectHttpApiErrorBadRequest | InvalidRequestError
++  /**
++   * QuestionNotFoundError
++   */
++  404: QuestionNotFoundError
+ }
+ 
+-export type PtyCreateError = PtyCreateErrors[keyof PtyCreateErrors]
++export type QuestionReplyError = QuestionReplyErrors[keyof QuestionReplyErrors]
+ 
+-export type PtyCreateResponses = {
++export type QuestionReplyResponses = {
+   /**
+-   * Created session
++   * Question answered successfully
+    */
+-  200: Pty
++  200: boolean
+ }
+ 
+-export type PtyCreateResponse = PtyCreateResponses[keyof PtyCreateResponses]
++export type QuestionReplyResponse = QuestionReplyResponses[keyof QuestionReplyResponses]
+ 
+-export type PtyRemoveData = {
++export type QuestionRejectData = {
+   body?: never
+   path: {
+-    ptyID: string
++    requestID: string
+   }
+   query?: {
+     directory?: string
+     workspace?: string
+   }
+-  url: "/pty/{ptyID}"
++  url: "/question/{requestID}/reject"
+ }
+ 
+-export type PtyRemoveErrors = {
++export type QuestionRejectErrors = {
+   /**
+-   * Bad request
++   * BadRequest | InvalidRequestError
+    */
+-  400: BadRequestError
++  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+   /**
+-   * PtyNotFoundError
++   * QuestionNotFoundError
+    */
+-  404: PtyNotFoundError
++  404: QuestionNotFoundError
+ }
+ 
+-export type PtyRemoveError = PtyRemoveErrors[keyof PtyRemoveErrors]
++export type QuestionRejectError = QuestionRejectErrors[keyof QuestionRejectErrors]
+ 
+-export type PtyRemoveResponses = {
++export type QuestionRejectResponses = {
+   /**
+-   * Session removed
++   * Question rejected successfully
+    */
+   200: boolean
+ }
+ 
+-export type PtyRemoveResponse = PtyRemoveResponses[keyof PtyRemoveResponses]
++export type QuestionRejectResponse = QuestionRejectResponses[keyof QuestionRejectResponses]
+ 
+-export type PtyGetData = {
++export type PermissionListData = {
+   body?: never
+-  path: {
+-    ptyID: string
+-  }
++  path?: never
+   query?: {
+     directory?: string
+     workspace?: string
+   }
+-  url: "/pty/{ptyID}"
++  url: "/permission"
+ }
+ 
+-export type PtyGetErrors = {
++export type PermissionListErrors = {
+   /**
+    * Bad request
+    */
+   400: BadRequestError
+-  /**
+-   * PtyNotFoundError
+-   */
+-  404: PtyNotFoundError
+ }
+ 
+-export type PtyGetError = PtyGetErrors[keyof PtyGetErrors]
++export type PermissionListError = PermissionListErrors[keyof PermissionListErrors]
+ 
+-export type PtyGetResponses = {
++export type PermissionListResponses = {
+   /**
+-   * Session info
++   * List of pending permissions
+    */
+-  200: Pty
++  200: Array<PermissionRequest>
+ }
+ 
+-export type PtyGetResponse = PtyGetResponses[keyof PtyGetResponses]
++export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
+ 
+-export type PtyUpdateData = {
++export type PermissionReplyData = {
+   body?: {
+-    title?: string
+-    size?: {
+-      rows: number
+-      cols: number
+-    }
++    reply: "once" | "always" | "reject"
++    message?: string
+   }
+   path: {
+-    ptyID: string
++    requestID: string
+   }
+   query?: {
+     directory?: string
+     workspace?: string
+   }
+-  url: "/pty/{ptyID}"
++  url: "/permission/{requestID}/reply"
+ }
+ 
+-export type PtyUpdateErrors = {
++export type PermissionReplyErrors = {
+   /**
+    * BadRequest | InvalidRequestError
+    */
+   400: EffectHttpApiErrorBadRequest | InvalidRequestError
+   /**
+-   * PtyNotFoundError
++   * PermissionNotFoundError
+    */
+-  404: PtyNotFoundError
++  404: PermissionNotFoundError
+ }
+ 
+-export type PtyUpdateError = PtyUpdateErrors[keyof PtyUpdateErrors]
++export type PermissionReplyError = PermissionReplyErrors[keyof PermissionReplyErrors]
+ 
+-export type PtyUpdateResponses = {
++export type PermissionReplyResponses = {
+   /**
+-   * Updated session
++   * Permission processed successfully
+    */
+-  200: Pty
++  200: boolean
+ }
+ 
+-export type PtyUpdateResponse = PtyUpdateResponses[keyof PtyUpdateResponses]
++export type PermissionReplyResponse = PermissionReplyResponses[keyof PermissionReplyResponses]
+ 
+-export type PtyConnectTokenData = {
++export type ProviderListData = {
+   body?: never
+-  path: {
+-    ptyID: string
+-  }
++  path?: never
+   query?: {
+     directory?: string
+     workspace?: string
+   }
+-  url: "/pty/{ptyID}/connect-token"
++  url: "/provider"
+ }
+ 
+-export type PtyConnectTokenErrors = {
++export type ProviderListErrors = {
+   /**
+    * Bad request
+    */
+   400: BadRequestError
+-  /**
+-   * PtyForbiddenError
+-   */
+-  403: PtyForbiddenError
+-  /**
+-   * PtyNotFoundError
+-   */
+-  404: PtyNotFoundError
+ }
+ 
+-export type PtyConnectTokenError = PtyConnectTokenErrors[keyof PtyConnectTokenErrors]
++export type ProviderListError = ProviderListErrors[keyof ProviderListErrors]
+ 
+-export type PtyConnectTokenResponses = {
++export type ProviderListResponses = {
+   /**
+-   * WebSocket connect token
++   * List of providers
+    */
+-  200: PtyTicketConnectToken
++  200: {
++    all: Array<Provider>
++    default: {
++      [key: string]: string
++    }
++    connected: Array<string>
++  }
+ }
+ 
+-export type PtyConnectTokenResponse = PtyConnectTokenResponses[keyof PtyConnectTokenResponses]
++export type ProviderListResponse = ProviderListResponses[keyof ProviderListResponses]
+ 
+-export type QuestionListData = {
++export type ProviderAuthData = {
+   body?: never
+   path?: never
+   query?: {
+     directory?: string
+     workspace?: string
+   }
+-  url: "/question"
++  url: "/provider/auth"
+ }
+ 
+-export type QuestionListErrors = {
++export type ProviderAuthErrors = {
+   /**
+    * Bad request
+    */
+   400: BadRequestError
+ }
+ 
+-export type QuestionListError = QuestionListErrors[keyof QuestionListErrors]
++export type ProviderAuthError2 = ProviderAuthErrors[keyof ProviderAuthErrors]
+ 
+-export type QuestionListResponses = {
++export type ProviderAuthResponses = {
+   /**
+-   * List of pending questions
++   * Provider auth methods
+    */
+-  200: Array<QuestionRequest>
++  200: {
++    [key: string]: Array<ProviderAuthMethod>
++  }
+ }
+ 
+-export type QuestionListResponse = QuestionListResponses[keyof QuestionListResponses]
++export type ProviderAuthResponse = ProviderAuthResponses[keyof ProviderAuthResponses]
+ 
+-export type QuestionReplyData = {
+-  body?: {
+-    /**
+-     * User answers in order of questions (each answer is an array of selected labels)
+-     */
+-    answers: Array<QuestionAnswer>
+-  }
+-  path: {
+-    requestID: string
+-  }
+-  query?: {
+-    directory?: string
+-    workspace?: string
+-  }
+-  url: "/question/{requestID}/reply"
+-}
+-
+-export type QuestionReplyErrors = {
+-  /**
+-   * BadRequest | InvalidRequestError
+-   */
+-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+-  /**
+-   * QuestionNotFoundError
+-   */
+-  404: QuestionNotFoundError
+-}
+-
+-export type QuestionReplyError = QuestionReplyErrors[keyof QuestionReplyErrors]
+-
+-export type QuestionReplyResponses = {
+-  /**
+-   * Question answered successfully
+-   */
+-  200: boolean
+-}
+-
+-export type QuestionReplyResponse = QuestionReplyResponses[keyof QuestionReplyResponses]
+-
+-export type QuestionRejectData = {
+-  body?: never
+-  path: {
+-    requestID: string
+-  }
+-  query?: {
+-    directory?: string
+-    workspace?: string
+-  }
+-  url: "/question/{requestID}/reject"
+-}
+-
+-export type QuestionRejectErrors = {
+-  /**
+-   * BadRequest | InvalidRequestError
+-   */
+-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+-  /**
+-   * QuestionNotFoundError
+-   */
+-  404: QuestionNotFoundError
+-}
+-
+-export type QuestionRejectError = QuestionRejectErrors[keyof QuestionRejectErrors]
+-
+-export type QuestionRejectResponses = {
+-  /**
+-   * Question rejected successfully
+-   */
+-  200: boolean
+-}
+-
+-export type QuestionRejectResponse = QuestionRejectResponses[keyof QuestionRejectResponses]
+-
+-export type PermissionListData = {
+-  body?: never
+-  path?: never
+-  query?: {
+-    directory?: string
+-    workspace?: string
+-  }
+-  url: "/permission"
+-}
+-
+-export type PermissionListErrors = {
+-  /**
+-   * Bad request
+-   */
+-  400: BadRequestError
+-}
+-
+-export type PermissionListError = PermissionListErrors[keyof PermissionListErrors]
+-
+-export type PermissionListResponses = {
+-  /**
+-   * List of pending permissions
+-   */
+-  200: Array<PermissionRequest>
+-}
+-
+-export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
+-
+-export type PermissionReplyData = {
+-  body?: {
+-    reply: "once" | "always" | "reject"
+-    message?: string
+-  }
+-  path: {
+-    requestID: string
+-  }
+-  query?: {
+-    directory?: string
+-    workspace?: string
+-  }
+-  url: "/permission/{requestID}/reply"
+-}
+-
+-export type PermissionReplyErrors = {
+-  /**
+-   * BadRequest | InvalidRequestError
+-   */
+-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+-  /**
+-   * PermissionNotFoundError
+-   */
+-  404: PermissionNotFoundError
+-}
+-
+-export type PermissionReplyError = PermissionReplyErrors[keyof PermissionReplyErrors]
+-
+-export type PermissionReplyResponses = {
+-  /**
+-   * Permission processed successfully
+-   */
+-  200: boolean
+-}
+-
+-export type PermissionReplyResponse = PermissionReplyResponses[keyof PermissionReplyResponses]
+-
+-export type ProviderListData = {
+-  body?: never
+-  path?: never
+-  query?: {
+-    directory?: string
+-    workspace?: string
+-  }
+-  url: "/provider"
+-}
+-
+-export type ProviderListErrors = {
+-  /**
+-   * Bad request
+-   */
+-  400: BadRequestError
+-}
+-
+-export type ProviderListError = ProviderListErrors[keyof ProviderListErrors]
+-
+-export type ProviderListResponses = {
+-  /**
+-   * List of providers
+-   */
+-  200: {
+-    all: Array<Provider>
+-    default: {
+-      [key: string]: string
+-    }
+-    connected: Array<string>
+-  }
+-}
+-
+-export type ProviderListResponse = ProviderListResponses[keyof ProviderListResponses]
+-
+-export type ProviderAuthData = {
+-  body?: never
+-  path?: never
+-  query?: {
+-    directory?: string
+-    workspace?: string
+-  }
+-  url: "/provider/auth"
+-}
+-
+-export type ProviderAuthErrors = {
+-  /**
+-   * Bad request
+-   */
+-  400: BadRequestError
+-}
+-
+-export type ProviderAuthError2 = ProviderAuthErrors[keyof ProviderAuthErrors]
+-
+-export type ProviderAuthResponses = {
+-  /**
+-   * Provider auth methods
+-   */
+-  200: {
+-    [key: string]: Array<ProviderAuthMethod>
+-  }
+-}
+-
+-export type ProviderAuthResponse = ProviderAuthResponses[keyof ProviderAuthResponses]
+-
+-export type ProviderOauthAuthorizeData = {
++export type ProviderOauthAuthorizeData = {
+   body?: {
+     /**
+      * Auth method index
+@@ -12591,311 +12183,6 @@ export type V2EventSubscribeResponses = {
+ 
+ export type V2EventSubscribeResponse = V2EventSubscribeResponses[keyof V2EventSubscribeResponses]
+ 
+-export type V2PtyListData = {
+-  body?: never
+-  path?: never
+-  query?: {
+-    location?: {
+-      directory?: string
+-      workspace?: string
+-    }
+-  }
+-  url: "/api/pty"
+-}
+-
+-export type V2PtyListErrors = {
+-  /**
+-   * InvalidRequestError
+-   */
+-  400: InvalidRequestError
+-  /**
+-   * UnauthorizedError
+-   */
+-  401: UnauthorizedError
+-}
+-
+-export type V2PtyListError = V2PtyListErrors[keyof V2PtyListErrors]
+-
+-export type V2PtyListResponses = {
+-  /**
+-   * Success
+-   */
+-  200: {
+-    location: LocationInfo
+-    data: Array<Pty>
+-  }
+-}
+-
+-export type V2PtyListResponse = V2PtyListResponses[keyof V2PtyListResponses]
+-
+-export type V2PtyCreateData = {
+-  body: {
+-    command?: string
+-    args?: Array<string>
+-    cwd?: string
+-    title?: string
+-    env?: {
+-      [key: string]: string
+-    }
+-  }
+-  path?: never
+-  query?: {
+-    location?: {
+-      directory?: string
+-      workspace?: string
+-    }
+-  }
+-  url: "/api/pty"
+-}
+-
+-export type V2PtyCreateErrors = {
+-  /**
+-   * InvalidRequestError
+-   */
+-  400: InvalidRequestError
+-  /**
+-   * UnauthorizedError
+-   */
+-  401: UnauthorizedError
+-}
+-
+-export type V2PtyCreateError = V2PtyCreateErrors[keyof V2PtyCreateErrors]
+-
+-export type V2PtyCreateResponses = {
+-  /**
+-   * Success
+-   */
+-  200: {
+-    location: LocationInfo
+-    data: Pty
+-  }
+-}
+-
+-export type V2PtyCreateResponse = V2PtyCreateResponses[keyof V2PtyCreateResponses]
+-
+-export type V2PtyRemoveData = {
+-  body?: never
+-  path: {
+-    ptyID: string
+-  }
+-  query?: {
+-    location?: {
+-      directory?: string
+-      workspace?: string
+-    }
+-  }
+-  url: "/api/pty/{ptyID}"
+-}
+-
+-export type V2PtyRemoveErrors = {
+-  /**
+-   * InvalidRequestError
+-   */
+-  400: InvalidRequestError
+-  /**
+-   * UnauthorizedError
+-   */
+-  401: UnauthorizedError
+-  /**
+-   * PtyNotFoundError
+-   */
+-  404: PtyNotFoundError
+-}
+-
+-export type V2PtyRemoveError = V2PtyRemoveErrors[keyof V2PtyRemoveErrors]
+-
+-export type V2PtyRemoveResponses = {
+-  /**
+-   * <No Content>
+-   */
+-  204: void
+-}
+-
+-export type V2PtyRemoveResponse = V2PtyRemoveResponses[keyof V2PtyRemoveResponses]
+-
+-export type V2PtyGetData = {
+-  body?: never
+-  path: {
+-    ptyID: string
+-  }
+-  query?: {
+-    location?: {
+-      directory?: string
+-      workspace?: string
+-    }
+-  }
+-  url: "/api/pty/{ptyID}"
+-}
+-
+-export type V2PtyGetErrors = {
+-  /**
+-   * InvalidRequestError
+-   */
+-  400: InvalidRequestError
+-  /**
+-   * UnauthorizedError
+-   */
+-  401: UnauthorizedError
+-  /**
+-   * PtyNotFoundError
+-   */
+-  404: PtyNotFoundError
+-}
+-
+-export type V2PtyGetError = V2PtyGetErrors[keyof V2PtyGetErrors]
+-
+-export type V2PtyGetResponses = {
+-  /**
+-   * Success
+-   */
+-  200: {
+-    location: LocationInfo
+-    data: Pty
+-  }
+-}
+-
+-export type V2PtyGetResponse = V2PtyGetResponses[keyof V2PtyGetResponses]
+-
+-export type V2PtyUpdateData = {
+-  body: {
+-    title?: string
+-    size?: {
+-      rows: number
+-      cols: number
+-    }
+-  }
+-  path: {
+-    ptyID: string
+-  }
+-  query?: {
+-    location?: {
+-      directory?: string
+-      workspace?: string
+-    }
+-  }
+-  url: "/api/pty/{ptyID}"
+-}
+-
+-export type V2PtyUpdateErrors = {
+-  /**
+-   * InvalidRequestError
+-   */
+-  400: InvalidRequestError
+-  /**
+-   * UnauthorizedError
+-   */
+-  401: UnauthorizedError
+-  /**
+-   * PtyNotFoundError
+-   */
+-  404: PtyNotFoundError
+-}
+-
+-export type V2PtyUpdateError = V2PtyUpdateErrors[keyof V2PtyUpdateErrors]
+-
+-export type V2PtyUpdateResponses = {
+-  /**
+-   * Success
+-   */
+-  200: {
+-    location: LocationInfo
+-    data: Pty
+-  }
+-}
+-
+-export type V2PtyUpdateResponse = V2PtyUpdateResponses[keyof V2PtyUpdateResponses]
+-
+-export type V2PtyConnectTokenData = {
+-  body?: never
+-  path: {
+-    ptyID: string
+-  }
+-  query?: {
+-    location?: {
+-      directory?: string
+-      workspace?: string
+-    }
+-  }
+-  url: "/api/pty/{ptyID}/connect-token"
+-}
+-
+-export type V2PtyConnectTokenErrors = {
+-  /**
+-   * InvalidRequestError
+-   */
+-  400: InvalidRequestError
+-  /**
+-   * UnauthorizedError
+-   */
+-  401: UnauthorizedError
+-  /**
+-   * ForbiddenError
+-   */
+-  403: ForbiddenError
+-  /**
+-   * PtyNotFoundError
+-   */
+-  404: PtyNotFoundError
+-}
+-
+-export type V2PtyConnectTokenError = V2PtyConnectTokenErrors[keyof V2PtyConnectTokenErrors]
+-
+-export type V2PtyConnectTokenResponses = {
+-  /**
+-   * Success
+-   */
+-  200: {
+-    location: LocationInfo
+-    data: PtyTicketConnectToken
+-  }
+-}
+-
+-export type V2PtyConnectTokenResponse = V2PtyConnectTokenResponses[keyof V2PtyConnectTokenResponses]
+-
+-export type V2PtyConnectData = {
+-  body?: never
+-  path: {
+-    ptyID: string
+-  }
+-  query?: {
+-    "location[directory]"?: string
+-    "location[workspace]"?: string
+-    cursor?: string
+-    ticket?: string
+-  }
+-  url: "/api/pty/{ptyID}/connect"
+-}
+-
+-export type V2PtyConnectErrors = {
+-  /**
+-   * InvalidRequestError
+-   */
+-  400: InvalidRequestError
+-  /**
+-   * UnauthorizedError
+-   */
+-  401: UnauthorizedError
+-  /**
+-   * ForbiddenError
+-   */
+-  403: ForbiddenError
+-  /**
+-   * PtyNotFoundError
+-   */
+-  404: PtyNotFoundError
+-}
+-
+-export type V2PtyConnectError = V2PtyConnectErrors[keyof V2PtyConnectErrors]
+-
+-export type V2PtyConnectResponses = {
+-  /**
+-   * Success
+-   */
+-  200: boolean
+-}
+-
+-export type V2PtyConnectResponse = V2PtyConnectResponses[keyof V2PtyConnectResponses]
+-
+ export type V2QuestionRequestListData = {
+   body?: never
+   path?: never
+@@ -13181,39 +12468,3 @@ export type V2ProjectCopyRefreshResponses = {
+ }
+ 
+ export type V2ProjectCopyRefreshResponse = V2ProjectCopyRefreshResponses[keyof V2ProjectCopyRefreshResponses]
+-
+-export type PtyConnectData = {
+-  body?: never
+-  path: {
+-    ptyID: string
+-  }
+-  query?: {
+-    directory?: string
+-    workspace?: string
+-    cursor?: string
+-    ticket?: string
+-  }
+-  url: "/pty/{ptyID}/connect"
+-}
+-
+-export type PtyConnectErrors = {
+-  /**
+-   * Forbidden
+-   */
+-  403: EffectHttpApiErrorForbidden
+-  /**
+-   * Not found
+-   */
+-  404: NotFoundError
+-}
+-
+-export type PtyConnectError = PtyConnectErrors[keyof PtyConnectErrors]
+-
+-export type PtyConnectResponses = {
+-  /**
+-   * Connected session
+-   */
+-  200: boolean
+-}
+-
+-export type PtyConnectResponse = PtyConnectResponses[keyof PtyConnectResponses]
+diff --git a/packages/server/src/handlers.ts b/packages/server/src/handlers.ts
+index 3a5e2e777e..e68b18bccd 100644
+--- a/packages/server/src/handlers.ts
++++ b/packages/server/src/handlers.ts
+@@ -10,7 +10,6 @@ import { SkillHandler } from "./handlers/skill"
+ import { EventHandler } from "./handlers/event"
+ import { AgentHandler } from "./handlers/agent"
+ import { HealthHandler } from "./handlers/health"
+-import { PtyHandler } from "./handlers/pty"
+ import { QuestionHandler } from "./handlers/question"
+ import { ReferenceHandler } from "./handlers/reference"
+ import { LocationHandler } from "./handlers/location"
+@@ -33,7 +32,6 @@ export const handlers = Layer.mergeAll(
+   CommandHandler,
+   SkillHandler,
+   EventHandler,
+-  PtyHandler,
+   QuestionHandler,
+   ReferenceHandler,
+   ProjectCopyHandler,
+diff --git a/packages/server/src/handlers/pty.ts b/packages/server/src/handlers/pty.ts
+deleted file mode 100644
+index 1b83264ad1..0000000000
+--- a/packages/server/src/handlers/pty.ts
++++ /dev/null
+@@ -1,223 +0,0 @@
+-import { Pty } from "@opencode-ai/core/pty"
+-import { PtyProtocol } from "@opencode-ai/core/pty/protocol"
+-import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+-import { Location } from "@opencode-ai/core/location"
+-import { Effect, Queue } from "effect"
+-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+-import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
+-import * as Socket from "effect/unstable/socket/Socket"
+-import { Api } from "../api"
+-import { CorsConfig, isAllowedRequestOrigin } from "../cors"
+-import { ForbiddenError, PtyNotFoundError } from "@opencode-ai/protocol/errors"
+-import {
+-  PTY_CONNECT_TICKET_QUERY,
+-  PTY_CONNECT_TOKEN_HEADER,
+-  PTY_CONNECT_TOKEN_HEADER_VALUE,
+-} from "@opencode-ai/protocol/groups/pty"
+-import { response } from "../location"
+-import { PtyEnvironment } from "../pty-environment"
+-
+-const ticketScope = Effect.gen(function* () {
+-  const location = yield* Location.Service
+-  return { directory: location.directory as string, workspaceID: location.workspaceID }
+-})
+-
+-export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
+-  Effect.gen(function* () {
+-    const tickets = yield* PtyTicket.Service
+-    const cors = yield* CorsConfig
+-    const environment = yield* PtyEnvironment.Service
+-
+-    return handlers
+-      .handle(
+-        "pty.list",
+-        Effect.fn(function* () {
+-          return yield* response((yield* Pty.Service).list())
+-        }),
+-      )
+-      .handle(
+-        "pty.create",
+-        Effect.fn(function* (ctx) {
+-          const pty = yield* Pty.Service
+-          const location = yield* Location.Service
+-          const cwd = ctx.payload.cwd || location.directory
+-          return yield* response(
+-            pty.create({
+-              ...ctx.payload,
+-              args: ctx.payload.args ? [...ctx.payload.args] : undefined,
+-              cwd,
+-              env: {
+-                ...ctx.payload.env,
+-                ...(yield* environment.get({ directory: location.directory, cwd })),
+-              },
+-            }),
+-          )
+-        }),
+-      )
+-      .handle(
+-        "pty.get",
+-        Effect.fn(function* (ctx) {
+-          const pty = yield* Pty.Service
+-          return yield* response(
+-            pty.get(ctx.params.ptyID).pipe(
+-              Effect.catchTag(
+-                "Pty.NotFoundError",
+-                () =>
+-                  new PtyNotFoundError({
+-                    ptyID: ctx.params.ptyID,
+-                    message: `PTY session not found: ${ctx.params.ptyID}`,
+-                  }),
+-              ),
+-            ),
+-          )
+-        }),
+-      )
+-      .handle(
+-        "pty.update",
+-        Effect.fn(function* (ctx) {
+-          const pty = yield* Pty.Service
+-          return yield* response(
+-            pty
+-              .update(ctx.params.ptyID, {
+-                ...ctx.payload,
+-                size: ctx.payload.size ? { ...ctx.payload.size } : undefined,
+-              })
+-              .pipe(
+-                Effect.catchTag(
+-                  "Pty.NotFoundError",
+-                  () =>
+-                    new PtyNotFoundError({
+-                      ptyID: ctx.params.ptyID,
+-                      message: `PTY session not found: ${ctx.params.ptyID}`,
+-                    }),
+-                ),
+-              ),
+-          )
+-        }),
+-      )
+-      .handle(
+-        "pty.remove",
+-        Effect.fn(function* (ctx) {
+-          const pty = yield* Pty.Service
+-          yield* pty.remove(ctx.params.ptyID).pipe(
+-            Effect.catchTag(
+-              "Pty.NotFoundError",
+-              () =>
+-                new PtyNotFoundError({
+-                  ptyID: ctx.params.ptyID,
+-                  message: `PTY session not found: ${ctx.params.ptyID}`,
+-                }),
+-            ),
+-          )
+-          return HttpApiSchema.NoContent.make()
+-        }),
+-      )
+-      .handle(
+-        "pty.connectToken",
+-        Effect.fn(function* (ctx) {
+-          const request = yield* HttpServerRequest.HttpServerRequest
+-          // The custom header forces a CORS preflight, so cross-origin browser pages cannot
+-          // mint tickets without passing the server's origin policy.
+-          if (
+-            request.headers[PTY_CONNECT_TOKEN_HEADER] !== PTY_CONNECT_TOKEN_HEADER_VALUE ||
+-            !isAllowedRequestOrigin(request.headers.origin, request.headers.host, cors)
+-          )
+-            return yield* new ForbiddenError({ message: "Invalid PTY connect token request" })
+-          const pty = yield* Pty.Service
+-          yield* pty.get(ctx.params.ptyID).pipe(
+-            Effect.catchTag(
+-              "Pty.NotFoundError",
+-              () =>
+-                new PtyNotFoundError({
+-                  ptyID: ctx.params.ptyID,
+-                  message: `PTY session not found: ${ctx.params.ptyID}`,
+-                }),
+-            ),
+-          )
+-          return yield* response(tickets.issue({ ptyID: ctx.params.ptyID, ...(yield* ticketScope) }))
+-        }),
+-      )
+-      .handleRaw(
+-        "pty.connect",
+-        Effect.fn("PtyHandler.connect")(function* (ctx) {
+-          if (!isAllowedRequestOrigin(ctx.request.headers.origin, ctx.request.headers.host, cors))
+-            return HttpServerResponse.empty({ status: 403 })
+-
+-          const url = new URL(ctx.request.url, "http://localhost")
+-          const ticket = url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
+-          if (ticket && !(yield* tickets.consume({ ticket, ptyID: ctx.params.ptyID, ...(yield* ticketScope) })))
+-            return HttpServerResponse.empty({ status: 403 })
+-
+-          const pty = yield* Pty.Service
+-          const exists = yield* pty.get(ctx.params.ptyID).pipe(
+-            Effect.as(true),
+-            Effect.catchTag("Pty.NotFoundError", () => Effect.succeed(false)),
+-          )
+-          if (!exists) return HttpServerResponse.empty({ status: 404 })
+-
+-          const parsedCursor = url.searchParams.get("cursor")
+-          const cursorNumber = parsedCursor === null ? undefined : Number(parsedCursor)
+-          const cursor =
+-            cursorNumber !== undefined && Number.isSafeInteger(cursorNumber) && cursorNumber >= -1
+-              ? cursorNumber
+-              : undefined
+-
+-          const socket = yield* Effect.orDie(ctx.request.upgrade)
+-          const write = yield* socket.writer
+-          const closeAccepted = (event: Socket.CloseEvent) =>
+-            socket
+-              .runRaw(() => Effect.void, { onOpen: write(event).pipe(Effect.catch(() => Effect.void)) })
+-              .pipe(
+-                Effect.timeout("1 second"),
+-                Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
+-                Effect.catch(() => Effect.void),
+-              )
+-
+-          // Outbound frames flow through one queue drained by a single writer so replay, live
+-          // output, and the close frame keep their order.
+-          // TODO: Integrate graceful-shutdown socket tracking before clients migrate to this route.
+-          const outbox = yield* Queue.unbounded<string | Uint8Array | Socket.CloseEvent>()
+-          const attachment = yield* pty
+-            .attach(ctx.params.ptyID, {
+-              cursor,
+-              onData: (chunk) => Queue.offerUnsafe(outbox, chunk),
+-              onEnd: () => Queue.offerUnsafe(outbox, new Socket.CloseEvent(1000)),
+-            })
+-            .pipe(
+-              Effect.catchTags({
+-                "Pty.NotFoundError": () =>
+-                  closeAccepted(new Socket.CloseEvent(4404, "session not found")).pipe(Effect.as(undefined)),
+-                "Pty.ExitedError": () =>
+-                  closeAccepted(new Socket.CloseEvent(4404, "session exited")).pipe(Effect.as(undefined)),
+-              }),
+-            )
+-          if (!attachment) return HttpServerResponse.empty()
+-
+-          for (const chunk of PtyProtocol.chunks(attachment.replay)) Queue.offerUnsafe(outbox, chunk)
+-          Queue.offerUnsafe(outbox, PtyProtocol.metaFrame(attachment.cursor))
+-          attachment.activate()
+-
+-          const drain = Effect.gen(function* () {
+-            while (true) {
+-              const item = yield* Queue.take(outbox)
+-              yield* write(item)
+-              if (item instanceof Socket.CloseEvent) return
+-            }
+-          })
+-
+-          yield* Effect.race(
+-            drain,
+-            socket.runRaw((message) => {
+-              const decoded = PtyProtocol.decodeInput(message)
+-              if (decoded !== undefined) attachment.write(decoded)
+-            }),
+-          ).pipe(
+-            Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
+-            Effect.ensuring(Effect.sync(() => attachment.detach())),
+-            Effect.orDie,
+-          )
+-          return HttpServerResponse.empty()
+-        }),
+-      )
+-  }),
+-)
+diff --git a/packages/server/src/middleware/authorization.ts b/packages/server/src/middleware/authorization.ts
+index cc785ee247..feb4bcecc3 100644
+--- a/packages/server/src/middleware/authorization.ts
++++ b/packages/server/src/middleware/authorization.ts
+@@ -2,7 +2,6 @@ import { ServerAuth } from "../auth"
+ import { UnauthorizedError } from "@opencode-ai/protocol/errors"
+ import { Authorization } from "@opencode-ai/protocol/middleware/authorization"
+ export { Authorization } from "@opencode-ai/protocol/middleware/authorization"
+-import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
+ import { Effect, Encoding, Layer, Redacted } from "effect"
+ import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+ 
+@@ -43,9 +42,6 @@ export const authorizationLayer = Layer.effect(
+     return Authorization.of((effect) =>
+       Effect.gen(function* () {
+         const request = yield* HttpServerRequest.HttpServerRequest
+-        // Browsers cannot set headers on WebSocket upgrades, so a ticketed PTY connect skips
+-        // credential checks here; the connect handler consumes and validates the ticket.
+-        if (hasPtyConnectTicketURL(new URL(request.url, "http://localhost"))) return yield* effect
+         const credential = yield* credentialFromRequest(request)
+         if (ServerAuth.authorized(credential, config)) return yield* effect
+         yield* HttpEffect.appendPreResponseHandler((_request, response) =>
+diff --git a/packages/server/src/pty-environment.ts b/packages/server/src/pty-environment.ts
+deleted file mode 100644
+index 3e18a6f925..0000000000
+--- a/packages/server/src/pty-environment.ts
++++ /dev/null
+@@ -1,19 +0,0 @@
+-export * as PtyEnvironment from "./pty-environment"
+-
+-import { Context, Effect, Layer } from "effect"
+-import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
+-
+-export interface Interface {
+-  readonly get: (input: { directory: string; cwd: string }) => Effect.Effect<Record<string, string>>
+-}
+-
+-export class Service extends Context.Service<Service, Interface>()("@opencode/ServerPtyEnvironment") {}
+-
+-export const layer = Layer.succeed(
+-  Service,
+-  Service.of({
+-    get: () => Effect.succeed({}),
+-  }),
+-)
+-
+-export const node = makeGlobalNode({ service: Service, layer, deps: [] })
+diff --git a/packages/server/src/routes.ts b/packages/server/src/routes.ts
+index cc1b1ae6a5..7d405a7c71 100644
+--- a/packages/server/src/routes.ts
++++ b/packages/server/src/routes.ts
+@@ -5,7 +5,6 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+ import { EventV2 } from "@opencode-ai/core/event"
+ import { Credential } from "@opencode-ai/core/credential"
+ import { PermissionSaved } from "@opencode-ai/core/permission/saved"
+-import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+ import { SessionV2 } from "@opencode-ai/core/session"
+ import { SessionExecution } from "@opencode-ai/core/session/execution"
+ import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+@@ -19,7 +18,6 @@ import { ServerAuth } from "./auth"
+ import { handlers } from "./handlers"
+ import { authorizationLayer } from "./middleware/authorization"
+ import { schemaErrorLayer } from "./middleware/schema-error"
+-import { PtyEnvironment } from "./pty-environment"
+ import { layer as locationLayer } from "./location"
+ import { sessionLocationLayer } from "./middleware/session-location"
+ 
+@@ -30,9 +28,7 @@ const applicationServices = LayerNode.group([
+   ToolOutputStore.cleanupNode,
+   SessionV2.node,
+   PermissionSaved.node,
+-  PtyTicket.node,
+   Credential.node,
+-  PtyEnvironment.node,
+   LocationServiceMap.node,
+ ])
+ 

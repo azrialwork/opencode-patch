@@ -167,6 +167,15 @@ from view.
   keeps only models whose cost is zero on every tier and that are not
   deprecated. Paid Zen models no longer exist in this build at all;
   custom providers and models are unaffected.
+- `0013-remove-pty.patch` — removes the PTY (pseudo-terminal)
+  subsystem end to end: the core PTY service and its Bun/Node
+  adapters (`bun-pty`, `@lydell/node-pty`), the `/pty` HTTP API
+  (REST + WebSocket connect + ticket auth), the V2 protocol/server
+  PTY group and handlers, the plugin PTY-environment bridge, the
+  schema/event definitions, and the SDK clients. The interactive
+  terminal panel only ever existed in the web/desktop UI (already
+  removed by patch 0002); the agent's Bash tool does not use PTY
+  and is unaffected.
 
 To add a patch later:
 
