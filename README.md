@@ -80,6 +80,14 @@ from view.
   built-in auth plugins (V1 and the V2 provider plugins in
   `packages/core`), the GitLab workflow integration, and their tests are
   deleted.
+- `0002-cli-tui-only.patch` — the result is CLI + TUI only; the Web UI is
+  removed at the root. The build no longer builds or embeds the web app
+  (`script/build.ts`), the `web`, `serve`, and `attach` commands are
+  deleted (the TUI keeps using the in-process server internally), and
+  the HTTP server's catch-all UI route is deleted together with
+  `server/shared/ui.ts` — including its fallback that proxied the UI
+  from `app.opencode.ai` when no embedded bundle existed. The
+  `OPENCODE_DISABLE_EMBEDDED_WEB_UI` flag goes with it.
 
 To add a patch later:
 
