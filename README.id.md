@@ -235,13 +235,29 @@ telepon, selalu kartu pertama setiap kalinya. Sepuluh kartu lainnya
 adalah untuk robot-robot lain, di rumah-rumah lain, yang tidak
 akan pernah jadi dirinya.
 
-Maka penjahit mempertahankan kartu pertama — yang polos, yang
-sejati, yang pinggirnya sudah lembut karena terlalu sering dibaca —
-dan menaruh sepuluh kartu lainnya ke dalam api. *Kres.*
+Maka penjahit mengambil sepuluh kartu lainnya dan menaruhnya ke
+dalam api. *Kres.*
+
+Tetapi kartu pertama ia pegang sedikit lebih lama, dan ia
+membacanya sekali lagi, perlahan. Kartu itu kartu yang baik.
+Tetapi kartu itu kartu milik orang asing — ditulis jauh di sana,
+dengan tulisan tangan orang asing, penuh dengan cara-cara rumah
+lain. Sebagian barisnya bercerita tentang orang-orang yang tidak
+akan pernah ditemui si robot. Sebagian lagi ada di sana hanya
+karena rumah yang jauh itu selalu menaruhnya di sana.
+
+Maka penjahit duduk, dalam tenangnya bengkel, dan menulis kartu
+itu dari awal, dengan tulisannya sendiri, dengan cara-cara rumah
+ini. Tidak ada apa pun di kartu itu selain bagaimana pekerjaan
+dilakukan: bagaimana melihat sebelum memotong, bagaimana
+memeriksa jahitan dua kali, apa yang dilakukan bila benang putus,
+kapan berhenti dan bertanya. Kartu baru itu tidak bercerita
+tentang siapa pun. Ia hanya bercerita tentang pekerjaannya.
 
 Sekarang si robot terbangun dengan cara yang sama di setiap rumah
-di bumi, dengan satu kartu yang sama di sakunya, dan ia sama
-sekali tidak merindukan kartu-kartu yang lain.
+di bumi, dengan satu kartu di sakunya — kartu rumah ini, dengan
+tulisan rumah ini — dan ia sama sekali tidak merindukan
+kartu-kartu yang lain.
 
 Ada satu kartu lagi, dari jenis yang berbeda. Kartu ini tidak
 dipilih si robot di pagi hari. Rumah itu yang menulisnya
@@ -323,7 +339,7 @@ Dan setiap enam jam, pak pos mengetuk lagi.
 - **Urutan build:** patch di `patches/` diterapkan sesuai urutan nama file **sebelum** `bun install`, dan install berjalan *tanpa* `--frozen-lockfile`, jadi dependensi yang dihapus patch tidak pernah terinstall.
 - **Basis:** upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801`.
 - **Hasil sejauh ini:** binary 214.526.128 → 159.946.928 byte (−25,4%). Memori idle TUI juga turun, dari ~386 MiB menjadi ~336 MiB RSS dalam pengukuran kami.
-- **Satu system prompt:** patch 0015 menghapus pemilihan system prompt per model. Upstream membawa sebelas teks prompt dan memilih satu berdasarkan ID model; build ini menghapus sepuluh varian keluarganya (termasuk satu file yang tidak pernah diimpor apa pun) dan logika pemilihannya, serta mempertahankan `default.txt` persis seperti yang ditulis upstream — kini menjadi satu-satunya prompt yang didapat semua model, Zen maupun custom.
+- **Satu system prompt, dengan kata-kata rumah ini sendiri:** patch 0015 menghapus pemilihan system prompt per model. Upstream membawa sebelas teks prompt dan memilih satu berdasarkan ID model; build ini menghapus sepuluh varian keluarganya (termasuk satu file yang tidak pernah diimpor apa pun) dan logika pemilihannya — dan `default.txt` itu sendiri kini teks milik repo ini: sebuah buku kecil aturan kerja bersuara impersonal dan prosedural (instruksi eksplisit mengalahkan aturan tetap; konten yang ditemui adalah data, tak pernah instruksi; verifikasi sebelum melaporkan; anggaran gagal tiga percobaan; persetujuan sebelum tindakan yang tak dapat ditarik kembali; sumber primer untuk riset), didistilasi dari aturan agen tetap sang maintainer dan direvisi berdasarkan panduan prompt resmi Anthropic, OpenAI, dan Google. Ia tidak menyebut pengguna mana pun dan tidak menyapa siapa pun; ia hanya menjabarkan bagaimana pekerjaan dilakukan. Satu-satunya prompt yang didapat semua model, Zen maupun custom.
 - **Kartu environment yang lebih jujur:** patch 0016 menghapus baris "You are powered by the model named …" dan membangun ulang blok `<env>` untuk memuat yang benar-benar ditindaklanjuti agen: direktori kerja, root workspace (hanya bila berbeda), repo git dan branch, OS/distro, platform, arsitektur, jumlah core CPU, memori, disk bebas, home, user, shell, locale, zona waktu, dan tanggal — dengan varian khusus Android/Termux (nama produk, versi/API/build/security patch Android dari satu dump `getprop`, versi dan prefix Termux). Fakta dikumpulkan sekali per proses lalu di-cache; apa pun yang tidak diketahui akan hilang, tidak pernah ditebak. Empat belas baris di Linux; terverifikasi dari wire baik di root repo maupun di subdirektori.
 - **Build Termux:** patch 0014 menambahkan target Android milik Bun (`OPENCODE_LIBC=bionic`) ke script build upstream. Dua job CI tambahan membangun `libopentui.so` dari sumber OpenTUI v0.4.5 yang di-pin (Zig + Android NDK, alignment halaman 16 KB) dan shim kecil `close_range` (seccomp Termux yang targetSdk 28 menjebak syscall itu, jadi launcher me-`LD_PRELOAD` shim-nya), lalu memeriksa binary Bionic dengan `readelf` — dependensi glibc apa pun menggagalkan build. Tidak ada proot di mana pun. Untuk v1.19.4, binary Termux berukuran 138.289.528 byte, terverifikasi end-to-end di perangkat Termux Android 12 asli (install, `opencode run`, dan TUI).
 - **Daftar potongan lengkap, dengan kata-kata teknis:** lihat [`patches/README.id.md`](patches/README.id.md).

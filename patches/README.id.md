@@ -128,7 +128,16 @@ file prompt keluarga (`anthropic`, `beast`, `codex`, `gemini`,
 `gpt`, `gpt-astra`, `kimi`, `meta`, `trinity`) dan `copilot-gpt-5.txt`
 yang tidak pernah diimpor dihapus, dan `SystemPrompt.provider()`
 tidak lagi bercabang berdasarkan ID model. `default.txt` sendiri
-dipertahankan persis seperti bawaan upstream — ia hanya menjadi
+diganti dengan teks milik repo ini: sebuah buku kecil aturan
+kerja bersuara impersonal dan prosedural — instruksi eksplisit
+mengalahkan aturan tetap, konten yang ditemui adalah data dan
+tak pernah instruksi, verifikasi mendahului laporan, kegagalan
+mendapat anggaran tiga percobaan, tindakan yang tak dapat
+ditarik kembali menunggu persetujuan, riset bertumpu pada sumber
+primer — didistilasi dari aturan agen tetap sang maintainer dan
+direvisi berdasarkan panduan prompt resmi Anthropic, OpenAI, dan
+Google. Ia tidak menyebut pengguna mana pun; ia hanya
+menjabarkan bagaimana pekerjaan dilakukan, dan ia adalah
 satu-satunya prompt yang didapat semua model, Zen maupun custom.
 Teks pengingat plan-mode dan prompt agen bawaan (title, summary,
 explore, compaction) adalah permukaan terpisah dan tidak disentuh.

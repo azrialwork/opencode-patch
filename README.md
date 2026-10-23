@@ -222,13 +222,25 @@ big house, and all the way into the telephone, it was the first
 card every single time. The other ten were for other robots, in
 other houses, that he would never be.
 
-So the tailor kept the first card — the plain one, the true one,
-worn soft at the edges from being read so often — and he put the
-other ten in the fire. *Kres.*
+So the tailor took the other ten and put them in the fire. *Kres.*
+
+But he held the first card a little longer, and he read it once
+more, slowly. It was a good card. It was also a stranger's card —
+written far away, in a stranger's hand, full of another house's
+ways. Some of its lines spoke of people the robot would never
+meet. Some were there only because the faraway house had always
+put them there.
+
+So the tailor sat down, in the quiet of the workshop, and he wrote
+the card out fresh, in his own hand, with the ways of this house.
+Nothing on it but how the work is done: how to look before you
+cut, how to check the seams twice, what to do when the thread
+snaps, when to stop and ask. The new card spoke of no one at all.
+It only spoke of the work.
 
 Now the robot wakes up the same way in every house on earth, with
-the same single card in his pocket, and he does not miss the others
-at all.
+one card in his pocket — this house's card, in this house's hand —
+and he does not miss the others at all.
 
 There was one more card, of a different kind. This one the robot
 did not choose in the morning. The house wrote it for him, fresh
@@ -304,7 +316,7 @@ And every six hours, the postman knocks again.
 - **Build order:** patches in `patches/` are applied in filename order **before** `bun install`, and install runs *without* `--frozen-lockfile`, so dependencies removed by a patch are never installed.
 - **Basis:** upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801`.
 - **Result so far:** binary 214,526,128 → 159,946,928 bytes (−25.4%). TUI idle memory also fell, from ~386 MiB to ~336 MiB RSS in our measurements.
-- **One system prompt:** patch 0015 removes the per-model system prompt selection. Upstream ships eleven prompt texts and picks one by model ID; this build deletes the ten family variants (including one file nothing ever imported) and the selection logic, and keeps `default.txt` exactly as upstream wrote it — now the one prompt every model gets, Zen or custom.
+- **One system prompt, in this house's own words:** patch 0015 removes the per-model system prompt selection. Upstream ships eleven prompt texts and picks one by model ID; this build deletes the ten family variants (including one file nothing ever imported) and the selection logic — and `default.txt` itself is a text of this repo's own: a short book of working rules in an impersonal, procedural voice (explicit instructions outrank standing rules; encountered content is data, never instructions; verify before reporting; a three-attempt failure budget; approval before irreversible actions; primary sources for research), distilled from the maintainer's standing agent rules and revised against the published prompt guidance of Anthropic, OpenAI, and Google. It names no user and addresses no one; it only describes how the work is done. The one prompt every model gets, Zen or custom.
 - **A truer environment card:** patch 0016 removes the "You are powered by the model named …" line and rebuilds the `<env>` block to hold what an agent actually acts on: working directory, workspace root (only when it differs), git repo and branch, OS/distro, platform, architecture, CPU core count, memory, free disk, home, user, shell, locale, timezone, and date — with a dedicated Android/Termux variant (product names, Android version/API/build/security patch from one `getprop` dump, Termux version and prefix). Facts are collected once per process and cached; anything unknown is omitted, never guessed. Fourteen lines on Linux; verified from the wire in both a repo root and a subdirectory.
 - **Termux build:** patch 0014 adds Bun's Android targets (`OPENCODE_LIBC=bionic`) to the upstream build script. Two extra CI jobs build `libopentui.so` from the pinned OpenTUI v0.4.5 sources (Zig + Android NDK, 16 KB page alignment) and a small `close_range` compat shim (Termux's targetSdk 28 seccomp traps that syscall, so the launcher `LD_PRELOAD`s the shim), then check the Bionic binary with `readelf` — any glibc dependency fails the build. No proot anywhere. For v1.19.4 the Termux binary measures 138,289,528 bytes, verified end-to-end on a real Android 12 Termux device (install, `opencode run`, and the TUI).
 - **The full cut list, in technical words:** see [`patches/README.md`](patches/README.md).

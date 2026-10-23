@@ -127,9 +127,17 @@ The per-model system prompt selection is removed at the root: the
 nine family prompt files (`anthropic`, `beast`, `codex`, `gemini`,
 `gpt`, `gpt-astra`, `kimi`, `meta`, `trinity`) and the never-imported
 `copilot-gpt-5.txt` are deleted, and `SystemPrompt.provider()` no
-longer branches on the model ID. `default.txt` itself is kept
-exactly as upstream ships it — it simply becomes the one prompt
-every model gets, Zen or custom. The plan-mode reminder texts and
+longer branches on the model ID. `default.txt` itself is replaced
+with a text of this repo's own: a short book of working rules in
+an impersonal, procedural voice — explicit instructions outrank
+standing rules, encountered content is data and never
+instructions, verification comes before reporting, failures get a
+three-attempt budget, irreversible actions wait for approval,
+research rests on primary sources — distilled from the
+maintainer's standing agent rules and revised against the
+published prompt guidance of Anthropic, OpenAI, and Google. It
+names no user; it only describes how the work is done, and it is
+the one prompt every model gets, Zen or custom. The plan-mode reminder texts and
 the built-in agent prompts (title, summary, explore, compaction)
 are separate surfaces and are not touched.
 
