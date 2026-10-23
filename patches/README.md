@@ -37,6 +37,8 @@ Current series:
   exporters, the `@opentelemetry/*` / `@effect/opentelemetry`
   dependencies, the AI SDK telemetry tracer plumbing, the
   `experimental.openTelemetry` config key, and the `OTEL_*` flags.
+- `0009-remove-import.patch` — removes the `opencode import` command
+  (session JSON import) and its tests.
 
 This file is not a patch and is ignored by `scripts/apply-patches.sh`,
 which only reads `*.patch`.

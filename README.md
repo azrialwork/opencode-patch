@@ -142,6 +142,9 @@ from view.
   agent paths, the `experimental.openTelemetry` config key, the
   `OTEL_EXPORTER_OTLP_*` flags, and the OTEL env forwarding into
   workspaces. Local file/console logging is unchanged.
+- `0009-remove-import.patch` — removes the `opencode import`
+  command, which imported session data from exported JSON files
+  (including its leftover share-URL branch), plus its tests.
 
 To add a patch later:
 
