@@ -113,6 +113,86 @@ index 24cfe02171..2599ded308 100644
              expect(documents[0]?.info.permissions).toEqual([
                { action: "bash", resource: "*", effect: "ask" },
                { action: "edit", resource: "*.md", effect: "allow" },
+diff --git a/packages/opencode/src/cli/cmd/run.ts b/packages/opencode/src/cli/cmd/run.ts
+index 944aec17ab..320c326afb 100644
+--- a/packages/opencode/src/cli/cmd/run.ts
++++ b/packages/opencode/src/cli/cmd/run.ts
+@@ -158,11 +158,6 @@ export const RunCommand = effectCmd({
+         describe: "fork the session before continuing (requires --continue or --session)",
+         type: "boolean",
+       })
+-      .option("share", {
+-        type: "boolean",
+-        describe: "deprecated: session sharing was discontinued",
+-        hidden: true,
+-      })
+       .option("model", {
+         type: "string",
+         alias: ["m"],
+@@ -533,10 +528,6 @@ export const RunCommand = effectCmd({
+         }
+       }
+ 
+-      async function share(_sdk: OpencodeClient, _sessionID: string) {
+-        if (args.share) UI.println(UI.Style.TEXT_DANGER_BOLD + "!  Session sharing has been discontinued")
+-      }
+-
+       async function createFreshSession(
+         sdk: OpencodeClient,
+         input: { agent: string | undefined; model: ModelInput | undefined; variant: string | undefined },
+@@ -558,7 +549,6 @@ export const RunCommand = effectCmd({
+           throw new Error("Failed to create session")
+         }
+ 
+-        void share(sdk, id).catch(() => {})
+         return {
+           id,
+           title: result.data?.title,
+@@ -818,8 +808,6 @@ export const RunCommand = effectCmd({
+         // Validate agent if specified
+         const agent = await pickAgent(client)
+ 
+-        await share(client, sessionID)
+-
+         if (!interactive) {
+           const events = await client.event.subscribe()
+           const completed = loop(client, events).catch((e) => {
+@@ -912,7 +900,6 @@ export const RunCommand = effectCmd({
+             fetch: fetchFn,
+             resolveAgent: localAgent,
+             session,
+-            share,
+             createSession: createFreshSession,
+             agent: args.agent,
+             model,
+@@ -979,7 +966,6 @@ export async function runMini(input: MiniCommandInput) {
+     continue: input.continue,
+     session: input.session,
+     fork: input.fork,
+-    share: undefined,
+     model: input.model,
+     agent: input.agent,
+     format: "default",
+diff --git a/packages/opencode/src/cli/cmd/run/runtime.ts b/packages/opencode/src/cli/cmd/run/runtime.ts
+index 90cddffa22..2c05c81830 100644
+--- a/packages/opencode/src/cli/cmd/run/runtime.ts
++++ b/packages/opencode/src/cli/cmd/run/runtime.ts
+@@ -62,7 +62,6 @@ type RunLocalInput = {
+   fetch: typeof globalThis.fetch
+   resolveAgent: () => Promise<string | undefined>
+   session: (sdk: RunInput["sdk"]) => Promise<{ id: string; title?: string } | undefined>
+-  share: (sdk: RunInput["sdk"], sessionID: string) => Promise<void>
+   createSession?: CreateSession
+   agent: RunInput["agent"]
+   model: RunInput["model"]
+@@ -758,7 +757,6 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
+           throw new Error("Session not found")
+         }
+ 
+-        void input.share(sdk, next.id).catch(() => {})
+         return {
+           sessionID: next.id,
+           sessionTitle: next.title,
 diff --git a/packages/opencode/src/config/config.ts b/packages/opencode/src/config/config.ts
 index 9e10b67fe7..cfbc73c417 100644
 --- a/packages/opencode/src/config/config.ts
