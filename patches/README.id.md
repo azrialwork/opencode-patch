@@ -122,6 +122,19 @@ dengan `libopentui.so` yang dibangun secara native dan shim kecil
 `close_range` (lihat `termux/` di repo ini); tidak ada proot yang
 terlibat di titik mana pun.
 
+**15. `0015-single-system-prompt.patch` — satu suara untuk semua model.**
+Pemilihan system prompt per model dihapus dari akarnya: sembilan
+file prompt keluarga (`anthropic`, `beast`, `codex`, `gemini`,
+`gpt`, `gpt-astra`, `kimi`, `meta`, `trinity`) dan `copilot-gpt-5.txt`
+yang tidak pernah diimpor dihapus, dan `SystemPrompt.provider()`
+tidak lagi bercabang berdasarkan ID model. `default.txt` diganti
+dengan prompt milik proyek ini sendiri — satu teks untuk semua
+model, Zen maupun custom — yang mencakup disiplin kerja (pahami
+dulu, verifikasi sebelum melapor, jangan pernah mengarang output),
+gaya keluaran, dan keamanan. Teks pengingat plan-mode dan prompt
+agen bawaan (title, summary, explore, compaction) adalah permukaan
+terpisah dan tidak disentuh.
+
 ---
 
 Catatan untuk pembaca yang teliti: README ini bukan patch.

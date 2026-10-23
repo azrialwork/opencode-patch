@@ -122,6 +122,19 @@ release asset pairs the binary with a natively built `libopentui.so`
 and a small `close_range` compat shim (see `termux/` in this repo);
 no proot is involved at any point.
 
+**15. `0015-single-system-prompt.patch` — one voice for every model.**
+The per-model system prompt selection is removed at the root: the
+nine family prompt files (`anthropic`, `beast`, `codex`, `gemini`,
+`gpt`, `gpt-astra`, `kimi`, `meta`, `trinity`) and the never-imported
+`copilot-gpt-5.txt` are deleted, and `SystemPrompt.provider()` no
+longer branches on the model ID. `default.txt` is replaced by this
+project's own prompt — one text for every model, Zen or custom —
+covering working discipline (understand first, verify before
+reporting, never invent output), output style, and safety. The
+plan-mode reminder texts and the built-in agent prompts (title,
+summary, explore, compaction) are separate surfaces and are not
+touched.
+
 ---
 
 A note for careful readers: this README is not a patch.
