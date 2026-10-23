@@ -148,6 +148,16 @@ satu dump `getprop`), dan baris `Termux:`. Fakta dikumpulkan
 sekali per proses lalu di-cache; apa pun yang tidak bisa
 ditentukan akan hilang, tidak pernah ditebak.
 
+**17. `0017-trim-env-block.patch` — blok environment, dipangkas
+menjadi yang benar-benar ditindaklanjuti agen.** Di atas 0016:
+jenis terminal, versi runtime Bun, dan string model CPU dihapus
+(jumlah core tetap tinggal), baris perangkat tidak lagi jatuh ke
+hostname di luar Android, dan baris root workspace hanya dicetak
+bila berbeda dari direktori kerja. Yang tersisa: lokasi dan
+branch, OS, platform, arsitektur, core, memori, disk, home, user,
+shell, locale, zona waktu, tanggal — plus baris produk, Android,
+dan Termux pada varian Android.
+
 ---
 
 Catatan untuk pembaca yang teliti: README ini bukan patch.

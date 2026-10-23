@@ -147,6 +147,16 @@ build, security patch, all from one `getprop` dump), and a
 `Termux:` line. Facts are collected once per process and cached;
 anything that cannot be determined is omitted, never guessed.
 
+**17. `0017-trim-env-block.patch` — the environment block, trimmed
+to what an agent acts on.** On top of 0016: the terminal type, the
+Bun runtime version, and the CPU model string are removed (the
+core count stays), the device line no longer falls back to the
+hostname outside Android, and the workspace root line is only
+printed when it differs from the working directory. What remains:
+location and branch, OS, platform, architecture, cores, memory,
+disk, home, user, shell, locale, timezone, date — plus the Android
+variant's product, Android, and Termux lines.
+
 ---
 
 A note for careful readers: this README is not a patch.
