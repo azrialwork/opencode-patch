@@ -127,13 +127,11 @@ The per-model system prompt selection is removed at the root: the
 nine family prompt files (`anthropic`, `beast`, `codex`, `gemini`,
 `gpt`, `gpt-astra`, `kimi`, `meta`, `trinity`) and the never-imported
 `copilot-gpt-5.txt` are deleted, and `SystemPrompt.provider()` no
-longer branches on the model ID. `default.txt` is replaced by this
-project's own prompt — one text for every model, Zen or custom —
-covering working discipline (understand first, verify before
-reporting, never invent output), output style, and safety. The
-plan-mode reminder texts and the built-in agent prompts (title,
-summary, explore, compaction) are separate surfaces and are not
-touched.
+longer branches on the model ID. `default.txt` itself is kept
+exactly as upstream ships it — it simply becomes the one prompt
+every model gets, Zen or custom. The plan-mode reminder texts and
+the built-in agent prompts (title, summary, explore, compaction)
+are separate surfaces and are not touched.
 
 ---
 

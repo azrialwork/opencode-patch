@@ -127,13 +127,11 @@ Pemilihan system prompt per model dihapus dari akarnya: sembilan
 file prompt keluarga (`anthropic`, `beast`, `codex`, `gemini`,
 `gpt`, `gpt-astra`, `kimi`, `meta`, `trinity`) dan `copilot-gpt-5.txt`
 yang tidak pernah diimpor dihapus, dan `SystemPrompt.provider()`
-tidak lagi bercabang berdasarkan ID model. `default.txt` diganti
-dengan prompt milik proyek ini sendiri — satu teks untuk semua
-model, Zen maupun custom — yang mencakup disiplin kerja (pahami
-dulu, verifikasi sebelum melapor, jangan pernah mengarang output),
-gaya keluaran, dan keamanan. Teks pengingat plan-mode dan prompt
-agen bawaan (title, summary, explore, compaction) adalah permukaan
-terpisah dan tidak disentuh.
+tidak lagi bercabang berdasarkan ID model. `default.txt` sendiri
+dipertahankan persis seperti bawaan upstream — ia hanya menjadi
+satu-satunya prompt yang didapat semua model, Zen maupun custom.
+Teks pengingat plan-mode dan prompt agen bawaan (title, summary,
+explore, compaction) adalah permukaan terpisah dan tidak disentuh.
 
 ---
 
