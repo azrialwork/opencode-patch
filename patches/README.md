@@ -28,6 +28,11 @@ Current series:
   session `share` field and `share_url` storage column, the `share` /
   `autoshare` config keys, `OPENCODE_AUTO_SHARE`, the TUI share
   keybinds/sidebar URL, and the SDK share client/types.
+- `0007-remove-upgrade-uninstall.patch` — removes the self-update /
+  self-uninstall machinery: the `upgrade` and `uninstall` commands,
+  the `Installation` service, the `/global/upgrade` endpoint, the TUI
+  `/update` flow and update notices, the `autoupdate` config keys,
+  and `OPENCODE_DISABLE_AUTOUPDATE`.
 
 This file is not a patch and is ignored by `scripts/apply-patches.sh`,
 which only reads `*.patch`.

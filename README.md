@@ -127,6 +127,14 @@ from view.
   `share` / `autoshare` config keys and the `OPENCODE_AUTO_SHARE`
   flag, the TUI share keybinds and sidebar share URL, and the SDK
   share client/types.
+- `0007-remove-upgrade-uninstall.patch` — removes the self-update and
+  self-uninstall machinery: the `opencode upgrade` and
+  `opencode uninstall` commands, the `Installation` service
+  (install-method detection, latest-version checks, download/replace),
+  the `/global/upgrade` endpoint, the TUI `/update` command, update
+  dialog and home-screen update notice, the periodic update checker,
+  the `autoupdate` config keys, and `OPENCODE_DISABLE_AUTOUPDATE`.
+  A patched build must never be overwritten by an upstream release.
 
 To add a patch later:
 
