@@ -114,6 +114,11 @@ from view.
   subsystem and stay. The generic extension→language map that lived in
   `lsp/language.ts` moves to `util/filetype.ts` (its only remaining
   consumer is the `run` renderer's syntax highlighting).
+- `0005-remove-acp.patch` — removes ACP (Agent Client Protocol): the
+  `opencode acp` command and the whole `src/acp/` implementation
+  (±3,700 lines) that served editor clients over stdio, plus the
+  `@agentclientprotocol/sdk` dependency and the ACP tests. The HTTP
+  API server the TUI uses is a separate surface and stays.
 
 To add a patch later:
 

@@ -20,6 +20,9 @@ Current series:
   `lsp` config keys (V1 + V2), the `/lsp` and `/find/symbol` endpoints,
   the TUI LSP displays, the SDK LSP client/types, and the
   `vscode-jsonrpc` / `vscode-languageserver-types` dependencies.
+- `0005-remove-acp.patch` — removes ACP (Agent Client Protocol): the
+  `opencode acp` command, the `src/acp/` implementation, the
+  `@agentclientprotocol/sdk` dependency, and the ACP tests.
 
 This file is not a patch and is ignored by `scripts/apply-patches.sh`,
 which only reads `*.patch`.
