@@ -12,16 +12,18 @@ index a86ec804ff..1da3539150 100644
  
  import { InstanceState } from "@/effect/instance-state"
  
-@@ -22,6 +26,176 @@ export function provider(_model: Provider.Model) {
+@@ -22,6 +26,178 @@ export function provider(_model: Provider.Model) {
    return [PROMPT_DEFAULT]
  }
  
 +// opencode-patch 0016: the <env> block no longer introduces the model by
 +// name, and it describes the device as completely as the runtime allows,
 +// with a dedicated Android/Termux variant. Device facts are collected
-+// once per process and cached; git branch and free disk space describe
-+// the current worktree and are read per call. Every fact that cannot be
-+// determined is omitted silently.
++// once per process and cached; the git branch describes the current
++// worktree, while free disk space describes the working directory: a
++// non-git project sets the worktree to "/", which on Android is a full,
++// read-only system image that says nothing about usable space. Both are
++// read per call. Every fact that cannot be determined is omitted silently.
 +//
 +// opencode-patch 0017: the block is trimmed to what an agent actually
 +// acts on. Gone: the terminal type, the runtime version, the CPU model
@@ -174,9 +176,9 @@ index a86ec804ff..1da3539150 100644
 +  return head?.match(/^ref: refs\/heads\/(.+)$/m)?.[1]?.trim()
 +}
 +
-+function diskLine(worktree: string) {
++function diskLine(directory: string) {
 +  try {
-+    const stats = statfsSync(worktree)
++    const stats = statfsSync(directory)
 +    const total = Number(stats.blocks) * Number(stats.bsize)
 +    const free = Number(stats.bavail) * Number(stats.bsize)
 +    if (!total) return undefined
@@ -189,7 +191,7 @@ index a86ec804ff..1da3539150 100644
  export interface Interface {
    readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
    readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
-@@ -38,20 +212,35 @@ const layer = Layer.effect(
+@@ -38,20 +214,35 @@ const layer = Layer.effect(
      const locations = yield* LocationServiceMap.Service
  
      return Service.of({
@@ -201,7 +203,7 @@ index a86ec804ff..1da3539150 100644
          }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
 +        const info = deviceInfo()
 +        const branch = ctx.project.vcs === "git" ? gitBranch(ctx.worktree) : undefined
-+        const disk = diskLine(ctx.worktree)
++        const disk = diskLine(ctx.directory)
          return [
            [
 -            `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
