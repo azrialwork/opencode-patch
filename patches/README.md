@@ -141,6 +141,8 @@ the one prompt every model gets, Zen or custom. The plan-mode reminder texts and
 the built-in agent prompts (title, summary, explore, compaction)
 are separate surfaces and are not touched.
 
+A later deduplication pass removed the todo-timing clause from this prompt: the mechanics of marking steps done live only in the todowrite tool's description, and the prompt keeps only the rule that multi-step work keeps a list.
+
 **16. `0016-complete-env-block.patch` — the environment block
 tells the truth about the device, and only the useful truth.** The
 "You are powered by the model named …" line is removed from the
@@ -184,6 +186,8 @@ emojis) are left to the system prompt. Tool descriptions from
 MCP servers and plugins are untouched — OpenCode only forwards
 those. `plan-enter.txt` is also untouched: no code imports it.
 
+A later deduplication pass trimmed the task description's verification sentence: verifying a subagent's result is policy, stated once in the system prompt; the description keeps what is unique to the tool.
+
 **18. `0018-parallel-first-tools.patch` — parallel tool calls
 are the default, in writing.** The runtime already executes the
 independent tool calls of one turn concurrently (verified
@@ -203,6 +207,8 @@ parallel-issuance notes (overlapping edits to the same file
 stay sequenced), task's concurrent launch becomes the stated
 default, and the rendered shell section says independent
 commands run in parallel by default. Instruction text only — no code changes.
+
+A later deduplication pass removed this patch's batching sentences from the individual tool descriptions (glob, grep, websearch, read, webfetch, write, and the shell and edit wordings): the parallel rule is stated once, in the system prompt and the subagent cards, and the descriptions keep only tool-specific mechanics - such as edit's note that overlapping edits to one file are sequenced.
 
 **19. `0019-explore-parallel-prompt.patch` — the explore
 agent's own card learns the two-hands rule.** An agent with its
@@ -272,6 +278,8 @@ delegated, and a tree glimpsed once does not make its contents
 known. Direct work remains for exact files already known,
 single lookups in them, and work delegation would plainly cost
 more than.
+
+A later deduplication pass shortened this patch's delegation rule: the enumeration of what a complete brief contains now lives only in the task tool's description, where it is used.
 
 **21. `0021-agent-descriptions.patch` — the notes by the bell,
 rewritten.** The last instruction surface still in upstream's

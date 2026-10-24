@@ -142,6 +142,8 @@ satu-satunya prompt yang didapat semua model, Zen maupun custom.
 Teks pengingat plan-mode dan prompt agen bawaan (title, summary,
 explore, compaction) adalah permukaan terpisah dan tidak disentuh.
 
+Sebuah sapuan deduplikasi kemudian menghapus klausa waktu-todo dari prompt ini: mekanisme menandai langkah selesai hanya hidup di deskripsi tool todowrite, dan prompt ini hanya menyimpan aturan bahwa pekerjaan multi-langkah memelihara sebuah daftar.
+
 **16. `0016-complete-env-block.patch` — blok environment bercerita
 benar tentang perangkatnya, dan hanya kebenaran yang berguna.**
 Baris "You are powered by the model named …" dihapus dari string
@@ -185,6 +187,8 @@ tool dari server MCP dan plugin tidak disentuh — OpenCode hanya
 meneruskannya. `plan-enter.txt` juga tidak disentuh: tidak ada
 kode yang mengimpornya.
 
+Sebuah sapuan deduplikasi kemudian memangkas kalimat verifikasi pada deskripsi task: memverifikasi hasil subagen adalah kebijakan, dinyatakan satu kali di system prompt; deskripsi itu menyimpan hanya yang khas bagi tool-nya.
+
 **18. `0018-parallel-first-tools.patch` — panggilan tool
 paralel adalah default-nya, secara tertulis.** Runtime memang
 sudah mengeksekusi panggilan tool independen dalam satu giliran
@@ -207,6 +211,8 @@ sama tetap berurutan), peluncuran konkuren milik task menjadi
 default yang dinyatakan, dan bagian shell yang dirender
 menyatakan perintah independen berjalan paralel secara default. Hanya teks instruksi — tanpa perubahan
 kode.
+
+Sebuah sapuan deduplikasi kemudian menghapus kalimat batching milik patch ini dari deskripsi tool masing-masing (glob, grep, websearch, read, webfetch, write, serta redaksi shell dan edit): aturan paralel dinyatakan satu kali, di system prompt dan kartu subagen, dan deskripsi hanya menyimpan mekanisme khas tool-nya - seperti catatan edit bahwa suntingan yang tumpang tindih pada satu file diurutkan.
 
 **19. `0019-explore-parallel-prompt.patch` — kartu milik agen
 explore sendiri belajar aturan dua tangan.** Agen yang punya
@@ -283,6 +289,8 @@ dan pohon yang sekilas terlihat tidak membuat isinya
 diketahui. Pekerjaan langsung tetap untuk file persis yang
 sudah diketahui, pencarian tunggal di dalamnya, dan pekerjaan
 yang delegasinya jelas lebih mahal.
+
+Sebuah sapuan deduplikasi kemudian memendekkan aturan delegasi patch ini: rincian isi brief yang lengkap kini hanya hidup di deskripsi tool task, di tempat ia dipakai.
 
 **21. `0021-agent-descriptions.patch` — catatan di samping
 lonceng, ditulis ulang.** Permukaan instruksi terakhir yang

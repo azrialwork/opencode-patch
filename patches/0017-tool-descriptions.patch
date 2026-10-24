@@ -561,7 +561,7 @@ index d8ca640cfb..6ca851eaf2 100644
  })
  
 diff --git a/packages/opencode/src/tool/task.txt b/packages/opencode/src/tool/task.txt
-index c5e412f409..9497fe0c68 100644
+index c5e412f409..150e07d0f6 100644
 --- a/packages/opencode/src/tool/task.txt
 +++ b/packages/opencode/src/tool/task.txt
 @@ -1,19 +1,19 @@
@@ -599,7 +599,7 @@ index c5e412f409..9497fe0c68 100644
 +3. The prompt must stand on its own. An invocation starts with a fresh context, so state the task in full detail: the goal, the scope, whether the agent may write code or should only research, how it should verify its work, and exactly what its final message must return.
 +4. To continue an earlier invocation instead of starting fresh, pass its `task_id`; the agent resumes with its previous messages and tool outputs.
 +5. Once work is delegated, do not duplicate it. Continue with non-overlapping work, or wait for the result.
-+6. The result is not visible to the user. Verify it against the original request before relying on it, and report its outcome in the reply to the user.
++6. The result is not visible to the user; report its outcome in the reply to the user.
 diff --git a/packages/opencode/src/tool/todowrite.txt b/packages/opencode/src/tool/todowrite.txt
 index a21630c158..090a7b5bf2 100644
 --- a/packages/opencode/src/tool/todowrite.txt
