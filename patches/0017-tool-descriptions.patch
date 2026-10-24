@@ -226,27 +226,66 @@ index 368174cc8d..dc085fdf44 100644
 +- To locate files by name, use `glob`; to search file contents, use `grep`.
 +- Independent reads can be batched in a single block.
 diff --git a/packages/opencode/src/tool/shell/prompt.ts b/packages/opencode/src/tool/shell/prompt.ts
-index b576b77297..db0c0007e0 100644
+index b576b77297..ea506d0f5c 100644
 --- a/packages/opencode/src/tool/shell/prompt.ts
 +++ b/packages/opencode/src/tool/shell/prompt.ts
-@@ -64,52 +64,37 @@ function powershellNotes(name: string) {
+@@ -4,9 +4,6 @@ import { PositiveInt } from "@opencode-ai/core/schema"
+ import { Global } from "@opencode-ai/core/global"
+ import { ShellID } from "./id"
  
- function chainGuidance(name: string) {
-   if (name === "powershell") {
--    return "If the commands depend on each other and must run sequentially, avoid '&&' in this shell because Windows PowerShell (5.1) does not support it. Use PowerShell conditionals such as `cmd1; if ($?) { cmd2 }` when later commands must depend on earlier success."
-+    return "Dependent commands run in sequence inside one call. Windows PowerShell (5.1) has no '&&'; chain with `cmd1; if ($?) { cmd2 }` when a later command depends on an earlier success."
-   }
-   if (PS.has(name)) {
--    return "If the commands depend on each other and must run sequentially, use a single bash tool call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like New-Item before Copy-Item, Write before bash for git operations, or git add before git commit), run these operations sequentially instead."
-+    return "Dependent commands run in sequence inside one call, chained with '&&' (e.g., `git add . && git commit -m \"message\" && git push`). Operations that must finish first (New-Item before Copy-Item, a write before a git operation) belong in the same call."
-   }
-   if (CMD.has(name)) {
--    return "If the commands depend on each other and must run sequentially, use a single bash tool call with `&&` to chain them together (e.g., `mkdir out && dir out`). For instance, if one operation must complete before another starts, run these operations sequentially instead."
-+    return "Dependent commands run in sequence inside one call, chained with '&&' (e.g., `mkdir out && dir out`). Operations that must finish first belong in the same call."
-   }
--  return "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
-+  return "Dependent commands run in sequence inside one call, chained with '&&' (e.g., `git add . && git commit -m \"message\" && git push`). Operations that must finish first (mkdir before cp, a write before a git operation) belong in the same call."
+-const PS = new Set(["powershell", "pwsh"])
+-const CMD = new Set(["cmd"])
+-
+ export type Limits = {
+   maxLines: number
+   maxBytes: number
+@@ -33,83 +30,31 @@ function renderPrompt(template: string, values: Record<string, string>) {
+   })
  }
+ 
+-function shellDisplayName(name: string) {
+-  if (name === "pwsh") return "PowerShell (7+)"
+-  if (name === "powershell") return "Windows PowerShell (5.1)"
+-  if (name === "cmd") return "cmd.exe"
+-  return name
+-}
+ 
+-function powershellNotes(name: string) {
+-  if (name === "pwsh") {
+-    return `# PowerShell (7+) shell notes
+-- This cross-platform shell supports pipeline chain operators (\`&&\` and \`||\`).
+-- Use double quotes for interpolated strings (\`"Hello $name"\`), single quotes for verbatim strings.
+-- Prefer full cmdlet names like \`Get-ChildItem\`, \`Set-Content\`, \`Remove-Item\`, and \`New-Item\` over aliases.
+-- Use \`$(...)\` for subexpressions. Use \`@(...)\` for array expressions.
+-- To call a native executable whose path contains spaces, use the call operator: \`& "path/to/exe" args\`.
+-- Escape special characters with the PowerShell backtick character.`
+-  }
+-  if (name === "powershell") {
+-    return `# Windows PowerShell (5.1) shell notes
+-- Use \`cmd1; if ($?) { cmd2 }\` to chain dependent commands.
+-- Use double quotes for interpolated strings (\`"Hello $name"\`), single quotes for verbatim strings.
+-- Prefer full cmdlet names like \`Get-ChildItem\`, \`Set-Content\`, \`Remove-Item\`, and \`New-Item\` over aliases.
+-- Use \`$(...)\` for subexpressions. Use \`@(...)\` for array expressions.
+-- To call a native executable whose path contains spaces, use the call operator: \`& "path/to/exe" args\`.
+-- Escape special characters with the PowerShell backtick character.`
+-  }
+-  return ""
+-}
+ 
+-function chainGuidance(name: string) {
+-  if (name === "powershell") {
+-    return "If the commands depend on each other and must run sequentially, avoid '&&' in this shell because Windows PowerShell (5.1) does not support it. Use PowerShell conditionals such as `cmd1; if ($?) { cmd2 }` when later commands must depend on earlier success."
+-  }
+-  if (PS.has(name)) {
+-    return "If the commands depend on each other and must run sequentially, use a single bash tool call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like New-Item before Copy-Item, Write before bash for git operations, or git add before git commit), run these operations sequentially instead."
+-  }
+-  if (CMD.has(name)) {
+-    return "If the commands depend on each other and must run sequentially, use a single bash tool call with `&&` to chain them together (e.g., `mkdir out && dir out`). For instance, if one operation must complete before another starts, run these operations sequentially instead."
+-  }
+-  return "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
+-}
++const CHAIN_GUIDANCE =
++  "Dependent commands run in sequence inside one call, chained with '&&' (e.g., `git add . && git commit -m \"message\" && git push`). Operations that must finish first (New-Item before Copy-Item, a write before a git operation) belong in the same call."
  
  function bashCommandSection(chain: string, limits: Limits, defaultTimeoutMs: number) {
 -  return `Before executing the command, please follow these steps:
@@ -299,19 +338,25 @@ index b576b77297..db0c0007e0 100644
      <good-example>
      Use workdir="/foo/bar" with command: pytest tests
      </good-example>
-@@ -127,40 +112,25 @@ function powershellCommandSection(
- ) {
-   return `${powershellNotes(name)}
+@@ -118,147 +63,15 @@ Usage notes:
+     </bad-example>`
+ }
+ 
+-function powershellCommandSection(
+-  name: string,
+-  chain: string,
+-  pathSep: string,
+-  limits: Limits,
+-  defaultTimeoutMs: number,
+-) {
+-  return `${powershellNotes(name)}
  
 -Before executing the command, please follow these steps:
-+Before executing the command, follow these steps:
  
 -1. Directory Verification:
 -   - If the command will create new directories or files, first use \`Test-Path -LiteralPath <parent>\` to verify the parent directory exists and is the correct location
 -   - For example, before creating \`foo${pathSep}bar\`, first use \`Test-Path -LiteralPath "foo"\` to check that \`foo\` exists and is the intended parent directory
-+1. Directory verification:
-+   - When the command creates new directories or files, first use \`Test-Path -LiteralPath <parent>\` to confirm the parent exists and is the intended location. For example, before creating \`foo${pathSep}bar\`, first check \`Test-Path -LiteralPath "foo"\`.
- 
+-
 -2. Command Execution:
 -   - Always quote file paths that contain spaces with double quotes (e.g., Remove-Item -LiteralPath "path with spaces${pathSep}file.txt")
 -   - Examples of proper quoting:
@@ -321,11 +366,8 @@ index b576b77297..db0c0007e0 100644
 -     - path with spaces${pathSep}script.ps1 (incorrect - path is split and not invoked)
 -   - After ensuring proper quoting, execute the command.
 -   - Capture the output of the command.
-+2. Command execution:
-+   - Quote file paths that contain spaces with double quotes (e.g., \`Remove-Item -LiteralPath "path with spaces${pathSep}file.txt"\`).
-+   - Execute the command and capture its output.
- 
- Usage notes:
+-
+-Usage notes:
 -  - The command argument is required.
 -  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
 -  - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`Select-Object -First\`, \`Select-Object -Last\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
@@ -337,35 +379,33 @@ index b576b77297..db0c0007e0 100644
 -    - Edit files: Use Edit (NOT Set-Content)
 -    - Write files: Use Write (NOT Set-Content/Out-File or here-strings)
 -    - Communication: Output text directly (NOT Write-Output/Write-Host)
-+  - The command argument is required. The timeout is optional, in milliseconds; commands time out after ${defaultTimeoutMs}ms by default.
-+  - Output beyond ${limits.maxLines} lines or ${limits.maxBytes} bytes is truncated, and the full output is written to a file. Read it back with the read tool (offset/limit) or search it with the grep tool; do not use \`Select-Object -First\` or \`Select-Object -Last\` to limit output.
-+  - Prefer the dedicated tools over PowerShell file and content cmdlets: glob over \`Get-ChildItem\`, grep over \`Select-String\`, read over \`Get-Content\`, edit and write over \`Set-Content\`, \`Out-File\`, and here-strings. Plain communication belongs in the reply text, not in \`Write-Output\` or \`Write-Host\`.
-   - When issuing multiple commands:
+-  - When issuing multiple commands:
 -    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two bash tool calls in parallel.
-+    - Independent commands run in parallel: issue several tool calls in a single block (for example, \`git status\` and \`git diff\` together).
-     - ${chain}
+-    - ${chain}
 -    - Use \`;\` only when you need to run commands sequentially but don't care if earlier commands fail
 -    - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
 -  - AVOID changing directories inside the command. Use the \`workdir\` parameter to change directories instead.
-+    - Use ';' only when later commands should run even if earlier ones fail.
-+    - Separate commands with ';' or a chain operator, not with newlines (newlines inside quoted strings are fine).
-+  - Use the \`workdir\` parameter instead of changing directories inside the command.
-     <good-example>
-     Use workdir="project${pathSep}subdir" with command: pytest tests
-     </good-example>
-@@ -176,40 +146,25 @@ function cmdCommandSection(chain: string, limits: Limits, defaultTimeoutMs: numb
- - Use \`if exist\` for existence checks.
- - Use \`call\` when invoking batch files from another batch-style command.
- 
+-    <good-example>
+-    Use workdir="project${pathSep}subdir" with command: pytest tests
+-    </good-example>
+-    <bad-example>
+-    ${name === "powershell" ? `Set-Location -LiteralPath "project${pathSep}subdir"; if ($?) { pytest tests }` : `Set-Location -LiteralPath "project${pathSep}subdir" && pytest tests`}
+-    </bad-example>`
+-}
+-
+-function cmdCommandSection(chain: string, limits: Limits, defaultTimeoutMs: number) {
+-  return `# cmd.exe shell notes
+-- Use double quotes for paths with spaces.
+-- Use %VAR% for environment variables.
+-- Use \`if exist\` for existence checks.
+-- Use \`call\` when invoking batch files from another batch-style command.
+-
 -Before executing the command, please follow these steps:
-+Before executing the command, follow these steps:
- 
+-
 -1. Directory Verification:
 -   - If the command will create new directories or files, first use \`if exist\` to verify the parent directory exists and is the correct location
 -   - For example, before creating \`foo\\bar\`, first use \`if exist "foo\\" dir "foo"\` to check that \`foo\` exists and is the intended parent directory
-+1. Directory verification:
-+   - When the command creates new directories or files, first use \`if exist\` to confirm the parent exists and is the intended location. For example, before creating \`foo\\bar\`, first check \`if exist "foo\\" dir "foo"\`.
- 
+-
 -2. Command Execution:
 -   - Always quote file paths that contain spaces with double quotes (e.g., del "path with spaces\\file.txt")
 -   - Examples of proper quoting:
@@ -375,11 +415,8 @@ index b576b77297..db0c0007e0 100644
 -     - path with spaces\\script.bat (incorrect - path is split and not invoked correctly)
 -   - After ensuring proper quoting, execute the command.
 -   - Capture the output of the command.
-+2. Command execution:
-+   - Quote file paths that contain spaces with double quotes (e.g., \`del "path with spaces\\file.txt"\`).
-+   - Execute the command and capture its output.
- 
- Usage notes:
+-
+-Usage notes:
 -  - The command argument is required.
 -  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
 -  - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`more\` or other pagination commands to limit output; the full output will already be captured to a file for more precise searching.
@@ -391,48 +428,58 @@ index b576b77297..db0c0007e0 100644
 -    - Edit files: Use Edit (NOT copy)
 -    - Write files: Use Write (NOT echo > file)
 -    - Communication: Output text directly (NOT echo)
-+  - The command argument is required. The timeout is optional, in milliseconds; commands time out after ${defaultTimeoutMs}ms by default.
-+  - Output beyond ${limits.maxLines} lines or ${limits.maxBytes} bytes is truncated, and the full output is written to a file. Read it back with the read tool (offset/limit) or search it with the grep tool; do not use \`more\` or other pagination commands to limit output.
-+  - Prefer the dedicated tools over cmd.exe file and content commands: glob over \`dir /s\`, grep over \`findstr\`, read over \`type\`, write over \`echo\` redirection. Plain communication belongs in the reply text, not in \`echo\`.
-   - When issuing multiple commands:
+-  - When issuing multiple commands:
 -    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "dir" and "where cmd", send a single message with two bash tool calls in parallel.
-+    - Independent commands run in parallel: issue several tool calls in a single block (for example, \`dir\` and \`where cmd\` together).
-     - ${chain}
+-    - ${chain}
 -    - Use \`&\` only when you need to run commands sequentially but don't care if earlier commands fail
 -    - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
 -  - AVOID changing directories inside the command. Use the \`workdir\` parameter to change directories instead.
-+    - Use '&' only when later commands should run even if earlier ones fail.
-+    - Separate commands with '&' or '&&', not with newlines (newlines inside quoted strings are fine).
-+  - Use the \`workdir\` parameter instead of changing directories inside the command.
-     <good-example>
-     Use workdir="project\\subdir" with command: dir
-     </good-example>
-@@ -223,9 +178,9 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
-   const chain = chainGuidance(name)
-   if (CMD.has(name)) {
-     return {
+-    <good-example>
+-    Use workdir="project\\subdir" with command: dir
+-    </good-example>
+-    <bad-example>
+-    cd /d "project\\subdir" && dir
+-    </bad-example>`
+-}
+-
+-function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaultTimeoutMs: number) {
+-  const isPowerShell = PS.has(name)
+-  const chain = chainGuidance(name)
+-  if (CMD.has(name)) {
+-    return {
 -      intro: `Executes a given ${shellDisplayName(name)} command with optional timeout, ensuring proper handling and security measures.`,
-+      intro: `Executes a given ${shellDisplayName(name)} command with an optional timeout and returns its output.`,
-       workdirSection:
+-      workdirSection:
 -        "All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID changing directories inside the command - use `workdir` instead.",
-+        "Commands run in the current working directory by default. To run a command in a different directory, set the `workdir` parameter instead of changing directories inside the command.",
-       commandSection: cmdCommandSection(chain, limits, defaultTimeoutMs),
-       gitCommands: "git commands",
-       gitCommandRestriction: "git commands",
-@@ -235,9 +190,9 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
-   }
-   if (isPowerShell) {
-     return {
+-      commandSection: cmdCommandSection(chain, limits, defaultTimeoutMs),
+-      gitCommands: "git commands",
+-      gitCommandRestriction: "git commands",
+-      createPrInstruction: "Create PR using a temporary body file so cmd.exe quoting stays simple.",
+-      createPrExample: `(\n  echo ## Summary\n  echo - ^<1-3 bullet points^>\n) > pr-body.txt\ngh pr create --title "the pr title" --body-file pr-body.txt`,
+-    }
+-  }
+-  if (isPowerShell) {
+-    return {
 -      intro: `Executes a given ${shellDisplayName(name)} command with optional timeout, ensuring proper handling and security measures.`,
-+      intro: `Executes a given ${shellDisplayName(name)} command with an optional timeout and returns its output.`,
-       workdirSection:
+-      workdirSection:
 -        "All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID changing directories inside the command - use `workdir` instead.",
-+        "Commands run in the current working directory by default. To run a command in a different directory, set the `workdir` parameter instead of changing directories inside the command.",
-       commandSection: powershellCommandSection(
-         name,
-         chain,
-@@ -256,9 +211,9 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
-   }
+-      commandSection: powershellCommandSection(
+-        name,
+-        chain,
+-        platform === "win32" ? "\\" : "/",
+-        limits,
+-        defaultTimeoutMs,
+-      ),
+-      gitCommands: "git commands",
+-      gitCommandRestriction: "git commands",
+-      createPrInstruction: "Create PR using gh pr create with a PowerShell here-string to pass the body correctly.",
+-      createPrExample: `gh pr create --title "the pr title" --body @'
+-## Summary
+-- <1-3 bullet points>
+-'@`,
+-    }
+-  }
++function profile(name: string, limits: Limits, defaultTimeoutMs: number) {
++  const chain = CHAIN_GUIDANCE
    return {
      intro:
 -      "Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.",
@@ -443,6 +490,15 @@ index b576b77297..db0c0007e0 100644
      commandSection: bashCommandSection(chain, limits, defaultTimeoutMs),
      gitCommands: "bash commands",
      gitCommandRestriction: "git bash commands",
+@@ -271,7 +84,7 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
+ }
+ 
+ export function render(name: string, platform: NodeJS.Platform, limits: Limits, defaultTimeoutMs: number) {
+-  const selected = profile(name, platform, limits, defaultTimeoutMs)
++  const selected = profile(name, limits, defaultTimeoutMs)
+   return {
+     description: renderPrompt(DESCRIPTION, {
+       intro: selected.intro,
 diff --git a/packages/opencode/src/tool/shell/shell.txt b/packages/opencode/src/tool/shell/shell.txt
 index 22bd8f6c1a..5c8a308d16 100644
 --- a/packages/opencode/src/tool/shell/shell.txt

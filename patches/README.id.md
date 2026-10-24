@@ -165,8 +165,11 @@ yang dikembalikannya; kapan tool dipakai; kapan tidak, dan apa
 penggantinya; batas serta cara gagalnya; register polos di
 seluruh teks. Patch ini mencakup teks-teks `.txt` per tool di
 `src/tool/` (tiga belas, ditambah template shell), deskripsi
-`bash` yang dirender (template plus bagian bash, PowerShell, dan
-cmd yang dibangkitkan di `shell/prompt.ts`), teks parameter
+shell yang dirender (template plus bagian yang dibangkitkan di
+`shell/prompt.ts`) — varian deskripsi PowerShell dan cmd dihapus
+sepenuhnya, sehingga yang tersisa hanya deskripsi bash dan
+setiap shell menerimanya; rumah ini mengirim untuk Linux dan
+Termux, tempat bash adalah shell yang penting —, teks parameter
 background milik `task`, deskripsi parameter `path` milik `glob`
 (peringatan 268 karakter menjadi satu kalimat), deskripsi tool
 code-mode, dan deskripsi tool structured-output di
@@ -201,9 +204,8 @@ glob, grep, webfetch, dan websearch berubah dari "can be
 batched" menjadi "by default", edit dan write mendapat catatan
 penerbitan paralel (edit yang tumpang tindih pada file yang
 sama tetap berurutan), peluncuran konkuren milik task menjadi
-default yang dinyatakan, dan ketiga bagian shell yang dirender
-(bash, PowerShell, cmd) menyatakan perintah independen berjalan
-paralel secara default. Hanya teks instruksi — tanpa perubahan
+default yang dinyatakan, dan bagian shell yang dirender
+menyatakan perintah independen berjalan paralel secara default. Hanya teks instruksi — tanpa perubahan
 kode.
 
 ---

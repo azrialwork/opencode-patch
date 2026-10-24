@@ -59,10 +59,10 @@ index dc085fdf44..64eddf01df 100644
 -- Independent reads can be batched in a single block.
 +- Batch independent reads in a single block by default. A read waits only when its path depends on an earlier result.
 diff --git a/packages/opencode/src/tool/shell/prompt.ts b/packages/opencode/src/tool/shell/prompt.ts
-index db0c0007e0..c90f8a4b01 100644
+index ea506d0f5c..f843d9d4a1 100644
 --- a/packages/opencode/src/tool/shell/prompt.ts
 +++ b/packages/opencode/src/tool/shell/prompt.ts
-@@ -90,7 +90,7 @@ Usage notes:
+@@ -50,7 +50,7 @@ Usage notes:
    - Output beyond ${limits.maxLines} lines or ${limits.maxBytes} bytes is truncated, and the full output is written to a file. Read it back with the read tool (offset/limit) or search it with the grep tool; do not use \`head\`, \`tail\`, or similar commands to limit output.
    - Prefer the dedicated tools over shell equivalents: glob over \`find\` and \`ls\` for finding files, grep over \`grep\` and \`rg\` for searching contents, read over \`cat\`, \`head\`, and \`tail\`, edit over \`sed\` and \`awk\`, write over \`echo\` redirection and heredocs. Plain communication belongs in the reply text, not in \`echo\` or \`printf\`.
    - When issuing multiple commands:
@@ -71,24 +71,6 @@ index db0c0007e0..c90f8a4b01 100644
      - ${chain}
      - Use ';' only when later commands should run even if earlier ones fail.
      - Separate commands with '&&' or ';', never with newlines (newlines inside quoted strings are fine).
-@@ -126,7 +126,7 @@ Usage notes:
-   - Output beyond ${limits.maxLines} lines or ${limits.maxBytes} bytes is truncated, and the full output is written to a file. Read it back with the read tool (offset/limit) or search it with the grep tool; do not use \`Select-Object -First\` or \`Select-Object -Last\` to limit output.
-   - Prefer the dedicated tools over PowerShell file and content cmdlets: glob over \`Get-ChildItem\`, grep over \`Select-String\`, read over \`Get-Content\`, edit and write over \`Set-Content\`, \`Out-File\`, and here-strings. Plain communication belongs in the reply text, not in \`Write-Output\` or \`Write-Host\`.
-   - When issuing multiple commands:
--    - Independent commands run in parallel: issue several tool calls in a single block (for example, \`git status\` and \`git diff\` together).
-+    - Independent commands run in parallel by default: issue them as several tool calls in a single block rather than one after another (for example, \`git status\` and \`git diff\` together).
-     - ${chain}
-     - Use ';' only when later commands should run even if earlier ones fail.
-     - Separate commands with ';' or a chain operator, not with newlines (newlines inside quoted strings are fine).
-@@ -160,7 +160,7 @@ Usage notes:
-   - Output beyond ${limits.maxLines} lines or ${limits.maxBytes} bytes is truncated, and the full output is written to a file. Read it back with the read tool (offset/limit) or search it with the grep tool; do not use \`more\` or other pagination commands to limit output.
-   - Prefer the dedicated tools over cmd.exe file and content commands: glob over \`dir /s\`, grep over \`findstr\`, read over \`type\`, write over \`echo\` redirection. Plain communication belongs in the reply text, not in \`echo\`.
-   - When issuing multiple commands:
--    - Independent commands run in parallel: issue several tool calls in a single block (for example, \`dir\` and \`where cmd\` together).
-+    - Independent commands run in parallel by default: issue them as several tool calls in a single block rather than one after another (for example, \`dir\` and \`where cmd\` together).
-     - ${chain}
-     - Use '&' only when later commands should run even if earlier ones fail.
-     - Separate commands with '&' or '&&', not with newlines (newlines inside quoted strings are fine).
 diff --git a/packages/opencode/src/tool/task.txt b/packages/opencode/src/tool/task.txt
 index 9497fe0c68..e289fe622f 100644
 --- a/packages/opencode/src/tool/task.txt

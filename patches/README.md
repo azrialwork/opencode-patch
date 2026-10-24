@@ -163,8 +163,12 @@ is rewritten following the same prompt best practices as patch
 it; when not to, and what to use instead; limits and failure
 modes; plain register throughout. The patch covers the per-tool
 `.txt` texts in `src/tool/` (thirteen, plus the shell template),
-the rendered `bash` description (the template plus the bash,
-PowerShell, and cmd sections generated in `shell/prompt.ts`),
+the rendered shell description (the template plus the section
+generated in `shell/prompt.ts`) — the PowerShell and cmd
+description variants are removed outright, so only the bash
+description remains and every shell receives it; this house
+ships for Linux and Termux, where bash is the shell that
+matters,
 the `task` background parameter text, the `glob` `path`
 parameter description (a 268-character warning becomes one
 sentence), the code-mode tool description, and the
@@ -197,9 +201,8 @@ the batching lines in read, glob, grep, webfetch, and websearch
 move from "can be batched" to "by default", edit and write gain
 parallel-issuance notes (overlapping edits to the same file
 stay sequenced), task's concurrent launch becomes the stated
-default, and all three rendered shell sections (bash,
-PowerShell, cmd) say independent commands run in parallel by
-default. Instruction text only — no code changes.
+default, and the rendered shell section says independent
+commands run in parallel by default. Instruction text only — no code changes.
 
 ---
 
