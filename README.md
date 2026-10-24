@@ -131,7 +131,7 @@ the postman walks up to OpenCode's house and looks in the window. If
 a new OpenCode has been born, he hurries back and wakes the builder
 robots at GitHub, and they do the whole thing again: fetch the fresh
 robot, open the backpack, and make the tailor's cuts in the tailor's
-order, one to nineteen. If even one cut does not fit the new robot,
+order, one to twenty. If even one cut does not fit the new robot,
 they stop at once and ship nothing — a half-cut robot is worse than
 no robot at all, and everyone in the workshop knows it.
 
@@ -203,7 +203,7 @@ call it — and the card knows exactly where it is. It brings the
 small box, checks the safety stamp, and settles the robot in, shoes
 and all.
 
-Same robot. Same cuts, all nineteen of them. Just a smaller house,
+Same robot. Same cuts, all twenty of them. Just a smaller house,
 and clothes that fit it.
 
 One more thing was found in the backpack, at the very bottom: a
@@ -358,6 +358,26 @@ and come back once, with your arms full.
 Now when the bell rings, the shelves hum. The apprentice is
 gone a little longer — and comes back with everything.
 
+That winter the workshop took on more work than one pair of
+hands — even two hands — could carry, and the tailor taught
+the robot the last manner of the house.
+
+"Your hands are for the small errands," he said, "the ones
+already waiting by the door. The searching goes to the
+apprentice — that is what his quick feet are for. The heavy
+carrying goes to the strong helper. Ring first. Run second."
+
+So the tailor wrote a card for the helper too, who had never
+had one of his own — he had only ever borrowed the robot's.
+On it, the two-hands rule stood first, in larger letters,
+because the helper's errands were the long ones, and a long
+errand done one piece at a time takes all day.
+
+Now the bell rings before the robot's feet move. The
+apprentice sweeps the shelves, the helper carries the heavy
+boxes, and the robot keeps his two hands for the work that is
+truly his — done all at once, the way he was taught.
+
 At your house, you will find he has lost none of the things that
 matter. He still sits with you in the terminal and helps you write
 your programs. He still reads and writes and fixes files. He still
@@ -371,7 +391,7 @@ them to him in his configuration. No configuration, no tools. He will
 not pick up strangers' toys.
 
 As for the tailor — he is still here, in this repository, keeping his
-list tidy. The list is all this house has ever held: nineteen cuts, a
+list tidy. The list is all this house has ever held: twenty cuts, a
 postman who never forgets to check, and a promise he makes to every
 robot who leaves the workshop.
 
@@ -393,6 +413,7 @@ And every six hours, the postman knocks again.
 - **Every tool slip rewritten:** patch 0017 rewrites all built-in tool descriptions in the same best-practice format as the system prompt: what the tool does and returns, when to use it, when not to (and what to use instead), and its limits. It covers the per-tool `.txt` texts, the dynamically rendered shell description (bash only — the PowerShell and cmd variants are removed, so every shell receives the bash text), the task tool's background parameter, the `glob` path parameter, the code-mode description, and the structured-output tool. Two upstream contradictions are resolved (the grep description no longer sends the model to shell `rg`, against the bash description), the websearch description no longer claims domain filtering its schema does not offer, and the task description now asks for the subagent's result to be verified against the request instead of generally trusted. Tools arriving from MCP servers and plugins keep their own descriptions, which OpenCode only forwards; the orphaned `plan-enter.txt`, which no code imports, is left untouched.
 - **Parallel by default:** patch 0018 makes batched, parallel tool calls the stated default on both instruction surfaces: a dedicated rule and a closing reminder in `default.txt` (independent calls go out together in one block and run at the same time; a call waits only for a genuine dependency; verification follows the same rule), and matching "by default" batching language in the read, glob, grep, webfetch, websearch, edit, write, and task descriptions and in the rendered shell section. The runtime already executed same-turn calls concurrently (measured: two `sleep 3` calls from one response finish in ~3.3s, not ~6s); this patch aligns what the texts instruct with what the runtime does.
 - **The apprentice's card too:** patch 0019 aligns the one built-in agent prompt that runs a real tool loop — `explore`, whose own prompt (`src/agent/prompt/explore.txt`) replaces `default.txt` for its sessions — with the parallel-by-default rule as its first guideline, and fixes its Bash line to read-only inspection (upstream sent explore to Bash for copying and moving files, against its own read-only rule). The title, summary, and compaction agents also carry their own prompts, but run with every tool denied, so there is nothing to parallelize there.
+- **Delegate first, batch second:** patch 0020 orders the house's ways of working. The main prompt sends specialist work to the specialist agent before any direct tool call, with parallel batching as the tier below it; explore's card opens with its parallel rule; the general agent receives its own prompt card (`src/agent/prompt/general.txt`) for the first time, parallel-first, instead of silently inheriting the main prompt; and the plan-mode reminders put delegation first as well. The title, summary, and compaction prompts stay byte-identical to upstream.
 - **Termux build:** patch 0014 adds Bun's Android targets (`OPENCODE_LIBC=bionic`) to the upstream build script. Two extra CI jobs build `libopentui.so` from the pinned OpenTUI v0.4.5 sources (Zig + Android NDK, 16 KB page alignment) and a small `close_range` compat shim (Termux's targetSdk 28 seccomp traps that syscall, so the launcher `LD_PRELOAD`s the shim), then check the Bionic binary with `readelf` — any glibc dependency fails the build. No proot anywhere. For v1.19.4 the Termux binary measures 138,289,528 bytes, verified end-to-end on a real Android 12 Termux device (install, `opencode run`, and the TUI).
 - **The full cut list, in technical words:** see [`patches/README.md`](patches/README.md).
 - **Adding a cut:** make the change in a writable upstream clone, test it, export `git diff` as the next numbered file in `patches/`, and commit it here. The next scheduled build picks it up.

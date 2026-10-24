@@ -231,6 +231,36 @@ lainnya — title, summary, compaction — berjalan dengan semua
 tool ditolak, jadi tidak ada yang bisa diparalelkan di sana;
 ketiganya tidak disentuh.
 
+**20. `0020-delegation-first-prompts.patch` — tata kerja rumah
+ini: delegasi dulu, batch kemudian.** Prompt utama kini
+menyatakan hierarkinya secara terang-terangan. `default.txt`
+mendapat aturan delegasi di atas aturan paralel: pekerjaan
+yang punya spesialis pergi ke spesialis itu lewat tool task —
+pencarian dan pemahaman codebase ke agen explore, satu unit
+pekerjaan multi-langkah yang utuh ke agen general — setiap
+delegasi membawa brief yang lengkap, dan hasilnya diverifikasi
+sebelum apa pun dibangun di atasnya; pekerjaan langsung
+dicadangkan untuk yang kecil, sudah diketahui tempatnya, dan
+pasti, atau yang delegasinya lebih mahal daripada pekerjaannya
+sendiri. Aturan paralel tetap ada, dengan penurunan tingkat
+yang eksplisit: ia adalah tingkat di bawah delegasi, yang
+mengatur pekerjaan yang dikerjakan langsung, dan pengingat
+penutup mengatakan hal yang sama dalam satu baris. Kartu milik
+para pekerja diperkuat ke arah sebaliknya — di dalam sebuah
+brief, batching adalah hukum pertama: aturan paralel milik
+explore naik ke baris-baris pembukanya, dan agen general
+menerima prompt-nya sendiri untuk pertama kalinya
+(`src/agent/prompt/general.txt`, disambungkan di `agent.ts`),
+mandiri seperti milik explore, dengan paralel-secara-default
+sebagai pedoman pertamanya; sampai kini general diam-diam
+mewarisi `default.txt`. Pengingat plan mode (`plan.txt`,
+`plan-mode.txt`) diselaraskan ke tata yang sama: perencanaan
+mendelegasikan lebih dulu — eksplorasi ke agen explore,
+validasi desain ke agen general, secara paralel bila
+independen — dan pembacaan langsung adalah tingkat
+cadangannya. Prompt milik agen-agen hidden tetap tidak
+disentuh, seperti biasa.
+
 ---
 
 Catatan untuk pembaca yang teliti: README ini bukan patch.

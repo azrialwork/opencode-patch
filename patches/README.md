@@ -225,6 +225,33 @@ built-in agent prompts — title, summary, compaction — run with
 every tool denied, so there is nothing to parallelize there;
 they are untouched.
 
+**20. `0020-delegation-first-prompts.patch` — the house order
+of work: delegate first, batch second.** The main prompt now
+states the hierarchy outright. `default.txt` gains a delegation
+rule above the parallel rule: work that has a specialist goes
+to that specialist through the task tool — codebase searching
+and understanding to the explore agent, a self-contained unit
+of multi-step work to the general agent — each delegation
+carrying a complete brief, and its result verified before
+anything is built on it; direct work is reserved for what is
+small, already located, and certain, or where delegation would
+cost more than the work itself. The parallel rule stays,
+explicitly demoted: it is the tier below delegation, governing
+the work done directly, and the closing reminder says the same
+in one line. The workers' own cards are strengthened in the
+opposite direction — inside a brief, batching is the first
+law: explore's parallel rule moves up into its opening lines,
+and the general agent receives a prompt of its own for the
+first time (`src/agent/prompt/general.txt`, wired in
+`agent.ts`), self-contained like explore's, with
+parallel-by-default as its first guideline; until now general
+silently inherited `default.txt`. The plan-mode reminders
+(`plan.txt`, `plan-mode.txt`) are aligned to the same order:
+planning delegates first — exploration to explore agents,
+design validation to general agents, in parallel when
+independent — and direct reads are the fallback tier. The
+hidden agents' prompts remain untouched, as always.
+
 ---
 
 A note for careful readers: this README is not a patch.
