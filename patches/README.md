@@ -262,6 +262,16 @@ located, it goes to explore first; the codebase's size cannot
 excuse keeping it, because that size is only known after
 exploring. The closing reminder carries the same fence in one
 line.
+The threshold was then lowered on the same day, again folded
+into this patch: the trigger is no longer the shape or size of
+the question at all, but simply not knowing. A how-does-this-
+work question whose answer is not already known with certainty
+goes to explore first — before any scouting read, listing, or
+search, because that scouting is itself the exploration being
+delegated, and a tree glimpsed once does not make its contents
+known. Direct work remains for exact files already known,
+single lookups in them, and work delegation would plainly cost
+more than.
 
 ---
 

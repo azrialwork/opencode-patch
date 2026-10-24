@@ -272,6 +272,17 @@ diketahui tempatnya, ia pergi ke explore lebih dulu; ukuran
 codebase tidak bisa menjadi alasan mempertahankannya, sebab
 ukuran itu baru diketahui setelah eksplorasi. Pengingat
 penutup membawa pagar yang sama dalam satu baris.
+Ambangnya kemudian diturunkan pada hari yang sama, lagi-lagi
+dilipat ke patch ini: pemicunya bukan lagi bentuk atau ukuran
+pertanyaan sama sekali, melainkan semata-mata tidak tahu.
+Pertanyaan cara-kerja yang jawabannya belum diketahui dengan
+pasti pergi ke explore lebih dulu — sebelum bacaan, daftar,
+atau pencarian pengintaian apa pun dari Anda sendiri, sebab
+pengintaian itu sendiri adalah eksplorasi yang didelegasikan,
+dan pohon yang sekilas terlihat tidak membuat isinya
+diketahui. Pekerjaan langsung tetap untuk file persis yang
+sudah diketahui, pencarian tunggal di dalamnya, dan pekerjaan
+yang delegasinya jelas lebih mahal.
 
 ---
 
