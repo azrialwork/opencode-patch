@@ -166,10 +166,10 @@ penggantinya; batas serta cara gagalnya; register polos di
 seluruh teks. Patch ini mencakup teks-teks `.txt` per tool di
 `src/tool/` (tiga belas, ditambah template shell), deskripsi
 shell yang dirender (template plus bagian yang dibangkitkan di
-`shell/prompt.ts`) — varian deskripsi PowerShell dan cmd dihapus
+`shell/prompt.ts`; varian deskripsi PowerShell dan cmd dihapus
 sepenuhnya, sehingga yang tersisa hanya deskripsi bash dan
-setiap shell menerimanya; rumah ini mengirim untuk Linux dan
-Termux, tempat bash adalah shell yang penting —, teks parameter
+setiap shell menerimanya — rumah ini mengirim untuk Linux dan
+Termux, tempat bash adalah shell yang penting), teks parameter
 background milik `task`, deskripsi parameter `path` milik `glob`
 (peringatan 268 karakter menjadi satu kalimat), deskripsi tool
 code-mode, dan deskripsi tool structured-output di
