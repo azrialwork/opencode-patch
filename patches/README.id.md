@@ -182,6 +182,30 @@ tool dari server MCP dan plugin tidak disentuh — OpenCode hanya
 meneruskannya. `plan-enter.txt` juga tidak disentuh: tidak ada
 kode yang mengimpornya.
 
+**18. `0018-parallel-first-tools.patch` — panggilan tool
+paralel adalah default-nya, secara tertulis.** Runtime memang
+sudah mengeksekusi panggilan tool independen dalam satu giliran
+secara konkuren (terverifikasi empirik pada build ini); kini
+teks-teksnya memerintahkan persis itu sebagai default, bukan
+pilihan. `default.txt` mendapat aturan khusus di bawah "How
+the work is done" — panggilan independen (baca, cari, ambil,
+perintah, peluncuran subagen) berangkat bersama dalam satu blok
+dan berjalan pada saat yang sama, tidak pernah satu per
+giliran; sebuah panggilan menunggu hanya bila inputnya sungguh
+membutuhkan hasil panggilan sebelumnya; hal lain yang belum
+diketahui diselidiki secara paralel; verifikasi mengikuti
+aturan yang sama — ditambah bullet yang sepadan di pengingat
+tetap di bagian akhir. Deskripsi tool dari patch 0017
+diselaraskan ke default yang sama: baris batching di read,
+glob, grep, webfetch, dan websearch berubah dari "can be
+batched" menjadi "by default", edit dan write mendapat catatan
+penerbitan paralel (edit yang tumpang tindih pada file yang
+sama tetap berurutan), peluncuran konkuren milik task menjadi
+default yang dinyatakan, dan ketiga bagian shell yang dirender
+(bash, PowerShell, cmd) menyatakan perintah independen berjalan
+paralel secara default. Hanya teks instruksi — tanpa perubahan
+kode.
+
 ---
 
 Catatan untuk pembaca yang teliti: README ini bukan patch.

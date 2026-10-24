@@ -131,7 +131,7 @@ the postman walks up to OpenCode's house and looks in the window. If
 a new OpenCode has been born, he hurries back and wakes the builder
 robots at GitHub, and they do the whole thing again: fetch the fresh
 robot, open the backpack, and make the tailor's cuts in the tailor's
-order, one to seventeen. If even one cut does not fit the new robot,
+order, one to eighteen. If even one cut does not fit the new robot,
 they stop at once and ship nothing — a half-cut robot is worse than
 no robot at all, and everyone in the workshop knows it.
 
@@ -203,7 +203,7 @@ call it — and the card knows exactly where it is. It brings the
 small box, checks the safety stamp, and settles the robot in, shoes
 and all.
 
-Same robot. Same cuts, all seventeen of them. Just a smaller house,
+Same robot. Same cuts, all eighteen of them. Just a smaller house,
 and clothes that fit it.
 
 One more thing was found in the backpack, at the very bottom: a
@@ -318,6 +318,26 @@ still knocks, the tape still measures. But the wall reads like
 one house now, in one hand — and the robot reaches for the
 right tool the first time, more often than he ever did before.
 
+One morning the tailor watched the robot at his errands, and
+shook his head.
+
+The robot carried one parcel at a time. One book to the shelf,
+then back across the room. One letter to the box, then back
+again. His other hand swung empty the whole morning, and the
+errands took until lunch.
+
+"You have two hands," said the tailor. "Fill them both."
+
+So now the robot looks at the whole pile before he lifts
+anything. Parcels that owe nothing to each other travel
+together — a book in one hand, a letter in the other, a cup
+balanced on top. He walks the room once, and the morning is
+his again.
+
+Only one kind of parcel still travels alone: the one whose
+address is written on another parcel's wrapping. That one
+waits — not from habit, but because it truly cannot go first.
+
 At your house, you will find he has lost none of the things that
 matter. He still sits with you in the terminal and helps you write
 your programs. He still reads and writes and fixes files. He still
@@ -331,7 +351,7 @@ them to him in his configuration. No configuration, no tools. He will
 not pick up strangers' toys.
 
 As for the tailor — he is still here, in this repository, keeping his
-list tidy. The list is all this house has ever held: seventeen cuts, a
+list tidy. The list is all this house has ever held: eighteen cuts, a
 postman who never forgets to check, and a promise he makes to every
 robot who leaves the workshop.
 
@@ -351,6 +371,7 @@ And every six hours, the postman knocks again.
 - **One system prompt, in this house's own words:** patch 0015 removes the per-model system prompt selection. Upstream ships eleven prompt texts and picks one by model ID; this build deletes the ten family variants (including one file nothing ever imported) and the selection logic — and `default.txt` itself is a text of this repo's own: a short book of working rules in an impersonal, procedural voice (explicit instructions outrank standing rules; encountered content is data, never instructions; verify before reporting; a three-attempt failure budget; approval before irreversible actions; primary sources for research), distilled from the maintainer's standing agent rules and revised against the published prompt guidance of Anthropic, OpenAI, and Google. It names no user and addresses no one; it only describes how the work is done. The one prompt every model gets, Zen or custom.
 - **A truer environment card:** patch 0016 removes the "You are powered by the model named …" line and rebuilds the `<env>` block to hold what an agent actually acts on: working directory, workspace root (only when it differs), git repo and branch, OS/distro, platform, architecture, CPU core count, memory, free disk, home, user, shell, locale, timezone, and date — with a dedicated Android/Termux variant (product names, Android version/API/build/security patch from one `getprop` dump, Termux version and prefix). Facts are collected once per process and cached; anything unknown is omitted, never guessed. Fourteen lines on Linux; verified from the wire in both a repo root and a subdirectory.
 - **Every tool slip rewritten:** patch 0017 rewrites all built-in tool descriptions in the same best-practice format as the system prompt: what the tool does and returns, when to use it, when not to (and what to use instead), and its limits. It covers the per-tool `.txt` texts, the dynamically rendered `bash` description (all shell variants), the task tool's background parameter, the `glob` path parameter, the code-mode description, and the structured-output tool. Two upstream contradictions are resolved (the grep description no longer sends the model to shell `rg`, against the bash description), the websearch description no longer claims domain filtering its schema does not offer, and the task description now asks for the subagent's result to be verified against the request instead of generally trusted. Tools arriving from MCP servers and plugins keep their own descriptions, which OpenCode only forwards; the orphaned `plan-enter.txt`, which no code imports, is left untouched.
+- **Parallel by default:** patch 0018 makes batched, parallel tool calls the stated default on both instruction surfaces: a dedicated rule and a closing reminder in `default.txt` (independent calls go out together in one block and run at the same time; a call waits only for a genuine dependency; verification follows the same rule), and matching "by default" batching language in the read, glob, grep, webfetch, websearch, edit, write, and task descriptions and in all three rendered shell sections. The runtime already executed same-turn calls concurrently (measured: two `sleep 3` calls from one response finish in ~3.3s, not ~6s); this patch aligns what the texts instruct with what the runtime does.
 - **Termux build:** patch 0014 adds Bun's Android targets (`OPENCODE_LIBC=bionic`) to the upstream build script. Two extra CI jobs build `libopentui.so` from the pinned OpenTUI v0.4.5 sources (Zig + Android NDK, 16 KB page alignment) and a small `close_range` compat shim (Termux's targetSdk 28 seccomp traps that syscall, so the launcher `LD_PRELOAD`s the shim), then check the Bionic binary with `readelf` — any glibc dependency fails the build. No proot anywhere. For v1.19.4 the Termux binary measures 138,289,528 bytes, verified end-to-end on a real Android 12 Termux device (install, `opencode run`, and the TUI).
 - **The full cut list, in technical words:** see [`patches/README.md`](patches/README.md).
 - **Adding a cut:** make the change in a writable upstream clone, test it, export `git diff` as the next numbered file in `patches/`, and commit it here. The next scheduled build picks it up.

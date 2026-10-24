@@ -180,6 +180,27 @@ emojis) are left to the system prompt. Tool descriptions from
 MCP servers and plugins are untouched — OpenCode only forwards
 those. `plan-enter.txt` is also untouched: no code imports it.
 
+**18. `0018-parallel-first-tools.patch` — parallel tool calls
+are the default, in writing.** The runtime already executes the
+independent tool calls of one turn concurrently (verified
+empirically on this build); the texts now instruct exactly that
+as the default rather than an option. `default.txt` gains a
+dedicated rule under "How the work is done" — independent calls
+(reads, searches, fetches, commands, subagent launches) go out
+together in one block and run at the same time, never one per
+turn; a call waits only when its input genuinely needs an
+earlier call's result; anything else unknown is probed in
+parallel; verification follows the same rule — plus a matching
+bullet in the standing reminders at the end. The tool
+descriptions from patch 0017 are aligned to the same default:
+the batching lines in read, glob, grep, webfetch, and websearch
+move from "can be batched" to "by default", edit and write gain
+parallel-issuance notes (overlapping edits to the same file
+stay sequenced), task's concurrent launch becomes the stated
+default, and all three rendered shell sections (bash,
+PowerShell, cmd) say independent commands run in parallel by
+default. Instruction text only — no code changes.
+
 ---
 
 A note for careful readers: this README is not a patch.
