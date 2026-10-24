@@ -1,0 +1,690 @@
+diff --git a/packages/opencode/src/session/prompt.ts b/packages/opencode/src/session/prompt.ts
+index 35322e28bf..c41e7e027d 100644
+--- a/packages/opencode/src/session/prompt.ts
++++ b/packages/opencode/src/session/prompt.ts
+@@ -69,13 +69,11 @@ const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
+   "image/webp",
+ ])
+ 
+-const STRUCTURED_OUTPUT_DESCRIPTION = `Use this tool to return your final response in the requested structured format.
++const STRUCTURED_OUTPUT_DESCRIPTION = `Use this tool to return the final response in the requested structured format.
+ 
+-IMPORTANT:
+-- You MUST call this tool exactly once at the end of your response
+-- The input must be valid JSON matching the required schema
+-- Complete all necessary research and tool calls BEFORE calling this tool
+-- This tool provides your final answer - no further actions are taken after calling it`
++- Call this tool exactly once, at the end, after all research and other tool calls are complete.
++- The input must be valid JSON matching the required schema.
++- Calling it ends the turn: the input is the final answer, and no further actions are taken afterwards.`
+ 
+ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
+ 
+diff --git a/packages/opencode/src/tool/apply_patch.txt b/packages/opencode/src/tool/apply_patch.txt
+index 5b2d95608c..c64f5cb29a 100644
+--- a/packages/opencode/src/tool/apply_patch.txt
++++ b/packages/opencode/src/tool/apply_patch.txt
+@@ -1,16 +1,20 @@
+-Use the `apply_patch` tool to edit files. Your patch language is a stripped‑down, file‑oriented diff format designed to be easy to parse and safe to apply. You can think of it as a high‑level envelope:
++Applies file changes described in a patch envelope: creating, deleting, updating, and moving files in one call.
++
++Use for changes spanning several files, or when a change is easier to express as a patch than as separate edits. Use `edit` for a single targeted replacement.
++
++The patch language is a stripped-down, file-oriented diff format designed to be easy to parse and safe to apply. The envelope is:
+ 
+ *** Begin Patch
+ [ one or more file sections ]
+ *** End Patch
+ 
+-Within that envelope, you get a sequence of file operations.
+-You MUST include a header to specify the action you are taking.
+-Each operation starts with one of three headers:
++Each section starts with one of three headers:
+ 
+-*** Add File: <path> - create a new file. Every following line is a + line (the initial contents).
++*** Add File: <path> - create a new file. Every following line is a `+` line holding the initial contents.
+ *** Delete File: <path> - remove an existing file. Nothing follows.
+-*** Update File: <path> - patch an existing file in place (optionally with a rename).
++*** Update File: <path> - patch an existing file in place, optionally with a following `*** Move to: <path>` rename.
++
++Paths are relative to the working directory. Inside an update section, lines are context, `-` for removals and `+` for additions; an `@@` line can anchor the change to a surrounding heading or function.
+ 
+ Example patch:
+ 
+@@ -27,7 +31,6 @@ Example patch:
+ *** End Patch
+ ```
+ 
+-It is important to remember:
+-
+-- You must include a header with your intended action (Add/Delete/Update)
+-- You must prefix new lines with `+` even when creating a new file
++Rules:
++- Every section needs its header, and new content lines always carry the `+` prefix, including in newly created files.
++- If a section cannot be applied, the tool returns an error describing the problem.
+diff --git a/packages/opencode/src/tool/code-mode.ts b/packages/opencode/src/tool/code-mode.ts
+index 332d4b43f1..4eb7250244 100644
+--- a/packages/opencode/src/tool/code-mode.ts
++++ b/packages/opencode/src/tool/code-mode.ts
+@@ -11,7 +11,7 @@ import { Plugin } from "@/plugin"
+ 
+ export const CODE_MODE_TOOL = "execute"
+ 
+-const DESCRIPTION = "Run a confined orchestration script with access to connected MCP tools."
++const DESCRIPTION = "Runs a confined orchestration script that can call the connected MCP tools, and returns the script's output."
+ 
+ export const Parameters = Schema.Struct({
+   code: Schema.String.annotate({
+diff --git a/packages/opencode/src/tool/edit.txt b/packages/opencode/src/tool/edit.txt
+index 618fd5ad1e..0afe774544 100644
+--- a/packages/opencode/src/tool/edit.txt
++++ b/packages/opencode/src/tool/edit.txt
+@@ -1,10 +1,10 @@
+-Performs exact string replacements in files. 
++Performs an exact string replacement in an existing file.
++
++Use for targeted changes to a file that already exists. Use `write` to create a new file or replace a file's whole content; use `apply_patch`, when available, for changes spanning several files.
+ 
+ Usage:
+-- You must use your `Read` tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file. 
+-- When editing text from Read tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears AFTER the line number prefix. The line number prefix format is: line number + colon + space (e.g., `1: `). Everything after that space is the actual file content to match. Never include any part of the line number prefix in the oldString or newString.
+-- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
+-- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.
+-- The edit will FAIL if `oldString` is not found in the file with an error "oldString not found in content".
+-- The edit will FAIL if `oldString` is found multiple times in the file with an error "Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match." Either provide a larger string with more surrounding context to make it unique or use `replaceAll` to change every instance of `oldString`. 
+-- Use `replaceAll` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.
++- Read the file first: the tool errors if the file has not been read in this conversation.
++- `oldString` must match the file exactly, including indentation. In `read` output, match the content after the line-number prefix; never include the prefix itself.
++- The edit fails when `oldString` is not found, and fails when it matches more than once. Add surrounding context to make it unique, or set `replaceAll` to change every occurrence, for example when renaming a symbol.
++- `newString` must differ from `oldString`.
++- Prefer editing an existing file over creating a new one.
+diff --git a/packages/opencode/src/tool/glob.ts b/packages/opencode/src/tool/glob.ts
+index 40d3a27d3c..6c36348ef2 100644
+--- a/packages/opencode/src/tool/glob.ts
++++ b/packages/opencode/src/tool/glob.ts
+@@ -10,7 +10,7 @@ import * as Tool from "./tool"
+ export const Parameters = Schema.Struct({
+   pattern: Schema.String.annotate({ description: "The glob pattern to match files against" }),
+   path: Schema.optional(Schema.String).annotate({
+-    description: `The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior. Must be a valid directory path if provided.`,
++    description: `The directory to search in. Defaults to the current working directory when omitted; when given, it must be a valid directory path.`,
+   }),
+ })
+ 
+diff --git a/packages/opencode/src/tool/glob.txt b/packages/opencode/src/tool/glob.txt
+index 9c01f3d50f..a3f1083524 100644
+--- a/packages/opencode/src/tool/glob.txt
++++ b/packages/opencode/src/tool/glob.txt
+@@ -1,6 +1,8 @@
+-- Fast file pattern matching tool that works with any codebase size
+-- Supports glob patterns like "**/*.js" or "src/**/*.ts"
+-- Returns matching file paths
+-- Use this tool when you need to find files by name patterns
+-- When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
+-- You have the capability to call multiple tools in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful.
++Finds files by name pattern. Fast at any codebase size.
++
++Returns the paths of files matching a glob pattern such as "**/*.js" or "src/**/*.ts". Use it to locate files before reading them. To search file contents instead, use `grep`; for open-ended exploration that needs many rounds of searching, use `task`.
++
++Usage:
++- `path` sets the search root and defaults to the current working directory.
++- Results are capped; narrow the pattern or the root when the output is truncated.
++- Independent searches can be batched in a single block.
+diff --git a/packages/opencode/src/tool/grep.txt b/packages/opencode/src/tool/grep.txt
+index c075da1e6b..6a5562f6b1 100644
+--- a/packages/opencode/src/tool/grep.txt
++++ b/packages/opencode/src/tool/grep.txt
+@@ -1,8 +1,8 @@
+-- Fast content search tool that works with any codebase size
+-- Searches file contents using regular expressions
+-- Supports full regex syntax (eg. "log.*Error", "function\s+\w+", etc.)
+-- Filter files by pattern with the include parameter (eg. "*.js", "*.{ts,tsx}")
+-- Returns file paths and line numbers with matching lines
+-- Use this tool when you need to find files containing specific patterns
+-- If you need to identify/count the number of matches within files, use the Bash tool with `rg` (ripgrep) directly. Do NOT use `grep`.
+-- When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
++Searches file contents with a regular expression. Fast at any codebase size.
++
++Returns matching lines with their file paths and line numbers. Use it to find where a symbol, string, or pattern occurs. To find files by name, use `glob`; to read known content in full, use `read`.
++
++Usage:
++- `pattern` is a full regex, for example "log.*Error" or "function\s+\w+".
++- `include` filters files by glob, for example "*.js" or "*.{ts,tsx}"; `path` sets the search root and defaults to the current working directory.
++- Results are capped; narrow the pattern, `include`, or `path` when the output is truncated.
+diff --git a/packages/opencode/src/tool/plan-exit.txt b/packages/opencode/src/tool/plan-exit.txt
+index 988821de3b..2339163eb1 100644
+--- a/packages/opencode/src/tool/plan-exit.txt
++++ b/packages/opencode/src/tool/plan-exit.txt
+@@ -1,13 +1,8 @@
+-Use this tool when you have completed the planning phase and are ready to exit plan agent.
++Exits the plan agent once planning is complete: it asks the user whether to switch to the build agent and start implementing the plan.
+ 
+-This tool will ask the user if they want to switch to build agent to start implementing the plan.
++Call it when:
++- The complete plan has been written to the plan file.
++- Open questions about the implementation have been clarified.
++- The plan is ready to be implemented as written.
+ 
+-Call this tool:
+-- After you have written a complete plan to the plan file
+-- After you have clarified any questions with the user
+-- When you are confident the plan is ready for implementation
+-
+-Do NOT call this tool:
+-- Before you have created or finalized the plan
+-- If you still have unanswered questions about the implementation
+-- If the user has indicated they want to continue planning
++Do not call it before the plan is finalized, or while questions that would change the plan remain unanswered.
+diff --git a/packages/opencode/src/tool/question.txt b/packages/opencode/src/tool/question.txt
+index 03cd496d60..a2738e7f53 100644
+--- a/packages/opencode/src/tool/question.txt
++++ b/packages/opencode/src/tool/question.txt
+@@ -1,10 +1,8 @@
+-Use this tool when you need to ask the user questions during execution. This allows you to:
+-1. Gather user preferences or requirements
+-2. Clarify ambiguous instructions
+-3. Get decisions on implementation choices as you work
+-4. Offer choices to the user about what direction to take.
++Asks the user questions during execution and returns their answers.
+ 
+-Usage notes:
+-- When `custom` is enabled (default), a "Type your own answer" option is added automatically; don't include "Other" or catch-all options
+-- Answers are returned as arrays of labels; set `multiple: true` to allow selecting more than one
+-- If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label
++Use to gather preferences or requirements, clarify ambiguous instructions, or get a decision on implementation choices. Settle first what the available context, files, and tools can already answer; ask only what remains open.
++
++Usage:
++- Answers come back as arrays of labels. Set `multiple: true` when more than one option may be selected.
++- With `custom` enabled (the default), a "Type your own answer" option is added automatically; do not add an "Other" or catch-all option yourself.
++- When recommending an option, list it first and end its label with "(Recommended)".
+diff --git a/packages/opencode/src/tool/read.txt b/packages/opencode/src/tool/read.txt
+index 368174cc8d..dc085fdf44 100644
+--- a/packages/opencode/src/tool/read.txt
++++ b/packages/opencode/src/tool/read.txt
+@@ -1,14 +1,11 @@
+-Read a file or directory from the local filesystem. If the path does not exist, an error is returned.
++Reads a file or directory from the local filesystem.
++
++Returns the file content with each line prefixed by its line number (`<line>: <content>`), or, for a directory, its entries one per line with a trailing `/` on subdirectories. Images and PDFs are returned as attachments.
+ 
+ Usage:
+-- The filePath parameter should be an absolute path.
+-- By default, this tool returns up to 2000 lines from the start of the file.
+-- The offset parameter is the line number to start from (1-indexed).
+-- To read later sections, call this tool again with a larger offset.
+-- Use the grep tool to find specific content in large files or files with long lines.
+-- If you are unsure of the correct file path, use the glob tool to look up filenames by glob pattern.
+-- Contents are returned with each line prefixed by its line number as `<line>: <content>`. For example, if a file has contents "foo\n", you will receive "1: foo\n". For directories, entries are returned one per line (without line numbers) with a trailing `/` for subdirectories.
+-- Any line longer than 2000 characters is truncated.
+-- Call this tool in parallel when you know there are multiple files you want to read.
+-- Avoid tiny repeated slices (30 line chunks). If you need more context, read a larger window.
+-- This tool can read image files and PDFs and return them as file attachments.
++- `filePath` must be an absolute path. If the path does not exist, an error is returned.
++- Files return up to 2000 lines from the start by default. Use `offset` (1-indexed) and `limit` to read a later window; prefer one larger window over many small slices.
++- Lines longer than 2000 characters are truncated, and long output is truncated as a whole. Narrow the window, or locate the relevant lines with `grep` first.
++- The line-number prefix is not part of the file. When passing text to `edit`, match the content after the prefix.
++- To locate files by name, use `glob`; to search file contents, use `grep`.
++- Independent reads can be batched in a single block.
+diff --git a/packages/opencode/src/tool/shell/prompt.ts b/packages/opencode/src/tool/shell/prompt.ts
+index b576b77297..db0c0007e0 100644
+--- a/packages/opencode/src/tool/shell/prompt.ts
++++ b/packages/opencode/src/tool/shell/prompt.ts
+@@ -64,52 +64,37 @@ function powershellNotes(name: string) {
+ 
+ function chainGuidance(name: string) {
+   if (name === "powershell") {
+-    return "If the commands depend on each other and must run sequentially, avoid '&&' in this shell because Windows PowerShell (5.1) does not support it. Use PowerShell conditionals such as `cmd1; if ($?) { cmd2 }` when later commands must depend on earlier success."
++    return "Dependent commands run in sequence inside one call. Windows PowerShell (5.1) has no '&&'; chain with `cmd1; if ($?) { cmd2 }` when a later command depends on an earlier success."
+   }
+   if (PS.has(name)) {
+-    return "If the commands depend on each other and must run sequentially, use a single bash tool call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like New-Item before Copy-Item, Write before bash for git operations, or git add before git commit), run these operations sequentially instead."
++    return "Dependent commands run in sequence inside one call, chained with '&&' (e.g., `git add . && git commit -m \"message\" && git push`). Operations that must finish first (New-Item before Copy-Item, a write before a git operation) belong in the same call."
+   }
+   if (CMD.has(name)) {
+-    return "If the commands depend on each other and must run sequentially, use a single bash tool call with `&&` to chain them together (e.g., `mkdir out && dir out`). For instance, if one operation must complete before another starts, run these operations sequentially instead."
++    return "Dependent commands run in sequence inside one call, chained with '&&' (e.g., `mkdir out && dir out`). Operations that must finish first belong in the same call."
+   }
+-  return "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
++  return "Dependent commands run in sequence inside one call, chained with '&&' (e.g., `git add . && git commit -m \"message\" && git push`). Operations that must finish first (mkdir before cp, a write before a git operation) belong in the same call."
+ }
+ 
+ function bashCommandSection(chain: string, limits: Limits, defaultTimeoutMs: number) {
+-  return `Before executing the command, please follow these steps:
++  return `Before executing the command, follow these steps:
+ 
+-1. Directory Verification:
+-   - If the command will create new directories or files, first use \`ls\` to verify the parent directory exists and is the correct location
+-   - For example, before running "mkdir foo/bar", first use \`ls foo\` to check that "foo" exists and is the intended parent directory
++1. Directory verification:
++   - When the command creates new directories or files, first run \`ls\` on the parent directory to confirm it exists and is the intended location. For example, before running "mkdir foo/bar", first run \`ls foo\`.
+ 
+-2. Command Execution:
+-   - Always quote file paths that contain spaces with double quotes (e.g., rm "path with spaces/file.txt")
+-   - Examples of proper quoting:
+-     - mkdir "/Users/name/My Documents" (correct)
+-     - mkdir /Users/name/My Documents (incorrect - will fail)
+-     - python "/path/with spaces/script.py" (correct)
+-     - python /path/with spaces/script.py (incorrect - will fail)
+-   - After ensuring proper quoting, execute the command.
+-   - Capture the output of the command.
++2. Command execution:
++   - Quote file paths that contain spaces with double quotes: \`mkdir "/Users/name/My Documents"\` is correct; the unquoted form fails.
++   - Execute the command and capture its output.
+ 
+ Usage notes:
+-  - The command argument is required.
+-  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
+-  - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`head\`, \`tail\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
+-
+-  - Avoid using Bash with the \`find\`, \`grep\`, \`cat\`, \`head\`, \`tail\`, \`sed\`, \`awk\`, or \`echo\` commands, unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
+-    - File search: Use Glob (NOT find or ls)
+-    - Content search: Use Grep (NOT grep or rg)
+-    - Read files: Use Read (NOT cat/head/tail)
+-    - Edit files: Use Edit (NOT sed/awk)
+-    - Write files: Use Write (NOT echo >/cat <<EOF)
+-    - Communication: Output text directly (NOT echo/printf)
++  - The command argument is required. The timeout is optional, in milliseconds; commands time out after ${defaultTimeoutMs}ms by default.
++  - Output beyond ${limits.maxLines} lines or ${limits.maxBytes} bytes is truncated, and the full output is written to a file. Read it back with the read tool (offset/limit) or search it with the grep tool; do not use \`head\`, \`tail\`, or similar commands to limit output.
++  - Prefer the dedicated tools over shell equivalents: glob over \`find\` and \`ls\` for finding files, grep over \`grep\` and \`rg\` for searching contents, read over \`cat\`, \`head\`, and \`tail\`, edit over \`sed\` and \`awk\`, write over \`echo\` redirection and heredocs. Plain communication belongs in the reply text, not in \`echo\` or \`printf\`.
+   - When issuing multiple commands:
+-    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two bash tool calls in parallel.
++    - Independent commands run in parallel: issue several tool calls in a single block (for example, \`git status\` and \`git diff\` together).
+     - ${chain}
+-    - Use ';' only when you need to run commands sequentially but don't care if earlier commands fail
+-    - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
+-  - AVOID using \`cd <directory> && <command>\`. Use the \`workdir\` parameter to change directories instead.
++    - Use ';' only when later commands should run even if earlier ones fail.
++    - Separate commands with '&&' or ';', never with newlines (newlines inside quoted strings are fine).
++  - Use the \`workdir\` parameter instead of \`cd <directory> && <command>\`.
+     <good-example>
+     Use workdir="/foo/bar" with command: pytest tests
+     </good-example>
+@@ -127,40 +112,25 @@ function powershellCommandSection(
+ ) {
+   return `${powershellNotes(name)}
+ 
+-Before executing the command, please follow these steps:
++Before executing the command, follow these steps:
+ 
+-1. Directory Verification:
+-   - If the command will create new directories or files, first use \`Test-Path -LiteralPath <parent>\` to verify the parent directory exists and is the correct location
+-   - For example, before creating \`foo${pathSep}bar\`, first use \`Test-Path -LiteralPath "foo"\` to check that \`foo\` exists and is the intended parent directory
++1. Directory verification:
++   - When the command creates new directories or files, first use \`Test-Path -LiteralPath <parent>\` to confirm the parent exists and is the intended location. For example, before creating \`foo${pathSep}bar\`, first check \`Test-Path -LiteralPath "foo"\`.
+ 
+-2. Command Execution:
+-   - Always quote file paths that contain spaces with double quotes (e.g., Remove-Item -LiteralPath "path with spaces${pathSep}file.txt")
+-   - Examples of proper quoting:
+-     - New-Item -ItemType Directory -Path "My Documents" (correct)
+-     - New-Item -ItemType Directory -Path My Documents (incorrect - path is split)
+-     - & "path with spaces${pathSep}script.ps1" (correct)
+-     - path with spaces${pathSep}script.ps1 (incorrect - path is split and not invoked)
+-   - After ensuring proper quoting, execute the command.
+-   - Capture the output of the command.
++2. Command execution:
++   - Quote file paths that contain spaces with double quotes (e.g., \`Remove-Item -LiteralPath "path with spaces${pathSep}file.txt"\`).
++   - Execute the command and capture its output.
+ 
+ Usage notes:
+-  - The command argument is required.
+-  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
+-  - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`Select-Object -First\`, \`Select-Object -Last\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
+-
+-  - Avoid using Shell with PowerShell file/content cmdlets unless explicitly instructed or when these cmdlets are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
+-    - File search: Use Glob (NOT Get-ChildItem)
+-    - Content search: Use Grep (NOT Select-String)
+-    - Read files: Use Read (NOT Get-Content)
+-    - Edit files: Use Edit (NOT Set-Content)
+-    - Write files: Use Write (NOT Set-Content/Out-File or here-strings)
+-    - Communication: Output text directly (NOT Write-Output/Write-Host)
++  - The command argument is required. The timeout is optional, in milliseconds; commands time out after ${defaultTimeoutMs}ms by default.
++  - Output beyond ${limits.maxLines} lines or ${limits.maxBytes} bytes is truncated, and the full output is written to a file. Read it back with the read tool (offset/limit) or search it with the grep tool; do not use \`Select-Object -First\` or \`Select-Object -Last\` to limit output.
++  - Prefer the dedicated tools over PowerShell file and content cmdlets: glob over \`Get-ChildItem\`, grep over \`Select-String\`, read over \`Get-Content\`, edit and write over \`Set-Content\`, \`Out-File\`, and here-strings. Plain communication belongs in the reply text, not in \`Write-Output\` or \`Write-Host\`.
+   - When issuing multiple commands:
+-    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two bash tool calls in parallel.
++    - Independent commands run in parallel: issue several tool calls in a single block (for example, \`git status\` and \`git diff\` together).
+     - ${chain}
+-    - Use \`;\` only when you need to run commands sequentially but don't care if earlier commands fail
+-    - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
+-  - AVOID changing directories inside the command. Use the \`workdir\` parameter to change directories instead.
++    - Use ';' only when later commands should run even if earlier ones fail.
++    - Separate commands with ';' or a chain operator, not with newlines (newlines inside quoted strings are fine).
++  - Use the \`workdir\` parameter instead of changing directories inside the command.
+     <good-example>
+     Use workdir="project${pathSep}subdir" with command: pytest tests
+     </good-example>
+@@ -176,40 +146,25 @@ function cmdCommandSection(chain: string, limits: Limits, defaultTimeoutMs: numb
+ - Use \`if exist\` for existence checks.
+ - Use \`call\` when invoking batch files from another batch-style command.
+ 
+-Before executing the command, please follow these steps:
++Before executing the command, follow these steps:
+ 
+-1. Directory Verification:
+-   - If the command will create new directories or files, first use \`if exist\` to verify the parent directory exists and is the correct location
+-   - For example, before creating \`foo\\bar\`, first use \`if exist "foo\\" dir "foo"\` to check that \`foo\` exists and is the intended parent directory
++1. Directory verification:
++   - When the command creates new directories or files, first use \`if exist\` to confirm the parent exists and is the intended location. For example, before creating \`foo\\bar\`, first check \`if exist "foo\\" dir "foo"\`.
+ 
+-2. Command Execution:
+-   - Always quote file paths that contain spaces with double quotes (e.g., del "path with spaces\\file.txt")
+-   - Examples of proper quoting:
+-     - mkdir "My Documents" (correct)
+-     - mkdir My Documents (incorrect - path is split)
+-     - call "path with spaces\\script.bat" (correct)
+-     - path with spaces\\script.bat (incorrect - path is split and not invoked correctly)
+-   - After ensuring proper quoting, execute the command.
+-   - Capture the output of the command.
++2. Command execution:
++   - Quote file paths that contain spaces with double quotes (e.g., \`del "path with spaces\\file.txt"\`).
++   - Execute the command and capture its output.
+ 
+ Usage notes:
+-  - The command argument is required.
+-  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
+-  - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`more\` or other pagination commands to limit output; the full output will already be captured to a file for more precise searching.
+-
+-  - Avoid using Shell with cmd.exe file/content commands unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
+-    - File search: Use Glob (NOT dir /s)
+-    - Content search: Use Grep (NOT findstr)
+-    - Read files: Use Read (NOT type)
+-    - Edit files: Use Edit (NOT copy)
+-    - Write files: Use Write (NOT echo > file)
+-    - Communication: Output text directly (NOT echo)
++  - The command argument is required. The timeout is optional, in milliseconds; commands time out after ${defaultTimeoutMs}ms by default.
++  - Output beyond ${limits.maxLines} lines or ${limits.maxBytes} bytes is truncated, and the full output is written to a file. Read it back with the read tool (offset/limit) or search it with the grep tool; do not use \`more\` or other pagination commands to limit output.
++  - Prefer the dedicated tools over cmd.exe file and content commands: glob over \`dir /s\`, grep over \`findstr\`, read over \`type\`, write over \`echo\` redirection. Plain communication belongs in the reply text, not in \`echo\`.
+   - When issuing multiple commands:
+-    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "dir" and "where cmd", send a single message with two bash tool calls in parallel.
++    - Independent commands run in parallel: issue several tool calls in a single block (for example, \`dir\` and \`where cmd\` together).
+     - ${chain}
+-    - Use \`&\` only when you need to run commands sequentially but don't care if earlier commands fail
+-    - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
+-  - AVOID changing directories inside the command. Use the \`workdir\` parameter to change directories instead.
++    - Use '&' only when later commands should run even if earlier ones fail.
++    - Separate commands with '&' or '&&', not with newlines (newlines inside quoted strings are fine).
++  - Use the \`workdir\` parameter instead of changing directories inside the command.
+     <good-example>
+     Use workdir="project\\subdir" with command: dir
+     </good-example>
+@@ -223,9 +178,9 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
+   const chain = chainGuidance(name)
+   if (CMD.has(name)) {
+     return {
+-      intro: `Executes a given ${shellDisplayName(name)} command with optional timeout, ensuring proper handling and security measures.`,
++      intro: `Executes a given ${shellDisplayName(name)} command with an optional timeout and returns its output.`,
+       workdirSection:
+-        "All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID changing directories inside the command - use `workdir` instead.",
++        "Commands run in the current working directory by default. To run a command in a different directory, set the `workdir` parameter instead of changing directories inside the command.",
+       commandSection: cmdCommandSection(chain, limits, defaultTimeoutMs),
+       gitCommands: "git commands",
+       gitCommandRestriction: "git commands",
+@@ -235,9 +190,9 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
+   }
+   if (isPowerShell) {
+     return {
+-      intro: `Executes a given ${shellDisplayName(name)} command with optional timeout, ensuring proper handling and security measures.`,
++      intro: `Executes a given ${shellDisplayName(name)} command with an optional timeout and returns its output.`,
+       workdirSection:
+-        "All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID changing directories inside the command - use `workdir` instead.",
++        "Commands run in the current working directory by default. To run a command in a different directory, set the `workdir` parameter instead of changing directories inside the command.",
+       commandSection: powershellCommandSection(
+         name,
+         chain,
+@@ -256,9 +211,9 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
+   }
+   return {
+     intro:
+-      "Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.",
++      "Executes a given bash command with an optional timeout and returns its output.",
+     workdirSection:
+-      "All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID using `cd <directory> && <command>` patterns - use `workdir` instead.",
++      "Commands run in the current working directory by default. To run a command in a different directory, set the `workdir` parameter instead of `cd <directory> && <command>`.",
+     commandSection: bashCommandSection(chain, limits, defaultTimeoutMs),
+     gitCommands: "bash commands",
+     gitCommandRestriction: "git bash commands",
+diff --git a/packages/opencode/src/tool/shell/shell.txt b/packages/opencode/src/tool/shell/shell.txt
+index 22bd8f6c1a..5c8a308d16 100644
+--- a/packages/opencode/src/tool/shell/shell.txt
++++ b/packages/opencode/src/tool/shell/shell.txt
+@@ -1,21 +1,20 @@
+ ${intro}
+ 
+-Be aware: OS: ${os}, Shell: ${shell}
++Environment: OS: ${os}, Shell: ${shell}
+ 
+ ${workdirSection}
+ 
+-Use `${tmp}` for temporary work outside the workspace. This directory has already been created, already exists, and is pre-approved for external directory access.
++Use `${tmp}` for temporary work outside the workspace. The directory already exists and is pre-approved for external directory access.
+ 
+-IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) - use the specialized tools for this instead.
++Use this tool for terminal operations: git, package managers, builds, tests, docker, and other system commands. File operations have dedicated tools that return better output: `read` for reading, `write` for creating files, `edit` for editing, `glob` for finding files, and `grep` for searching contents. Use those instead of shell equivalents.
+ 
+ ${commandSection}
+ 
+ # Git and GitHub
+-- Only commit, amend, push, or create PRs when explicitly requested.
+-- Before committing, inspect `git status`, `git diff`, and `git log --oneline -10`; stage only intended files and never commit secrets.
+-- Write a concise commit message that matches the repo style.
+-- Do not update git config, skip hooks, use interactive `-i`, force-push, or create empty commits unless explicitly requested.
+-- If a commit fails or hooks reject it, fix the issue and create a new commit; do not amend the failed commit.
+-- Before creating a PR, inspect status, diff, remote tracking, recent commits, and the diff from the base branch.
+-- Review all commits included in the PR, not just the latest commit.
+-- Use `gh` for GitHub tasks, including PRs, issues, checks, and releases; return the PR URL when done.
++- Commit, amend, push, and create pull requests only when explicitly requested.
++- Before committing, inspect `git status`, `git diff`, and `git log --oneline -10`. Stage only the intended files, and never commit secrets.
++- Commit messages are concise and match the repo's style.
++- Leave git config unchanged and let hooks run as configured. Interactive `-i` flags, skipped hooks, force-pushes, and empty commits require an explicit request.
++- When a commit fails or a hook rejects it, fix the cause and create a new commit instead of amending the failed one.
++- Before creating a PR, inspect the status, the remote tracking state, and the full diff against the base branch, covering every commit the PR contains, not only the latest.
++- Use `gh` for GitHub work (PRs, issues, checks, releases), and return the PR URL when done.
+diff --git a/packages/opencode/src/tool/skill.txt b/packages/opencode/src/tool/skill.txt
+index 44d990317a..a075b98953 100644
+--- a/packages/opencode/src/tool/skill.txt
++++ b/packages/opencode/src/tool/skill.txt
+@@ -1,5 +1,3 @@
+-Load a specialized skill when the task at hand matches one of the skills listed in the system prompt.
++Loads a specialized skill by name, injecting its instructions and resources into the conversation.
+ 
+-Use this tool to inject the skill's instructions and resources into current conversation. The output may contain detailed workflow guidance as well as references to scripts, files, etc in the same directory as the skill.
+-
+-The skill name must match one of the skills listed in your system prompt.
++Use when the task at hand matches one of the skills listed in the system prompt. The `name` must match a listed skill exactly. The skill's instructions are returned as the result; follow them for the rest of the task.
+diff --git a/packages/opencode/src/tool/task.ts b/packages/opencode/src/tool/task.ts
+index d8ca640cfb..6ca851eaf2 100644
+--- a/packages/opencode/src/tool/task.ts
++++ b/packages/opencode/src/tool/task.ts
+@@ -57,7 +57,7 @@ export const Parameters = Schema.Struct({
+   ...BaseParameterFields,
+   background: Schema.optional(Schema.Boolean).annotate({
+     description:
+-      "Run the agent in the background. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress",
++      "Run the agent in the background and return immediately. A notification arrives when it completes; do not sleep, poll, or proactively check on its progress.",
+   }),
+ })
+ 
+diff --git a/packages/opencode/src/tool/task.txt b/packages/opencode/src/tool/task.txt
+index c5e412f409..9497fe0c68 100644
+--- a/packages/opencode/src/tool/task.txt
++++ b/packages/opencode/src/tool/task.txt
+@@ -1,19 +1,19 @@
+-Launch a new agent to handle complex, multistep tasks autonomously.
++Launches a new agent to handle a complex, multistep task autonomously, and returns its result as a single message.
+ 
+-When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
++When to use:
++- Open-ended exploration or research that spans many files or several rounds of searching.
++- Independent units of work that can run in parallel with each other or with local work.
++- Work that matches a specialized agent type from the list appended below.
+ 
+-When NOT to use the Task tool:
+-- If you want to read a specific file path, use the Read or Glob tool instead of the Task tool, to find the match more quickly
+-- If you are searching for a specific class definition like "class Foo", use the Grep tool instead, to find the match more quickly
+-- If you are searching for code within a specific file or set of 2-3 files, use the Read tool instead of the Task tool, to find the match more quickly
+-- If no available agent is a good fit for the task, use other tools directly
++When not to use:
++- Reading a specific file: use `read`, locating it first with `glob` if needed.
++- Finding a specific symbol, string, or pattern: use `grep`.
++- Searching inside a small, known set of files: use `read`.
+ 
+-
+-Usage notes:
+-1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses
+-2. Once you have delegated work to an agent, do not duplicate that work yourself. Continue with non-overlapping tasks, or wait for the result. For background tasks, you will be notified automatically when the result is ready.
+-3. When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result. The output includes a task_id you can reuse later to continue the same subagent session.
+-4. Each agent invocation starts with a fresh context unless you provide task_id to resume the same subagent session (which continues with its previous messages and tool outputs). When starting fresh, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.
+-5. The agent's outputs should generally be trusted
+-6. Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent. Tell it how to verify its work if possible (e.g., relevant test commands).
+-7. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
++Usage:
++1. `subagent_type` is required and selects the agent type; `description` is a short 3-5 word label for the task.
++2. Launch independent agents concurrently by placing several calls in a single block.
++3. The prompt must stand on its own. An invocation starts with a fresh context, so state the task in full detail: the goal, the scope, whether the agent may write code or should only research, how it should verify its work, and exactly what its final message must return.
++4. To continue an earlier invocation instead of starting fresh, pass its `task_id`; the agent resumes with its previous messages and tool outputs.
++5. Once work is delegated, do not duplicate it. Continue with non-overlapping work, or wait for the result.
++6. The result is not visible to the user. Verify it against the original request before relying on it, and report its outcome in the reply to the user.
+diff --git a/packages/opencode/src/tool/todowrite.txt b/packages/opencode/src/tool/todowrite.txt
+index a21630c158..090a7b5bf2 100644
+--- a/packages/opencode/src/tool/todowrite.txt
++++ b/packages/opencode/src/tool/todowrite.txt
+@@ -1,44 +1,26 @@
+-Create and maintain a structured task list for the current coding session. Tracks progress, organizes multi-step work, and surfaces status to the user.
++Creates and maintains the structured task list for the current session, and returns the full updated list.
+ 
+-## When to use
+ Use proactively when:
+-- The task requires 3+ distinct steps or actions (not just 3 tool calls for a single conceptual step)
+-- The work is non-trivial and benefits from planning
+-- The user provides multiple tasks (numbered or comma-separated) or explicitly asks for a todo list
+-- New instructions arrive - capture them as todos
+-- You start a task - mark it `in_progress` (only one at a time) before working
+-- You finish a task - mark it `completed` and add any follow-ups discovered during the work
+-
+-## When NOT to use
+-Skip when:
+-- The work is a single, straightforward task (or <3 trivial steps)
+-- The request is purely informational or conversational
+-- Tracking adds no organizational value
+-
+-## States
+-- `pending` - not started
+-- `in_progress` - actively working (exactly ONE at a time)
+-- `completed` - finished successfully
+-- `cancelled` - no longer needed
+-
+-## Rules
+-- Update status in real time; don't batch completions
+-- Mark `completed` only after the required work is actually done, including any required verification. Never based on intent.
+-- Keep exactly one `in_progress` while work remains
+-- If blocked or partial, keep it `in_progress` and add a follow-up todo describing the blocker
+-- Preserve user-provided commands verbatim (flags, args, order)
+-- Items should be specific and actionable; break large work into smaller steps
+-
+-## Examples
+-
+-Use it:
+-- "Add a dark mode toggle and run the tests" -> multi-step feature + explicit verification
+-- "Rename getCwd -> getCurrentWorkingDirectory across the repo" -> grep reveals 15 occurrences in 8 files
+-- "Implement registration, catalog, cart, checkout" -> multiple complex features
+-
+-Skip it:
+-- "How do I print Hello World in Python?" -> informational
+-- "Add a comment to calculateTotal" -> single edit
+-- "Run npm install and tell me what happened" -> one command
+-
+-When in doubt, use it.
++- The task takes 3 or more distinct steps (not merely 3 tool calls for one conceptual step).
++- The work is non-trivial and benefits from visible planning.
++- Several tasks arrive together, or the user explicitly asks for a todo list.
++
++Skip it when:
++- The work is a single, straightforward step.
++- The request is purely informational or conversational.
++- Tracking would add no organizational value.
++
++States: `pending` (not started), `in_progress` (actively being worked on), `completed` (finished and verified), `cancelled` (no longer needed).
++
++Rules:
++- Keep exactly one item `in_progress` while work remains, and mark it before starting that work.
++- Update the list in real time rather than batching completions.
++- Mark an item `completed` only after its work is actually done, including any required verification. A blocked or partial item stays `in_progress`, with a follow-up item describing the blocker.
++- Items are specific and actionable; split large work into smaller steps.
++- Preserve commands given by the user verbatim (flags, args, order).
++
++Examples:
++- Use: "Add a dark mode toggle and run the tests" - a multi-step feature plus explicit verification.
++- Use: "Implement registration, catalog, cart, checkout" - several complex features.
++- Skip: "How do I print Hello World in Python?" - informational.
++- Skip: "Add a comment to calculateTotal" - a single edit.
+diff --git a/packages/opencode/src/tool/webfetch.txt b/packages/opencode/src/tool/webfetch.txt
+index 169aadefa3..73ea16b3b3 100644
+--- a/packages/opencode/src/tool/webfetch.txt
++++ b/packages/opencode/src/tool/webfetch.txt
+@@ -1,13 +1,8 @@
+-- Fetches content from a specified URL
+-- Takes a URL and optional format as input
+-- Fetches the URL content, converts to requested format (markdown by default)
+-- Returns the content in the specified format
+-- Use this tool when you need to retrieve and analyze web content
++Fetches the content of a URL and returns it as markdown (the default), text, or HTML.
+ 
+-Usage notes:
+-  - IMPORTANT: if another tool is present that offers better web fetching capabilities, is more targeted to the task, or has fewer restrictions, prefer using that tool instead of this one.
+-  - The URL must be a fully-formed valid URL
+-  - HTTP URLs will be automatically upgraded to HTTPS
+-  - Format options: "markdown" (default), "text", or "html"
+-  - This tool is read-only and does not modify any files
+-  - Results may be summarized if the content is very large
++Use to retrieve and analyze a specific, known page. To find pages on a topic, use `websearch` instead. When another available tool is purpose-built for a site or service, prefer it.
++
++Usage:
++- The URL must be complete and valid; HTTP URLs are upgraded to HTTPS automatically.
++- Very large content may be summarized or truncated.
++- This tool is read-only and does not modify any files.
+diff --git a/packages/opencode/src/tool/websearch.txt b/packages/opencode/src/tool/websearch.txt
+index ad5238cbd5..3cb2e4f1b2 100644
+--- a/packages/opencode/src/tool/websearch.txt
++++ b/packages/opencode/src/tool/websearch.txt
+@@ -1,14 +1,10 @@
+-- Search the web using the session's web search provider - performs real-time web searches and can scrape content from specific URLs
+-- Provides up-to-date information for current events and recent data
+-- Supports configurable result counts and returns the content from the most relevant websites
+-- Use this tool for accessing information beyond knowledge cutoff
+-- Searches are performed automatically within a single API call
++Searches the web with the session's search provider, and returns results together with content extracted from the most relevant pages.
+ 
+-Usage notes:
+-  - Supports live crawling modes when available: 'fallback' (backup if cached unavailable) or 'preferred' (prioritize live crawling)
+-  - Search types when available: 'auto' (balanced), 'fast' (quick results), 'deep' (comprehensive search)
+-  - Configurable context length for optimal LLM integration
+-  - Domain filtering and advanced search options available
++Use for current events and recent data, and for facts that must be checked against live sources beyond the knowledge cutoff. To fetch a specific, known URL, use `webfetch` instead.
+ 
+-The current year is {{year}}. You MUST use this year when searching for recent information or current events
+-- Example: If the current year is 2026 and the user asks for "latest AI news", search for "AI news 2026", NOT "AI news 2025"
++Usage:
++- `type` selects the search depth: `auto` (balanced, the default), `fast` (quick results), or `deep` (comprehensive search).
++- `livecrawl` selects crawling: `fallback` (the default) uses live crawling when cached content is unavailable; `preferred` prioritizes it.
++- `numResults` defaults to 8. `contextMaxCharacters` caps the returned context and defaults to 10000.
++
++The current year is {{year}}. Use this year when searching for recent information or current events: search "AI news {{year}}", not the same query with an earlier year.
+diff --git a/packages/opencode/src/tool/write.txt b/packages/opencode/src/tool/write.txt
+index 063cbb1f03..ae5c08916b 100644
+--- a/packages/opencode/src/tool/write.txt
++++ b/packages/opencode/src/tool/write.txt
+@@ -1,8 +1,8 @@
+-Writes a file to the local filesystem.
++Writes a file to the local filesystem, creating it or replacing its content completely.
++
++Use to create a new file, or when a file's content changes wholesale. Use `edit` for targeted changes to part of a file.
+ 
+ Usage:
+-- This tool will overwrite the existing file if there is one at the provided path.
+-- If this is an existing file, you MUST use the Read tool first to read the file's contents. This tool will fail if you did not read the file first.
+-- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
+-- NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+-- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.
++- `filePath` must be an absolute path; `content` is the file's complete new content.
++- Read an existing file before overwriting it: the tool fails if the file has not been read in this conversation.
++- Replacement is total: anything not present in `content` is lost.
