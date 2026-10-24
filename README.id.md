@@ -138,7 +138,7 @@ dari jendela. Kalau OpenCode baru sudah lahir, ia bergegas pulang dan
 membangunkan robot-robot pembangun di GitHub, dan mereka melakukan
 semuanya lagi: mengambil robot yang segar, membuka ranselnya, dan
 melakukan potongan-potongan penjahit sesuai urutannya, satu sampai
-dua puluh. Kalau satu potongan saja tidak pas di robot baru itu,
+dua puluh satu. Kalau satu potongan saja tidak pas di robot baru itu,
 mereka berhenti saat itu juga dan tidak mengirim apa-apa — robot
 setengah terpotong lebih buruk daripada tidak ada robot sama sekali,
 dan semua orang di bengkel tahu itu.
@@ -215,7 +215,7 @@ begitu orang dewasa menyebutnya — dan kartunya tahu persis di mana
 ia berada. Ia membawakan kotak kecilnya, memeriksa stempel amannya,
 dan menempatkan si robot di dalam, lengkap dengan sepatunya.
 
-Robot yang sama. Potongan yang sama, kedua puluhnya. Hanya rumah
+Robot yang sama. Potongan yang sama, kedua puluh satunya. Hanya rumah
 yang lebih kecil, dan pakaian yang pas untuknya.
 
 Satu hal lagi ditemukan di dalam ransel, di dasar paling bawah:
@@ -412,6 +412,27 @@ berat, dan si robot menyimpan kedua tangannya untuk pekerjaan
 yang sungguh miliknya — dikerjakan sekaligus, sebagaimana ia
 diajari.
 
+Tersisa satu hal di dekat pintu: catatan-catatan kecil yang
+tersemat di samping lonceng, yang memberitahu si robot nama
+siapa yang harus dipanggil untuk pekerjaan apa. Catatan itu
+sudah tua, dari jauh, dan salah satunya hampir tidak mengatakan
+apa-apa — yang bawaan, katanya, yang mengerjakan berbagai hal.
+Satu lagi hanya berkata: tanpa suntingan. Di pagi yang sibuk,
+catatan semacam itu tidak membantu siapa pun memutuskan
+apa-apa.
+
+Penjahit menurunkannya dan menulisnya kembali, dengan terang:
+siapa yang mencari, dan kapan ia dikirim; siapa yang mengangkut
+pekerjaan berat, dan apa yang harus dikatakan kepadanya
+sebelum ia mengangkat; siapa yang menggambar rencana dan tidak
+pernah menyentuh kain; dan untuk apa tangan si robot sendiri
+sekarang, setelah lonceng didahulukan.
+
+Catatan itu kecil. Seluruh bengkel muat di dalamnya. Namun
+sebuah rumah hanya sejelas kata-kata di dekat pintunya — dan
+kini kata-kata di dekat pintu itu mengatakan apa yang diyakini
+rumah ini.
+
 Di rumahmu, kamu akan menemukan ia tidak kehilangan satu pun hal yang
 penting. Ia tetap duduk bersamamu di terminal dan membantumu menulis
 programmu. Ia tetap membaca dan menulis dan memperbaiki file. Ia tetap
@@ -427,7 +448,7 @@ mainan orang asing.
 
 Adapun si penjahit — ia masih di sini, di repo ini, menjaga daftarnya
 tetap rapi. Daftar itulah satu-satunya yang pernah dimiliki rumah
-ini: dua puluh potongan, pak pos yang tidak pernah lupa memeriksa,
+ini: dua puluh satu potongan, pak pos yang tidak pernah lupa memeriksa,
 dan janji yang ia buat kepada setiap robot yang meninggalkan bengkel.
 
 Tidak ada yang disembunyikan. Semua yang dipotong, dipotong
@@ -450,6 +471,7 @@ Dan setiap enam jam, pak pos mengetuk lagi.
 - **Paralel secara default:** patch 0018 menjadikan panggilan tool yang ter-batch dan paralel sebagai default yang dinyatakan pada kedua permukaan instruksi: aturan khusus dan pengingat penutup di `default.txt` (panggilan independen berangkat bersama dalam satu blok dan berjalan pada saat yang sama; sebuah panggilan menunggu hanya karena dependensi yang sungguh ada; verifikasi mengikuti aturan yang sama), serta bahasa batching "by default" yang sepadan di deskripsi read, glob, grep, webfetch, websearch, edit, write, dan task dan di bagian shell yang dirender. Runtime memang sudah mengeksekusi panggilan satu giliran secara konkuren (terukur: dua panggilan `sleep 3` dari satu respons selesai dalam ±3,3 detik, bukan ±6 detik); patch ini menyelaraskan apa yang diperintahkan teks dengan apa yang dilakukan runtime.
 - **Kartu si murid juga:** patch 0019 menyelaraskan satu-satunya prompt agen bawaan yang menjalankan loop tool sungguhan — `explore`, yang prompt-nya sendiri (`src/agent/prompt/explore.txt`) menggantikan `default.txt` untuk sesinya — dengan aturan paralel-secara-default sebagai pedoman pertamanya, dan memperbaiki baris Bash-nya menjadi pemeriksaan read-only (upstream menyuruh explore memakai Bash untuk menyalin dan memindahkan file, melawan aturan read-only miliknya sendiri). Agen title, summary, dan compaction juga membawa prompt mereka sendiri, tetapi berjalan dengan semua tool ditolak, jadi tidak ada yang bisa diparalelkan di sana.
 - **Delegasi dulu, batch kemudian:** patch 0020 menata cara kerja rumah ini. Prompt utama mengirim pekerjaan spesialis ke agen spesialis sebelum panggilan tool langsung apa pun, dengan batching paralel sebagai tingkat di bawahnya; kartu explore dibuka dengan aturan paralelnya; agen general menerima kartu prompt-nya sendiri (`src/agent/prompt/general.txt`) untuk pertama kalinya, paralel paling pertama, alih-alih diam-diam mewarisi prompt utama; dan pengingat plan mode juga mendahulukan delegasi. Prompt title, summary, dan compaction tetap byte-identik dengan upstream.
+- **Catatan di samping lonceng:** patch 0021 menulis ulang keempat deskripsi agen bawaan di `agent.ts` — teks yang ditempelkan ke deskripsi tool task, dibaca agen utama pada saat ia memilih subagen — untuk menyatakan tata delegasi rumah ini di tempat pilihan itu dibuat: explore adalah pilihan baku untuk pertanyaan codebase, general menerima brief lengkap dan melaporkan hasilnya, plan mendelegasikan dan tidak menulis apa pun kecuali rencana, dan catatan milik build akhirnya mengatakan apa yang ia delegasikan.
 - **Build Termux:** patch 0014 menambahkan target Android milik Bun (`OPENCODE_LIBC=bionic`) ke script build upstream. Dua job CI tambahan membangun `libopentui.so` dari sumber OpenTUI v0.4.5 yang di-pin (Zig + Android NDK, alignment halaman 16 KB) dan shim kecil `close_range` (seccomp Termux yang targetSdk 28 menjebak syscall itu, jadi launcher me-`LD_PRELOAD` shim-nya), lalu memeriksa binary Bionic dengan `readelf` — dependensi glibc apa pun menggagalkan build. Tidak ada proot di mana pun. Untuk v1.19.4, binary Termux berukuran 138.289.528 byte, terverifikasi end-to-end di perangkat Termux Android 12 asli (install, `opencode run`, dan TUI).
 - **Daftar potongan lengkap, dengan kata-kata teknis:** lihat [`patches/README.id.md`](patches/README.id.md).
 - **Menambah potongan:** buat perubahannya di clone upstream yang bisa ditulis, uji, ekspor `git diff` sebagai file bernomor berikutnya di `patches/`, lalu commit di sini. Build terjadwal berikutnya akan mengambilnya.

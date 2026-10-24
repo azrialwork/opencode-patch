@@ -284,6 +284,29 @@ diketahui. Pekerjaan langsung tetap untuk file persis yang
 sudah diketahui, pencarian tunggal di dalamnya, dan pekerjaan
 yang delegasinya jelas lebih mahal.
 
+**21. `0021-agent-descriptions.patch` — catatan di samping
+lonceng, ditulis ulang.** Permukaan instruksi terakhir yang
+masih memakai kata-kata upstream adalah deskripsi agen di
+`agent.ts` — teks yang ditempelkan ke deskripsi tool task,
+yang dibaca agen utama tepat pada saat ia memilih subagen.
+Milik build hampir tidak mengatakan apa-apa ("The default
+agent. Executes tools based on configured permissions."), milik
+plan hanya mengatakan apa yang ia larang, dan milik explore
+adalah salinan katalog upstream. Keempatnya kini menyatakan
+tata rumah ini: build bekerja langsung dengan toolset penuh
+dan mendelegasikan eksplorasi ke explore serta unit
+multi-langkah ke general; plan bersifat read-only,
+mendelegasikan eksplorasi dan validasi desain, dan tidak
+menulis apa pun kecuali rencana; general menerima satu unit
+utuh dengan brief lengkap, bekerja paralel secara default, dan
+melaporkan apa yang dikerjakan, yang diverifikasi, dan yang
+masih terbuka; explore dinyatakan sebagai pilihan baku untuk
+pertanyaan apa pun tentang cara kerja sebuah codebase, di
+mana sesuatu berada, atau bagaimana bagian-bagiannya
+terhubung — pemicu delegasi, dinyatakan di tempat pilihan itu
+dibuat. Tingkat kedalaman yang diandalkan workflow plan
+dipertahankan kata per kata.
+
 ---
 
 Catatan untuk pembaca yang teliti: README ini bukan patch.

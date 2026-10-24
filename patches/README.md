@@ -273,6 +273,26 @@ known. Direct work remains for exact files already known,
 single lookups in them, and work delegation would plainly cost
 more than.
 
+**21. `0021-agent-descriptions.patch` — the notes by the bell,
+rewritten.** The last instruction surface still in upstream's
+words was the agent descriptions in `agent.ts` — the text
+appended to the task tool's description, which the main agent
+reads at the exact moment it chooses a subagent. Build's said
+almost nothing ("The default agent. Executes tools based on
+configured permissions."), plan's said only what it forbids,
+and explore's was upstream's catalogue copy. All four now state
+the house order: build works directly with the full toolset and
+delegates exploration to explore and multi-step units to
+general; plan is read-only, delegates exploration and design
+validation, and writes nothing but the plan; general takes a
+self-contained unit with a complete brief, works in parallel
+by default, and reports what was done, what was verified, and
+what remains open; explore is named the default choice for any
+question about how a codebase works, where something lives, or
+how its parts connect — the delegation trigger, stated where
+the choice is made. The thoroughness levels the plan workflow
+relies on are kept word for word.
+
 ---
 
 A note for careful readers: this README is not a patch.

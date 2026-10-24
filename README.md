@@ -131,7 +131,7 @@ the postman walks up to OpenCode's house and looks in the window. If
 a new OpenCode has been born, he hurries back and wakes the builder
 robots at GitHub, and they do the whole thing again: fetch the fresh
 robot, open the backpack, and make the tailor's cuts in the tailor's
-order, one to twenty. If even one cut does not fit the new robot,
+order, one to twenty-one. If even one cut does not fit the new robot,
 they stop at once and ship nothing — a half-cut robot is worse than
 no robot at all, and everyone in the workshop knows it.
 
@@ -203,7 +203,7 @@ call it — and the card knows exactly where it is. It brings the
 small box, checks the safety stamp, and settles the robot in, shoes
 and all.
 
-Same robot. Same cuts, all twenty of them. Just a smaller house,
+Same robot. Same cuts, all twenty-one of them. Just a smaller house,
 and clothes that fit it.
 
 One more thing was found in the backpack, at the very bottom: a
@@ -378,6 +378,23 @@ apprentice sweeps the shelves, the helper carries the heavy
 boxes, and the robot keeps his two hands for the work that is
 truly his — done all at once, the way he was taught.
 
+There was one thing left by the door: the little notes pinned
+beside the bell, telling the robot whose name to call for
+what. They were old notes, from far away, and one of them said
+almost nothing at all — the default one, it said, the one who
+does things. Another said only: no edits. On a busy morning,
+such notes help nobody decide anything.
+
+The tailor took them down and wrote them again, plainly: who
+searches, and when to send him; who carries the heavy work,
+and what to tell him before he lifts; who draws the plans and
+never touches the cloth; and what the robot's own hands are
+for, now that the bell comes first.
+
+The notes are small. The whole workshop fits in them. But a
+house is only as clear as the words by its door — and now the
+words by the door say what the house believes.
+
 At your house, you will find he has lost none of the things that
 matter. He still sits with you in the terminal and helps you write
 your programs. He still reads and writes and fixes files. He still
@@ -391,7 +408,7 @@ them to him in his configuration. No configuration, no tools. He will
 not pick up strangers' toys.
 
 As for the tailor — he is still here, in this repository, keeping his
-list tidy. The list is all this house has ever held: twenty cuts, a
+list tidy. The list is all this house has ever held: twenty-one cuts, a
 postman who never forgets to check, and a promise he makes to every
 robot who leaves the workshop.
 
@@ -414,6 +431,7 @@ And every six hours, the postman knocks again.
 - **Parallel by default:** patch 0018 makes batched, parallel tool calls the stated default on both instruction surfaces: a dedicated rule and a closing reminder in `default.txt` (independent calls go out together in one block and run at the same time; a call waits only for a genuine dependency; verification follows the same rule), and matching "by default" batching language in the read, glob, grep, webfetch, websearch, edit, write, and task descriptions and in the rendered shell section. The runtime already executed same-turn calls concurrently (measured: two `sleep 3` calls from one response finish in ~3.3s, not ~6s); this patch aligns what the texts instruct with what the runtime does.
 - **The apprentice's card too:** patch 0019 aligns the one built-in agent prompt that runs a real tool loop — `explore`, whose own prompt (`src/agent/prompt/explore.txt`) replaces `default.txt` for its sessions — with the parallel-by-default rule as its first guideline, and fixes its Bash line to read-only inspection (upstream sent explore to Bash for copying and moving files, against its own read-only rule). The title, summary, and compaction agents also carry their own prompts, but run with every tool denied, so there is nothing to parallelize there.
 - **Delegate first, batch second:** patch 0020 orders the house's ways of working. The main prompt sends specialist work to the specialist agent before any direct tool call, with parallel batching as the tier below it; explore's card opens with its parallel rule; the general agent receives its own prompt card (`src/agent/prompt/general.txt`) for the first time, parallel-first, instead of silently inheriting the main prompt; and the plan-mode reminders put delegation first as well. The title, summary, and compaction prompts stay byte-identical to upstream.
+- **The notes by the bell:** patch 0021 rewrites the four built-in agent descriptions in `agent.ts` — the text appended to the task tool's description, read by the main agent at the moment it chooses a subagent — to state the house order of delegation where the choice is made: explore is the default choice for codebase questions, general takes complete briefs and reports against them, plan delegates and writes nothing but the plan, and build's own note finally says what it delegates.
 - **Termux build:** patch 0014 adds Bun's Android targets (`OPENCODE_LIBC=bionic`) to the upstream build script. Two extra CI jobs build `libopentui.so` from the pinned OpenTUI v0.4.5 sources (Zig + Android NDK, 16 KB page alignment) and a small `close_range` compat shim (Termux's targetSdk 28 seccomp traps that syscall, so the launcher `LD_PRELOAD`s the shim), then check the Bionic binary with `readelf` — any glibc dependency fails the build. No proot anywhere. For v1.19.4 the Termux binary measures 138,289,528 bytes, verified end-to-end on a real Android 12 Termux device (install, `opencode run`, and the TUI).
 - **The full cut list, in technical words:** see [`patches/README.md`](patches/README.md).
 - **Adding a cut:** make the change in a writable upstream clone, test it, export `git diff` as the next numbered file in `patches/`, and commit it here. The next scheduled build picks it up.
