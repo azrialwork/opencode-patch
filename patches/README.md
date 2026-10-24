@@ -156,6 +156,30 @@ line (version, API level, build, security patch, all from one
 per process and cached; anything that cannot be determined is
 omitted, never guessed.
 
+**17. `0017-tool-descriptions.patch` — every tool description
+rewritten in the house format.** Every built-in tool description
+is rewritten following the same prompt best practices as patch
+0015's system prompt: what the tool does and returns; when to use
+it; when not to, and what to use instead; limits and failure
+modes; plain register throughout. The patch covers the per-tool
+`.txt` texts in `src/tool/` (thirteen, plus the shell template),
+the rendered `bash` description (the template plus the bash,
+PowerShell, and cmd sections generated in `shell/prompt.ts`),
+the `task` background parameter text, the `glob` `path`
+parameter description (a 268-character warning becomes one
+sentence), the code-mode tool description, and the
+structured-output tool description in `session/prompt.ts`.
+Deliberate content fixes ride along: the grep description no
+longer sends the model to shell `rg` for counting, which the
+bash description forbids; websearch no longer advertises domain
+filtering that its parameter schema does not offer; the task
+description asks for a subagent's result to be verified against
+the request instead of generally trusted; and the global style
+rules that `edit` and `write` duplicated (documentation files,
+emojis) are left to the system prompt. Tool descriptions from
+MCP servers and plugins are untouched — OpenCode only forwards
+those. `plan-enter.txt` is also untouched: no code imports it.
+
 ---
 
 A note for careful readers: this README is not a patch.

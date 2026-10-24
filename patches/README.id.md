@@ -157,6 +157,31 @@ security patch, semuanya dari satu dump `getprop`), dan baris
 `Termux:`. Fakta dikumpulkan sekali per proses lalu di-cache; apa
 pun yang tidak bisa ditentukan akan hilang, tidak pernah ditebak.
 
+**17. `0017-tool-descriptions.patch` — setiap deskripsi tool
+ditulis ulang dalam format rumah ini.** Setiap deskripsi tool
+bawaan ditulis ulang mengikuti praktik terbaik prompt yang sama
+dengan system prompt patch 0015: apa yang dilakukan tool dan apa
+yang dikembalikannya; kapan tool dipakai; kapan tidak, dan apa
+penggantinya; batas serta cara gagalnya; register polos di
+seluruh teks. Patch ini mencakup teks-teks `.txt` per tool di
+`src/tool/` (tiga belas, ditambah template shell), deskripsi
+`bash` yang dirender (template plus bagian bash, PowerShell, dan
+cmd yang dibangkitkan di `shell/prompt.ts`), teks parameter
+background milik `task`, deskripsi parameter `path` milik `glob`
+(peringatan 268 karakter menjadi satu kalimat), deskripsi tool
+code-mode, dan deskripsi tool structured-output di
+`session/prompt.ts`. Perbaikan isi yang disengaja ikut serta:
+deskripsi grep tidak lagi menyuruh model memakai `rg` di shell
+untuk menghitung, yang dilarang deskripsi bash; websearch tidak
+lagi mengiklankan penyaringan domain yang tidak ditawarkan skema
+parameternya; deskripsi task meminta hasil subagen diverifikasi
+terhadap permintaannya, bukan dipercaya begitu saja; dan aturan
+gaya global yang diduplikasi `edit` dan `write` (file
+dokumentasi, emoji) diserahkan kepada system prompt. Deskripsi
+tool dari server MCP dan plugin tidak disentuh — OpenCode hanya
+meneruskannya. `plan-enter.txt` juga tidak disentuh: tidak ada
+kode yang mengimpornya.
+
 ---
 
 Catatan untuk pembaca yang teliti: README ini bukan patch.
