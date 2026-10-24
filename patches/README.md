@@ -204,6 +204,27 @@ stay sequenced), task's concurrent launch becomes the stated
 default, and the rendered shell section says independent
 commands run in parallel by default. Instruction text only — no code changes.
 
+**19. `0019-explore-parallel-prompt.patch` — the explore
+agent's own card learns the two-hands rule.** An agent with its
+own prompt does not inherit `default.txt`: the explore
+subagent's system text is `src/agent/prompt/explore.txt`, and
+it was still upstream's — its tools listed one by one, with no
+word about parallelism — while explore is the highest-volume
+search worker in the system. The prompt gains the house
+parallel rule as its first guideline: independent Glob, Grep,
+and Read calls go out together in a single block and run at the
+same time; a call waits only when its input depends on an
+earlier result. The tool lines are aligned with the tool
+descriptions at the same time: Read lists directory contents,
+and Bash is reserved for read-only inspection the dedicated
+tools do not cover. Upstream's line sending explore to Bash
+"for file operations like copying, moving, or listing directory
+contents" contradicted the descriptions and explore's own
+read-only rule at the bottom of the same file. The other
+built-in agent prompts — title, summary, compaction — run with
+every tool denied, so there is nothing to parallelize there;
+they are untouched.
+
 ---
 
 A note for careful readers: this README is not a patch.

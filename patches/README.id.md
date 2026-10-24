@@ -208,6 +208,29 @@ default yang dinyatakan, dan bagian shell yang dirender
 menyatakan perintah independen berjalan paralel secara default. Hanya teks instruksi — tanpa perubahan
 kode.
 
+**19. `0019-explore-parallel-prompt.patch` — kartu milik agen
+explore sendiri belajar aturan dua tangan.** Agen yang punya
+prompt sendiri tidak mewarisi `default.txt`: teks sistem milik
+subagen explore adalah `src/agent/prompt/explore.txt`, dan ia
+masih milik upstream — alatnya didaftar satu per satu, tanpa
+satu kata pun soal paralel — padahal explore adalah pekerja
+pencarian bervolume tertinggi di sistem ini. Prompt itu
+mendapat aturan paralel rumah ini sebagai pedoman pertamanya:
+panggilan Glob, Grep, dan Read yang independen berangkat
+bersama dalam satu blok dan berjalan pada saat yang sama;
+sebuah panggilan menunggu hanya bila inputnya bergantung pada
+hasil sebelumnya. Baris-baris alatnya diselaraskan dengan
+deskripsi tool pada saat yang sama: Read mendaftar isi
+direktori, dan Bash dicadangkan untuk pemeriksaan read-only
+yang tidak dicakup tool khusus. Baris upstream yang menyuruh
+explore memakai Bash "for file operations like copying,
+moving, or listing directory contents" bertentangan dengan
+deskripsi tool dan dengan aturan read-only milik explore
+sendiri di bagian bawah file yang sama. Prompt agen bawaan
+lainnya — title, summary, compaction — berjalan dengan semua
+tool ditolak, jadi tidak ada yang bisa diparalelkan di sana;
+ketiganya tidak disentuh.
+
 ---
 
 Catatan untuk pembaca yang teliti: README ini bukan patch.

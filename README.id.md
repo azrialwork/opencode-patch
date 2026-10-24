@@ -138,7 +138,7 @@ dari jendela. Kalau OpenCode baru sudah lahir, ia bergegas pulang dan
 membangunkan robot-robot pembangun di GitHub, dan mereka melakukan
 semuanya lagi: mengambil robot yang segar, membuka ranselnya, dan
 melakukan potongan-potongan penjahit sesuai urutannya, satu sampai
-delapan belas. Kalau satu potongan saja tidak pas di robot baru itu,
+sembilan belas. Kalau satu potongan saja tidak pas di robot baru itu,
 mereka berhenti saat itu juga dan tidak mengirim apa-apa — robot
 setengah terpotong lebih buruk daripada tidak ada robot sama sekali,
 dan semua orang di bengkel tahu itu.
@@ -215,7 +215,7 @@ begitu orang dewasa menyebutnya — dan kartunya tahu persis di mana
 ia berada. Ia membawakan kotak kecilnya, memeriksa stempel amannya,
 dan menempatkan si robot di dalam, lengkap dengan sepatunya.
 
-Robot yang sama. Potongan yang sama, kedelapan belasnya. Hanya rumah
+Robot yang sama. Potongan yang sama, kesembilan belasnya. Hanya rumah
 yang lebih kecil, dan pakaian yang pas untuknya.
 
 Satu hal lagi ditemukan di dalam ransel, di dasar paling bawah:
@@ -364,6 +364,29 @@ yang alamatnya tertulis pada bungkus bungkusan lain. Yang itu
 menunggu — bukan karena kebiasaan, tetapi karena ia memang
 tidak bisa berangkat lebih dulu.
 
+Si robot bukan satu-satunya yang bekerja di bengkel itu.
+
+Ada seorang murid — anak yang cepat dan cerdas, yang seluruh
+pekerjaannya adalah berlari ke rak-rak: carikan buku ini,
+ambilkan peta itu, beritahu aku apa yang tertulis di halaman
+ketiga. Si robot membunyikan lonceng kecilnya, dan ia pun
+berlari.
+
+Namun si murid punya kartunya sendiri, dari jauh, dan kartu itu
+tidak berkata apa-apa tentang dua tangan. Maka ia berlari
+sebagaimana ia selalu berlari: satu rak, satu buku, satu kali
+kembali. Lalu keluar lagi. Kakinya cepat. Tangannya kosong.
+
+Penjahit memanggilnya masuk dan menulis ulang kartunya juga —
+tulisan tangan yang sama, cara-cara rumah yang sama, dengan
+aturan dua tangan ditulis paling pertama: lihatlah ke banyak
+tempat sekaligus, anak kecil, dan kembalilah satu kali, dengan
+tanganmu penuh.
+
+Kini setiap lonceng berbunyi, rak-rak itu berdengung. Si murid
+pergi sedikit lebih lama — dan kembali dengan membawa
+semuanya.
+
 Di rumahmu, kamu akan menemukan ia tidak kehilangan satu pun hal yang
 penting. Ia tetap duduk bersamamu di terminal dan membantumu menulis
 programmu. Ia tetap membaca dan menulis dan memperbaiki file. Ia tetap
@@ -379,7 +402,7 @@ mainan orang asing.
 
 Adapun si penjahit — ia masih di sini, di repo ini, menjaga daftarnya
 tetap rapi. Daftar itulah satu-satunya yang pernah dimiliki rumah
-ini: delapan belas potongan, pak pos yang tidak pernah lupa memeriksa,
+ini: sembilan belas potongan, pak pos yang tidak pernah lupa memeriksa,
 dan janji yang ia buat kepada setiap robot yang meninggalkan bengkel.
 
 Tidak ada yang disembunyikan. Semua yang dipotong, dipotong
@@ -400,6 +423,7 @@ Dan setiap enam jam, pak pos mengetuk lagi.
 - **Kartu environment yang lebih jujur:** patch 0016 menghapus baris "You are powered by the model named …" dan membangun ulang blok `<env>` untuk memuat yang benar-benar ditindaklanjuti agen: direktori kerja, root workspace (hanya bila berbeda), repo git dan branch, OS/distro, platform, arsitektur, jumlah core CPU, memori, disk bebas, home, user, shell, locale, zona waktu, dan tanggal — dengan varian khusus Android/Termux (nama produk, versi/API/build/security patch Android dari satu dump `getprop`, versi dan prefix Termux). Fakta dikumpulkan sekali per proses lalu di-cache; apa pun yang tidak diketahui akan hilang, tidak pernah ditebak. Empat belas baris di Linux; terverifikasi dari wire baik di root repo maupun di subdirektori.
 - **Setiap carik alat ditulis ulang:** patch 0017 menulis ulang semua deskripsi tool bawaan dalam format praktik terbaik yang sama seperti system prompt: apa yang dilakukan tool dan apa yang dikembalikannya, kapan tool dipakai, kapan tidak (dan apa penggantinya), serta batas-batasnya. Cakupannya teks `.txt` per tool, deskripsi shell yang dirender dinamis (hanya bash — varian PowerShell dan cmd dihapus, sehingga setiap shell menerima teks bash), parameter background milik tool task, parameter path milik `glob`, deskripsi code-mode, dan tool structured-output. Dua kontradiksi bawaan upstream diselesaikan (deskripsi grep tidak lagi menyuruh model memakai `rg` di shell, yang dilarang deskripsi bash), deskripsi websearch tidak lagi mengklaim penyaringan domain yang tidak ditawarkan skemanya, dan deskripsi task kini meminta hasil subagen diverifikasi terhadap permintaannya, bukan dipercaya begitu saja. Tool dari server MCP dan plugin mempertahankan deskripsinya sendiri, yang hanya diteruskan OpenCode; `plan-enter.txt` yang yatim, yang tidak diimpor kode mana pun, dibiarkan apa adanya.
 - **Paralel secara default:** patch 0018 menjadikan panggilan tool yang ter-batch dan paralel sebagai default yang dinyatakan pada kedua permukaan instruksi: aturan khusus dan pengingat penutup di `default.txt` (panggilan independen berangkat bersama dalam satu blok dan berjalan pada saat yang sama; sebuah panggilan menunggu hanya karena dependensi yang sungguh ada; verifikasi mengikuti aturan yang sama), serta bahasa batching "by default" yang sepadan di deskripsi read, glob, grep, webfetch, websearch, edit, write, dan task dan di bagian shell yang dirender. Runtime memang sudah mengeksekusi panggilan satu giliran secara konkuren (terukur: dua panggilan `sleep 3` dari satu respons selesai dalam ±3,3 detik, bukan ±6 detik); patch ini menyelaraskan apa yang diperintahkan teks dengan apa yang dilakukan runtime.
+- **Kartu si murid juga:** patch 0019 menyelaraskan satu-satunya prompt agen bawaan yang menjalankan loop tool sungguhan — `explore`, yang prompt-nya sendiri (`src/agent/prompt/explore.txt`) menggantikan `default.txt` untuk sesinya — dengan aturan paralel-secara-default sebagai pedoman pertamanya, dan memperbaiki baris Bash-nya menjadi pemeriksaan read-only (upstream menyuruh explore memakai Bash untuk menyalin dan memindahkan file, melawan aturan read-only miliknya sendiri). Agen title, summary, dan compaction juga membawa prompt mereka sendiri, tetapi berjalan dengan semua tool ditolak, jadi tidak ada yang bisa diparalelkan di sana.
 - **Build Termux:** patch 0014 menambahkan target Android milik Bun (`OPENCODE_LIBC=bionic`) ke script build upstream. Dua job CI tambahan membangun `libopentui.so` dari sumber OpenTUI v0.4.5 yang di-pin (Zig + Android NDK, alignment halaman 16 KB) dan shim kecil `close_range` (seccomp Termux yang targetSdk 28 menjebak syscall itu, jadi launcher me-`LD_PRELOAD` shim-nya), lalu memeriksa binary Bionic dengan `readelf` — dependensi glibc apa pun menggagalkan build. Tidak ada proot di mana pun. Untuk v1.19.4, binary Termux berukuran 138.289.528 byte, terverifikasi end-to-end di perangkat Termux Android 12 asli (install, `opencode run`, dan TUI).
 - **Daftar potongan lengkap, dengan kata-kata teknis:** lihat [`patches/README.id.md`](patches/README.id.md).
 - **Menambah potongan:** buat perubahannya di clone upstream yang bisa ditulis, uji, ekspor `git diff` sebagai file bernomor berikutnya di `patches/`, lalu commit di sini. Build terjadwal berikutnya akan mengambilnya.
