@@ -251,6 +251,17 @@ planning delegates first — exploration to explore agents,
 design validation to general agents, in parallel when
 independent — and direct reads are the fallback tier. The
 hidden agents' prompts remain untouched, as always.
+Tightened later the same day, folded into this same patch
+after a behavioral audit found the build agent answering a
+codebase question with direct reads instead of delegating: the
+direct-work exception is now fenced — a question about how a
+codebase works, where something lives, or how its parts
+connect is delegation-shaped by definition, and when answering
+it needs more than two or three files, or files not already
+located, it goes to explore first; the codebase's size cannot
+excuse keeping it, because that size is only known after
+exploring. The closing reminder carries the same fence in one
+line.
 
 ---
 

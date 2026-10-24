@@ -260,6 +260,18 @@ validasi desain ke agen general, secara paralel bila
 independen — dan pembacaan langsung adalah tingkat
 cadangannya. Prompt milik agen-agen hidden tetap tidak
 disentuh, seperti biasa.
+Diperketat kemudian pada hari yang sama, dilipat ke patch yang
+sama ini setelah audit perilaku menemukan agen build menjawab
+pertanyaan codebase dengan bacaan langsung alih-alih
+mendelegasikan: pengecualian pekerjaan-langsung kini dipagari —
+pertanyaan tentang cara kerja sebuah codebase, di mana sesuatu
+berada, atau bagaimana bagian-bagiannya terhubung adalah
+berbentuk-delegasi menurut definisinya, dan bila menjawabnya
+butuh lebih dari dua atau tiga file, atau file yang belum
+diketahui tempatnya, ia pergi ke explore lebih dulu; ukuran
+codebase tidak bisa menjadi alasan mempertahankannya, sebab
+ukuran itu baru diketahui setelah eksplorasi. Pengingat
+penutup membawa pagar yang sama dalam satu baris.
 
 ---
 
