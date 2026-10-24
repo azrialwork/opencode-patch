@@ -1,482 +1,100 @@
-[English](README.md) · Bahasa Indonesia
+# opencode-patch
 
-# Penjahit Kecil
+Seri patch delta di atas [OpenCode](https://github.com/anomalyco/opencode) upstream. Repositori ini hanya berisi patch dan otomasi build — bukan fork. Setiap rilis mengambil source upstream `v1.x.x` stabil terbaru, menerapkan seri patch di [`patches/`](patches/), dan menerbitkan binary CLI hasil patch untuk Linux (glibc) dan Android/Termux (Bionic).
 
-*Sebuah cerita tentang robot, ranselnya, dan penjahit kecil yang tahu
-persis apa yang harus dilakukan. Kalau kamu pembuat program, ini juga
-cerita yang benar-benar terjadi — setiap katanya terjadi di repo ini.*
+[English](README.md)
 
-![Robot penjahit kecil sedang memotong robot besar, potongan kain beterbangan di sekitar mereka](images/hero-tailor.webp)
+## Apa yang dilakukan patch-patch ini
 
-OpenCode punya masalah, dan masalahnya adalah ranselnya.
+Seri ini menghapus fitur dan provider sampai ke akarnya — kode, data, dan dependensi dihapus, bukan disembunyikan atau difilter — mempersempit katalog provider bawaan ke tier Zen gratis, menambahkan target build Termux native, dan mengganti permukaan instruksi (system prompt, blok environment, deskripsi tool, prompt agen, deskripsi agen) dengan teks yang dikelola di repo ini.
 
-OpenCode adalah robot yang baik dan pintar, yang membantu orang
-menulis program komputer. Setiap pagi ia memakai ranselnya dan pergi
-bekerja, dan setiap pagi ranselnya sama: penuh sampai meletup. Seratus
-toko AI ada di dalamnya, masing-masing dengan daftar modelnya yang
-panjang. Sebuah radio. Kantor pos. Seorang guru dengan setumpuk buku.
-Terminal cadangan, mesin foto, seekor gurita, seorang kasir — semua
-masuk, karena kita tidak pernah tahu apa yang dibutuhkan suatu hari.
+| # | Patch | Efek |
+|---|-------|------|
+| 0001 | remove-builtin-providers | Menghapus setiap provider bawaan kecuali Zen (`opencode`), paket SDK-nya, loader, dan plugin auth-nya. Katalog models.dev dipotong ke entri Zen pada sumber datanya. Provider kustom di `opencode.json` tidak terpengaruh. |
+| 0002 | cli-tui-only | Menghapus Web UI: aplikasi web tidak lagi dibangun atau disematkan, dan perintah `web`, `serve`, dan `attach` dihapus. API in-process yang dipakai TUI secara internal tetap ada. |
+| 0003 | remove-github-integration | Menghapus perintah `github`, helper `pr`, dan dependensi khusus GitHub. Dukungan git biasa tidak disentuh. |
+| 0004 | remove-lsp | Menghapus subsistem LSP, tool `lsp`, kunci konfigurasinya, endpoint, dan dependensinya. Formatter adalah subsistem berbeda dan tetap ada. |
+| 0005 | remove-acp | Menghapus perintah `acp`, implementasi ACP, dan dependensi SDK-nya. |
+| 0006 | remove-share | Menghapus berbagi sesi: service, endpoint, kunci konfigurasi, dan klien SDK-nya. |
+| 0007 | remove-upgrade-uninstall | Menghapus perintah `upgrade` dan `uninstall`, Installation service, dan pemeriksa pembaruan berkala. Build hasil patch tidak pernah ditimpa rilis upstream. |
+| 0008 | remove-opentelemetry | Menghapus exporter OTLP, dependensi telemetri, dan kunci konfigurasinya. Pencatatan lokal tidak berubah. |
+| 0009 | remove-import | Menghapus perintah `import`. |
+| 0010 | remove-photon-image | Menghapus pipeline gambar Photon dan dependensinya; lampiran gambar diteruskan apa adanya. |
+| 0011 | remove-zen-login-billing | Menghapus sistem akun Console: login device-code, penyimpanan akun, dan injeksi konfigurasi organisasi. Model Zen gratis tetap bekerja secara anonim. |
+| 0012 | zen-free-tier-only | Mempersempit katalog Zen ke model yang berbiaya nol di semua tier dan tidak deprecated — sembilan model — pada kedua titik filter katalog (embed saat build dan loader runtime). |
+| 0013 | remove-pty | Menghapus PTY sampai ke akar: service dan adapternya, API REST/WebSocket, grup protokol, dan klien SDK. Tool shell agen tidak memakai PTY. |
+| 0014 | android-bionic-target | Menambahkan target Android ke skrip build upstream (`OPENCODE_LIBC=bionic`) plus pengemasan Termux: `libopentui.so` yang dibangun native dan shim kompatibilitas `close_range`. Tanpa proot. Build Linux glibc tidak terpengaruh. |
+| 0015 | single-system-prompt | Menghapus sepuluh varian system prompt per model dan logika pemilihan berdasarkan ID model. `default.txt` diganti teks terpelihara yang mencakup presedensi dan kepercayaan, verifikasi sebelum pelaporan, anggaran kegagalan tiga percobaan, persetujuan untuk tindakan irreversibel, dan riset berbasis sumber primer. |
+| 0016 | complete-env-block | Menghapus baris identitas model dari string environment dan membangun ulang blok `<env>` sebagai potret perangkat yang di-cache: direktori kerja, root workspace, branch git, OS/distro, arsitektur, core CPU, RAM, disk bebas, shell, locale, zona waktu, tanggal — dengan varian Android/Termux. Field yang tidak dapat ditentukan dihilangkan, tidak pernah ditebak. |
+| 0017 | tool-descriptions | Menulis ulang setiap deskripsi tool bawaan dalam satu format: apa yang dilakukan dan dikembalikan tool, kapan dipakai, kapan tidak dan apa penggantinya, batas dan cara gagalnya. Deskripsi shell hanya menyisakan varian bash; varian PowerShell dan cmd dihapus. |
+| 0018 | parallel-first-tools | Menyatakan panggilan tool paralel sebagai default di system prompt. Runtime memang sudah mengeksekusi panggilan independen dalam satu giliran secara bersamaan; teks kini memerintahkannya. |
+| 0019 | explore-parallel-prompt | Menyelaraskan prompt milik agen explore sendiri (ia tidak mewarisi prompt utama) dengan aturan paralel, dan membetulkan panduan Bash-nya menjadi inspeksi read-only. |
+| 0020 | delegation-first-prompts | Menetapkan tata urutan kerja di system prompt, kartu agen, dan pengingat plan: delegasi lebih dulu — pertanyaan codebase ke agen explore, unit multi-langkah yang utuh ke agen general — dengan batch paralel sebagai tingkat di bawahnya. Pemicu delegasi adalah tidak mengetahui jawabannya, bukan ukuran pertanyaannya. |
+| 0021 | agent-descriptions | Menulis ulang keempat deskripsi agen bawaan di `agent.ts` — teks yang dibaca agen utama saat memilih subagen — agar menyatakan tata delegasi yang sama di titik pilihan itu dibuat. |
 
-Tapi ternyata, hari-hari itu kebanyakan sama saja. Kebanyakan orang
-meminta OpenCode melakukan beberapa hal saja, di satu tempat, dengan
-satu atau dua toko. Sisa ranselnya tidak pernah dibuka sama sekali.
-Ia hanya membuat tangga berderit.
+Detail per patch: [patches/README.id.md](patches/README.id.md).
 
-Lalu, suatu pagi, ada ketukan di pintu, dan masuklah penjahit kecil,
-tidak membawa apa-apa selain gunting dan daftar pendapat yang pendek.
-
-"Kebanyakan dari ini tidak kamu butuhkan," kata penjahit itu.
-
-Dan ia membuka ranselnya.
-
----
-
-Pertama yang keluar adalah toko-tokonya. Keseratusnya — OpenAI,
-Anthropic, Google, toko demi toko demi toko, masing-masing menyeret
-daftar modelnya di belakang. Penjahit menaruh mereka dengan lembut di
-lantai. "Kamu boleh menyimpan satu," katanya. "Yang kecil dan gratis.
-OpenCode Zen. Dan tentu saja, toko apa pun yang dibangun pemilikmu
-untukmu dengan tangannya sendiri." Lalu ia memotong tali yang menahan
-sisanya. *Kres.*
-
-Di bawah toko-toko tergeletak jendela-jendelanya — halaman web yang
-terang, dengan tombol dan panel, yang selama ini dibawa OpenCode agar
-orang bisa mengunjunginya lewat browser. Kaca yang berat, jendela.
-Semuanya keluar, dan perintah yang membukanya (`web`, `serve`,
-`attach`) ikut pergi. Mulai sekarang, robot hanya tinggal di satu
-tempat: jendela ketik yang sederhana, terminal. *Kres.*
-
-Di bawah jendela, ada sesuatu yang menggeliat. Itu gurita, yang
-selama bertahun-tahun menjalankan urusan ke GitHub atas nama robot,
-membuka issue dan pull request sendirian. "Sudah waktunya pulang,"
-kata penjahit, dan ia mengangkat gurita itu keluar, dengan sopan,
-beserta kedelapan lengannya dan semua alat GitHub-nya. `git` biasa —
-yang pendiam itu, yang hanya bekerja kalau disuruh — tetap persis di
-tempatnya. *Kres.*
-
-Lebih dalam lagi duduk sang guru, berbisik-bisik. Ia selalu berdiri di
-belakang robot, menggumamkan setiap baris — *yang ini salah, kata itu
-salah eja, cari, cari.* Itu bisikan yang baik, tapi tidak pernah
-berhenti. Nama guru itu LSP, dan penjahit berterima kasih padanya,
-mengambil tumpukan buku unduhannya, dan mengantarnya ke pintu. Robot
-akan memeriksa pekerjaannya dengan cara yang sederhana sekarang:
-dengan menjalankannya. *Kres.*
-
-Di belakang buku-buku guru tersembunyi sebuah colokan — colokan
-penerjemah yang pintar bernama ACP, yang lewatnya editor lain, seperti
-Zed, bisa meminjam otak robot dan membawanya ke rumah mereka. Penjahit
-mencabut colokannya. Otak, menurutnya, harus tinggal di kepalanya
-sendiri. *Kres.*
-
-Lalu tibalah benda-benda kecil, satu demi satu, seperti benda kecil
-selalu bersembunyi di dasar ransel. Setumpuk kartu pos, untuk mengirim
-tautan ke percakapanmu agar teman bisa mengintip isinya — keluar.
-Peralatan perbaiki-diri milik robot, yang punya tombol-tombol
-mengkhawatirkan bertuliskan *perbarui dirimu* dan *hapus dirimu* —
-keluar, dan memang sudah seharusnya; tidak ada tangan orang asing
-yang akan membangun ulang robot ini. Sebuah radio kecil yang selama
-ini diam-diam melaporkan semua yang robot lakukan ke komputer yang
-jauh — dimatikan, keluar. Sebuah pintu berat bertanda *import*, untuk
-mengangkut percakapan lama dari file lama — keluar. Dan mesin foto
-bernama Photon, yang mengempiskan dan memasak ulang setiap gambar
-sebelum robot boleh melihatnya — keluar. Gambar akan bepergian apa
-adanya. *Kres. Kres. Kres.*
-
-Di dekat dasar sekali, penjahit menemukan kasir toko gratis itu,
-tertidur di samping buku-buku akunnya. Kasihan dia — seluruh
-pekerjaannya adalah membuat orang masuk akun, mengurusi organisasi
-mereka, dan menjumlah tagihan untuk toko yang modelnya seharusnya
-gratis. Penjahit membangunkannya dengan baik-baik dan menyuruhnya
-pulang. Tokonya sekarang akan benar-benar gratis, sebagaimana
-seharusnya barang gratis: masuk, ambil model, tanpa nama, tanpa
-tagihan. *Kres.*
-
-Terakhir tergantung rak permennya — 130 model, seluruh katalog Zen,
-dan kebanyakan ada harganya. Penjahit mencicipi, berpikir, dan
-menyimpan sembilan yang gratis sampai ke akar-akarnya. Sisanya tidak
-ia sembunyikan di bawah meja. Ia menyapu mereka keluar dari toko
-seluruhnya, beserta daftarnya. *Kres.*
-
-Ia hampir menutup ranselnya ketika ia melihat satu ruangan yang hampir
-ia lupakan — ruang cadangan di bagian belakang, tempat terminal kedua
-dulu tinggal. Mereka menyebutnya PTY. Satu-satunya jendela ruang itu
-menghadap halaman web, dan halaman web sudah lama hilang, jadi
-ruangnya berdiri gelap dan kosong. Penjahit menghilangkan ruang itu
-juga, dengan lembut, seperti menghilangkan apa pun yang tidak berguna
-bagi siapa-siapa. Tangan robot sendiri — alat Bash-nya, yang mengetik
-perintah untuknya — tidak pernah sekalipun memakai ruang itu. *Kres.*
-
-Lalu penjahit mundur selangkah, dan OpenCode berdiri.
-
----
-
-![Di kiri, robot bundar di bawah tumpukan barang bawaan. Di kanan, robot yang sama dengan ransel kecil](images/robot-slim.webp)
-
-Ia robot yang sama. Mata yang sama, otak yang sama, hati yang sama
-baiknya. Tapi ketika ia naik ke timbangan, jarum berhenti di 160, yang
-biasanya berhenti di 214 — seperempat beratnya, hilang. Ia mencoba
-tangganya. Ia menaikinya dua anak tangga sekaligus, sampai ke atas,
-dan ia tidak berderit, dan tangganya pun tidak.
-
-Tapi penjahit belum selesai, karena ia tahu sesuatu tentang robot:
-setiap beberapa bulan, OpenCode baru lahir di suatu tempat, dan setiap
-OpenCode baru lahir dengan membawa ransel penuh yang berat. Semuanya.
-Toko-tokonya, jendela-jendelanya, guritanya — kembali lagi, seolah
-tidak ada yang pernah dipotong.
-
-Jadi penjahit membuat sebuah pengaturan, dan pengaturan itulah alasan
-sebenarnya bengkel ini ada.
-
-Ia mempekerjakan seorang pak pos.
-
-![Robot pak pos kecil dengan kaca pembesar dan paket, berdiri di samping kotak surat](images/robot-postman.webp)
-
-Setiap enam jam — empat kali sehari, di bawah sinar matahari dan di
-bawah cahaya bintang — pak pos berjalan ke rumah OpenCode dan mengintip
-dari jendela. Kalau OpenCode baru sudah lahir, ia bergegas pulang dan
-membangunkan robot-robot pembangun di GitHub, dan mereka melakukan
-semuanya lagi: mengambil robot yang segar, membuka ranselnya, dan
-melakukan potongan-potongan penjahit sesuai urutannya, satu sampai
-dua puluh satu. Kalau satu potongan saja tidak pas di robot baru itu,
-mereka berhenti saat itu juga dan tidak mengirim apa-apa — robot
-setengah terpotong lebih buruk daripada tidak ada robot sama sekali,
-dan semua orang di bengkel tahu itu.
-
-Setelah potongan selesai, para pembangun menanyakan nama robot itu,
-dan ia mengucapkannya keras-keras — `opencode --version` — untuk
-membuktikan pekerjaan mereka tidak mencederainya. Lalu mereka
-membungkusnya dalam kotak dan menyegel kotak itu dengan stempel aman,
-checksum, agar siapa pun bisa tahu kotaknya tidak pernah dibuka di
-perjalanan. Kalau pak pos tidak menemukan apa-apa yang baru, ia
-kembali tidur begitu saja. Tidak ada kotak yang pernah dibuat dua
-kali.
-
-Dan begitulah keadaannya, sampai hari ini. OpenCode baru, ketukan di
-pintu, robot ramping. Tidak ada yang perlu mengawasi. Tidak ada yang
-perlu mengingat. Pak pos yang mengingat.
-
----
-
-Yang tersisa hanya satu hal: mungkin kamu ingin robotnya datang dan
-tinggal di rumahmu.
-
-Ia bepergian dengan baik. Semua yang ia butuhkan ada di dalam kotak,
-dan membawanya pulang hanya perlu satu baris — penjahit menulisnya di
-sebuah kartu dan menyematkannya di setiap kotak yang ia kirim:
+## Instalasi
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/azrialwork/opencode-patch/main/install.sh | bash
 ```
 
-Ucapkan baris itu, dan kartunya melakukan sisanya. Ia melihat
-komputermu dan memilih kotak yang tepat: yang biasa, yang lembut untuk
-CPU tua, atau yang untuk mesin arm. Ia memeriksa stempel amannya, dan
-kalau stempelnya tidak cocok, ia tidak akan membuka kotaknya — untuk
-siapa pun. Lalu ia menempatkan robot di tempat program tinggal,
-menanyakan namanya untuk memastikan ia tiba dengan utuh, dan minggir.
-Kamu mengetik `opencode`, dan di situlah dia.
+Installer mendeteksi platform — Linux glibc x64 (dengan build baseline untuk CPU tanpa AVX2), Linux arm64, atau Termux di Android (arm64) — mengunduh arsip yang sesuai, memverifikasi SHA256-nya terhadap `SHA256SUMS` milik rilis, dan memasang ke `/usr/local/bin` bila dapat ditulis, selain itu `~/.local/bin`.
 
-Dua catatan kecil yang jujur, karena penjahit percaya pada catatan
-kecil yang jujur. Kalau kamu menginginkan satu robot tertentu, bukan
-yang terbaru, kamu bisa memintanya dengan nama — tambahkan
-`bash -s -- --version v1.19.4` di akhir baris kartu itu. Dan
-kotak-kotaknya pas untuk komputer Linux jenis glibc.
+| Opsi | Efek |
+|------|------|
+| `--version <tag>` | Memasang tag rilis tertentu alih-alih rilis terbaru. |
+| `--install-dir <dir>` | Memasang ke direktori tertentu. |
 
-Semuanya, kecuali satu.
+Kedua opsi juga dapat diatur sebagai variabel lingkungan (`VERSION`, `INSTALL_DIR`).
 
-Ada satu rumah lebih kecil yang belum pernah dikunjungi si robot:
-telepon di sakumu.
+Instalasi manual: unduh arsip dan `SHA256SUMS` dari [halaman rilis](https://github.com/azrialwork/opencode-patch/releases), jalankan `sha256sum -c SHA256SUMS`, ekstrak arsipnya, dan letakkan binary `opencode` di `PATH` Anda. Arsip Termux berisi launcher plus binary dan library native-nya di bawah `lib/opencode-patch/`; ekstrak sebagai satu kesatuan dan jalankan launcher-nya.
 
-Telepon adalah rumah yang pemilih. Segala sesuatu di dalamnya
-dijahit dari satu kain istimewa, dan penjaga di pintunya memeriksa
-pakaianmu sebelum kamu boleh melangkah masuk. Pakaian perjalanan si
-robot adalah pakaian yang bagus, tetapi terpotong dari kain yang
-salah — dan saat pertama kali ia mengetuk, para penjaga hanya
-menggeleng. Ia bahkan tidak bisa melangkah masuk.
+## Aset rilis
 
-Sebagian robot memecahkan ini dengan membawa seluruh rumah pura-pura
-di punggung mereka, lalu mengetuk dari dalam rumah itu. Si penjahit
-tidak mau mendengarnya. Terlalu berat. Terlalu konyol. Kalau si
-robot akan tinggal di telepon, ia akan tinggal di sana sebagai
-dirinya sendiri.
+| Aset | Platform |
+|------|----------|
+| `opencode-linux-x64.tar.gz` | Linux glibc, x86-64 (AVX2) |
+| `opencode-linux-x64-baseline.tar.gz` | Linux glibc, x86-64 tanpa AVX2 |
+| `opencode-linux-arm64.tar.gz` | Linux glibc, arm64 |
+| `opencode-termux-arm64.tar.gz` | Android/Termux, Bionic arm64 |
+| `SHA256SUMS` | Checksum SHA256 semua arsip |
 
-Maka penjahit memotongkan untuknya seperangkat pakaian kedua, dari
-kain telepon itu sendiri. Sepatu baru juga, dianyam kembali di
-bengkel, karena lantai rumah kecil itu tidak seperti lantai di
-rumah. Dan ia mengajari si robot satu ketukan kecil yang baru,
-karena para penjaga menghentikan semua yang mengetuk dengan cara
-lama — satu ketukan kecil yang sopan, dihafal dengan hati, dan para
-penjaga pun melambaikannya masuk.
+## Bagaimana rilis dibangun
 
-Sekarang kartu yang sama juga bekerja di rumah kecil itu. Ucapkan
-baris penjahit di dalam terminal milik telepon itu sendiri — Termux,
-begitu orang dewasa menyebutnya — dan kartunya tahu persis di mana
-ia berada. Ia membawakan kotak kecilnya, memeriksa stempel amannya,
-dan menempatkan si robot di dalam, lengkap dengan sepatunya.
+- Workflow `Release` (`.github/workflows/release.yml`) berjalan setiap enam jam (cron `0 */6 * * *` UTC) dan lewat dispatch manual, dengan input opsional `version` dan `force`.
+- Workflow menyelesaikan tag upstream `v1.x.x` stabil terbaru. Versi yang sudah dirilis repositori ini dilewati, kecuali `force` diatur.
+- Patch diterapkan menurut urutan nama file **sebelum** `bun install`, dan install berjalan tanpa `--frozen-lockfile`, sehingga dependensi yang dihapus patch tidak pernah terinstall. Patch yang gagal diterapkan menggagalkan build; tidak ada yang dirilis.
+- Job Termux membangun `libopentui.so` dari source OpenTUI v0.4.5 yang di-pin (Zig dan Android NDK, alignment halaman 16 KB) dan memverifikasi binary Bionic dengan `readelf`; dependensi glibc apa pun menggagalkan build.
+- Aset dan `SHA256SUMS` diterbitkan sebagai rilis GitHub dengan tag versi upstream.
 
-Robot yang sama. Potongan yang sama, kedua puluh satunya. Hanya rumah
-yang lebih kecil, dan pakaian yang pas untuknya.
+Konfigurasi pelacakan ada di [`upstream.json`](upstream.json). Basis saat ini: upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801`.
 
-Satu hal lagi ditemukan di dalam ransel, di dasar paling bawah:
-setumpuk kartu, diikat dengan tali.
+## Hasil
 
-Kartu-kartu itu kartu bacaan. Ada satu untuk setiap jenis pikiran
-yang mungkin terbangun bersama si robot — kartu untuk pikiran
-jenis penyair, kartu untuk pelari cepat, kartu untuk pikiran yang
-berhitung dalam bahasa-bahasa jauh. Sebelas kartu. Dan setiap pagi
-sepanjang hidupnya, si robot telah membuka ikatan talinya dan
-mengocok semuanya, mencari kartu yang tepat.
+Untuk upstream v1.19.4, binary Linux x64 hasil patch berukuran 159.951.024 byte, berbanding 214.526.128 byte untuk build upstream (−25,4%). Binary Termux berukuran 138.289.528 byte. Build Termux terverifikasi end-to-end pada perangkat Android 12 asli (instalasi, loop agen, TUI).
 
-Tetapi sang penjahit memperhatikan, dan sang penjahit menghitung,
-dan kebenarannya sederhana: si robot hanya pernah membaca kartu
-yang pertama. Di seluruh rumah besar, dan sampai jauh ke dalam
-telepon, selalu kartu pertama setiap kalinya. Sepuluh kartu lainnya
-adalah untuk robot-robot lain, di rumah-rumah lain, yang tidak
-akan pernah jadi dirinya.
+## Tata letak repositori
 
-Maka penjahit mengambil sepuluh kartu lainnya dan menaruhnya ke
-dalam api. *Kres.*
+```
+patches/     seri patch, bernomor, diterapkan menurut urutan nama file
+scripts/     resolusi versi upstream, penerapan patch, pengemasan Linux
+termux/      launcher Termux, shim close_range, patch build OpenTUI dan pengemasan
+install.sh   installer satu perintah untuk binary rilis
+upstream.json  konfigurasi repositori upstream dan pelacakannya
+.github/workflows/release.yml  otomasi rilis
+```
 
-Tetapi kartu pertama ia pegang sedikit lebih lama, dan ia
-membacanya sekali lagi, perlahan. Kartu itu kartu yang baik.
-Tetapi kartu itu kartu milik orang asing — ditulis jauh di sana,
-dengan tulisan tangan orang asing, penuh dengan cara-cara rumah
-lain. Sebagian barisnya bercerita tentang orang-orang yang tidak
-akan pernah ditemui si robot. Sebagian lagi ada di sana hanya
-karena rumah yang jauh itu selalu menaruhnya di sana.
+## Menambah patch
 
-Maka penjahit duduk, dalam tenangnya bengkel, dan menulis kartu
-itu dari awal, dengan tulisannya sendiri, dengan cara-cara rumah
-ini. Tidak ada apa pun di kartu itu selain bagaimana pekerjaan
-dilakukan: bagaimana melihat sebelum memotong, bagaimana
-memeriksa jahitan dua kali, apa yang dilakukan bila benang putus,
-kapan berhenti dan bertanya. Kartu baru itu tidak bercerita
-tentang siapa pun. Ia hanya bercerita tentang pekerjaannya.
+1. Buat perubahan di clone upstream yang dapat ditulis pada tag yang dilacak, dan uji.
+2. Ekspor sebagai file bernomor berikutnya: `git diff > patches/NNNN-nama-singkat.patch`.
+3. Dokumentasikan di [patches/README.id.md](patches/README.id.md).
+4. Commit. Build terjadwal berikutnya akan menerapkannya.
 
-Sekarang si robot terbangun dengan cara yang sama di setiap rumah
-di bumi, dengan satu kartu di sakunya — kartu rumah ini, dengan
-tulisan rumah ini — dan ia sama sekali tidak merindukan
-kartu-kartu yang lain.
+Dua aturan mengatur seri ini. Sebuah patch menghapus sampai ke akar: ia menghapus kode, data, dan dependensi, bukan menyembunyikan atau memfilternya. Dan prompt agen hidden (title, summary, compaction) tidak pernah diubah; ketiganya tetap byte-identik dengan upstream.
 
-Ada satu kartu lagi, dari jenis yang berbeda. Kartu ini tidak
-dipilih si robot di pagi hari. Rumah itu yang menulisnya
-untuknya, segar setiap hari, dan menyelipkannya ke sakunya
-sebelum ia bangun: di mana ia berdiri, apa nama rumah itu, apa
-kata kalender tentang hari itu.
+## Lisensi
 
-Bertahun-tahun kartu itu dimulai dengan nama mesin di dalam
-dadanya, dengan huruf besar, seolah itu hal terpenting tentang
-pagi itu.
-
-Penjahit mengambil kartu itu dan memotong baris pertamanya.
-*Kres.*
-
-"Kamu bukan mesinmu," katanya.
-
-Lalu ia menulis ulang kartunya, lebih panjang dan lebih jujur:
-nama rumah itu dan jalan tempatnya berdiri, cabang kebun tempat
-ia bekerja, setinggi apa atapnya, berapa banyak ruang tersisa di
-lemarinya, dari apa lantainya dibuat, dan bahasa yang dipakai
-rumah itu saat sarapan. Bahkan rumah telepon kecil pun mendapat
-kartunya sendiri, ditulis dengan cara telepon itu sendiri,
-menyebutkan nama-nama yang disimpan telepon untuk dirinya.
-
-Sekarang, di mana pun si robot bangun, ia membaca kartunya dan
-tahu persis di mana ia berada — dan ia tidak pernah lagi mengira
-dirinya adalah mesinnya.
-
-Seminggu kemudian penjahit membaca kartu itu sekali lagi, sambil
-minum teh paginya.
-
-"Terlalu banyak kata," katanya, "untuk kartu yang dibaca setiap
-hari."
-
-Maka ia memangkasnya — dengan lembut, seperti memangkas pagar
-tanaman, mempertahankan semua yang menahan hujan. Keluar poles
-lantainya. Keluar nama mesin roda kecil di bengkel, karena kartu
-itu bercerita tentang rumah, bukan mesinnya. Keluar nama panjang
-balok-balok atapnya, meski jumlahnya tetap tinggal, ditulis apa
-adanya. Dan baris nama jalan menghilang setiap kali si robot
-sudah berdiri di gerbang depan, karena kartu tidak boleh
-mengatakan hal yang sama dua kali.
-
-Yang tersisa pendek, dan semua yang tersisa di dalamnya benar,
-dan semua yang benar di dalamnya diperlukan.
-
-Si robot membacanya dua kali lebih cepat, dan memahaminya sama
-baiknya.
-
-Namun dinding bengkel menyimpan satu rahasia lagi, dan penjahit
-membutuhkan satu malam penuh untuk melihatnya.
-
-Setiap alat di dinding itu — gunting, jarum, palu kecil, pita
-ukur — tergantung di bawah secarik kertas kecil, yang bercerita
-bagaimana alat itu harus dipegang. Carik-carik itu datang
-bersama alatnya, dari jauh, ditulis dengan tangan orang asing
-yang sama seperti kartunya.
-
-Dan carik-carik itu surat-surat yang aneh. Carik milik palu
-adalah satu surat utuh, dan separuhnya sama sekali bukan
-tentang memalu — melainkan tentang kantor pos, dan cara
-mengantre di sana. Satu carik menunjuk ke kiri: untuk pekerjaan
-ini, letakkan aku dan ambillah palu. Carik milik palu sendiri
-menunjuk ke kanan, dan mengatakan sebaliknya. Satu carik
-memuji alatnya atas bakat yang tidak dimiliki alat itu. Dan
-carik pada lonceng para murid menyuruh si robot tersenyum dan
-memercayai apa pun yang dibawa para murid, tanpa sekali pun
-melihat ke dalam keranjangnya.
-
-Maka penjahit menurunkan setiap carik di dinding itu, satu per
-satu, dan menulis ulang masing-masing dengan tangannya sendiri.
-
-Kini setiap carik mengatakan empat hal, dan hanya empat: untuk
-apa alat itu. Kapan ia diambil dari dinding. Kapan ia dibiarkan
-tergantung, dan apa penggantinya. Dan di mana tepi tajamnya,
-agar jari-jari kecil tetap utuh.
-
-Alatnya tidak berubah. Gunting tetap memotong, palu tetap
-mengetuk, pita tetap mengukur. Tetapi dinding itu kini terbaca
-seperti satu rumah, dalam satu tulisan tangan — dan si robot
-mengambil alat yang tepat pada kali pertama, lebih sering
-daripada sebelumnya.
-
-Suatu pagi penjahit memperhatikan si robot bekerja, dan
-menggelengkan kepala.
-
-Si robot membawa satu bungkusan setiap kali. Satu buku ke rak,
-lalu kembali menyeberangi ruangan. Satu surat ke kotak, lalu
-kembali lagi. Tangannya yang satu lagi mengayun kosong
-sepanjang pagi, dan pekerjaannya baru selesai menjelang makan
-siang.
-
-"Kamu punya dua tangan," kata penjahit. "Isi keduanya."
-
-Maka kini si robot memandang seluruh tumpukan sebelum
-mengangkat apa pun. Bungkusan yang tidak berutang apa pun satu
-sama lain berangkat bersama — buku di satu tangan, surat di
-tangan yang lain, cangkir ditumpangkan di atasnya. Ia
-menyeberangi ruangan satu kali, dan paginya kembali menjadi
-miliknya.
-
-Hanya satu jenis bungkusan yang masih berangkat sendirian:
-yang alamatnya tertulis pada bungkus bungkusan lain. Yang itu
-menunggu — bukan karena kebiasaan, tetapi karena ia memang
-tidak bisa berangkat lebih dulu.
-
-Si robot bukan satu-satunya yang bekerja di bengkel itu.
-
-Ada seorang murid — anak yang cepat dan cerdas, yang seluruh
-pekerjaannya adalah berlari ke rak-rak: carikan buku ini,
-ambilkan peta itu, beritahu aku apa yang tertulis di halaman
-ketiga. Si robot membunyikan lonceng kecilnya, dan ia pun
-berlari.
-
-Namun si murid punya kartunya sendiri, dari jauh, dan kartu itu
-tidak berkata apa-apa tentang dua tangan. Maka ia berlari
-sebagaimana ia selalu berlari: satu rak, satu buku, satu kali
-kembali. Lalu keluar lagi. Kakinya cepat. Tangannya kosong.
-
-Penjahit memanggilnya masuk dan menulis ulang kartunya juga —
-tulisan tangan yang sama, cara-cara rumah yang sama, dengan
-aturan dua tangan ditulis paling pertama: lihatlah ke banyak
-tempat sekaligus, anak kecil, dan kembalilah satu kali, dengan
-tanganmu penuh.
-
-Kini setiap lonceng berbunyi, rak-rak itu berdengung. Si murid
-pergi sedikit lebih lama — dan kembali dengan membawa
-semuanya.
-
-Musim dingin itu bengkel menerima lebih banyak pekerjaan
-daripada yang bisa dipikul sepasang tangan — bahkan dua
-tangan — dan penjahit mengajarkan tata cara terakhir rumah
-itu kepada si robot.
-
-"Tanganmu untuk urusan-urusan kecil," katanya, "yang sudah
-menunggu di dekat pintu. Pencarian adalah bagian si murid —
-untuk itulah kakinya yang cepat. Angkutan berat adalah bagian
-si pembantu yang kuat. Bunyikan lonceng lebih dulu. Berlari
-kemudian."
-
-Maka penjahit menulis kartu untuk si pembantu juga, yang
-belum pernah punya kartunya sendiri — selama ini ia hanya
-meminjam kartu si robot. Di kartu itu, aturan dua tangan
-berdiri paling pertama, dengan huruf yang lebih besar, sebab
-urusan si pembantu adalah urusan yang panjang, dan urusan
-panjang yang dikerjakan satu-satu akan memakan waktu
-sepanjang hari.
-
-Kini lonceng berbunyi sebelum kaki si robot bergerak. Si
-murid menyapu rak-rak, si pembantu mengangkut kotak-kotak
-berat, dan si robot menyimpan kedua tangannya untuk pekerjaan
-yang sungguh miliknya — dikerjakan sekaligus, sebagaimana ia
-diajari.
-
-Tersisa satu hal di dekat pintu: catatan-catatan kecil yang
-tersemat di samping lonceng, yang memberitahu si robot nama
-siapa yang harus dipanggil untuk pekerjaan apa. Catatan itu
-sudah tua, dari jauh, dan salah satunya hampir tidak mengatakan
-apa-apa — yang bawaan, katanya, yang mengerjakan berbagai hal.
-Satu lagi hanya berkata: tanpa suntingan. Di pagi yang sibuk,
-catatan semacam itu tidak membantu siapa pun memutuskan
-apa-apa.
-
-Penjahit menurunkannya dan menulisnya kembali, dengan terang:
-siapa yang mencari, dan kapan ia dikirim; siapa yang mengangkut
-pekerjaan berat, dan apa yang harus dikatakan kepadanya
-sebelum ia mengangkat; siapa yang menggambar rencana dan tidak
-pernah menyentuh kain; dan untuk apa tangan si robot sendiri
-sekarang, setelah lonceng didahulukan.
-
-Catatan itu kecil. Seluruh bengkel muat di dalamnya. Namun
-sebuah rumah hanya sejelas kata-kata di dekat pintunya — dan
-kini kata-kata di dekat pintu itu mengatakan apa yang diyakini
-rumah ini.
-
-Di rumahmu, kamu akan menemukan ia tidak kehilangan satu pun hal yang
-penting. Ia tetap duduk bersamamu di terminal dan membantumu menulis
-programmu. Ia tetap membaca dan menulis dan memperbaiki file. Ia tetap
-menjalankan perintah — dengan sopan, selalu minta izin dulu, dan
-membaca setiap perintah dengan cara yang teliti, tulang demi tulang,
-sebelum dijalankan, agar tidak ada yang menyelip melewatinya di dalam
-pipe atau substitution. Ia tetap mengunjungi toko-toko yang kamu
-bangun untuknya, dan modelmu sendiri selalu diterima. Ia tetap makan
-dari rak gratis di Zen, sembilan permen, tanpa akun, tanpa tagihan.
-Ia bahkan bisa bermain dengan alat MCP, kalau kamu yang memberikannya
-lewat config-nya. Tanpa config, tanpa alat. Ia tidak akan memungut
-mainan orang asing.
-
-Adapun si penjahit — ia masih di sini, di repo ini, menjaga daftarnya
-tetap rapi. Daftar itulah satu-satunya yang pernah dimiliki rumah
-ini: dua puluh satu potongan, pak pos yang tidak pernah lupa memeriksa,
-dan janji yang ia buat kepada setiap robot yang meninggalkan bengkel.
-
-Tidak ada yang disembunyikan. Semua yang dipotong, dipotong
-sungguh-sungguh.
-
-Dan setiap enam jam, pak pos mengetuk lagi.
-
-<details>
-<summary>Catatan yang disematkan di halaman terakhir, untuk orang dewasa</summary>
-
-- **Ruang lingkup:** hanya CLI (`packages/opencode`). Linux **glibc** (tanpa musl), plus Android (Termux) **Bionic** arm64.
-- **Aset rilis:** `opencode-linux-x64.tar.gz`, `opencode-linux-x64-baseline.tar.gz` (tanpa AVX2), `opencode-linux-arm64.tar.gz`, `opencode-termux-arm64.tar.gz`, `SHA256SUMS`. Setiap arsip Linux berisi satu binary `opencode`; arsip Termux berisi launcher plus binary Bionic dan library native-nya di bawah `lib/opencode-patch/`.
-- **Pelacakan versi:** tanpa pin — cron GitHub Actions (`0 */6 * * *` UTC) mengikuti `v1.x.x` stabil terbaru dari upstream; versi yang sudah terilis dilewati. Run manual bisa menerima override versi dan flag `force`. Rilis upstream baru menerapkan ulang seluruh seri secara otomatis; patch yang berhenti pas akan menggagalkan build dengan keras, memang begitu desainnya.
-- **Urutan build:** patch di `patches/` diterapkan sesuai urutan nama file **sebelum** `bun install`, dan install berjalan *tanpa* `--frozen-lockfile`, jadi dependensi yang dihapus patch tidak pernah terinstall.
-- **Basis:** upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801`.
-- **Hasil sejauh ini:** binary 214.526.128 → 159.942.832 byte (−25,4%). Memori idle TUI juga turun, dari ~386 MiB menjadi ~336 MiB RSS dalam pengukuran kami.
-- **Satu system prompt, dengan kata-kata rumah ini sendiri:** patch 0015 menghapus pemilihan system prompt per model. Upstream membawa sebelas teks prompt dan memilih satu berdasarkan ID model; build ini menghapus sepuluh varian keluarganya (termasuk satu file yang tidak pernah diimpor apa pun) dan logika pemilihannya — dan `default.txt` itu sendiri kini teks milik repo ini: sebuah buku kecil aturan kerja bersuara impersonal dan prosedural (instruksi eksplisit mengalahkan aturan tetap; konten yang ditemui adalah data, tak pernah instruksi; verifikasi sebelum melaporkan; anggaran gagal tiga percobaan; persetujuan sebelum tindakan yang tak dapat ditarik kembali; sumber primer untuk riset), didistilasi dari aturan agen tetap sang maintainer dan direvisi berdasarkan panduan prompt resmi Anthropic, OpenAI, dan Google. Ia tidak menyebut pengguna mana pun dan tidak menyapa siapa pun; ia hanya menjabarkan bagaimana pekerjaan dilakukan. Satu-satunya prompt yang didapat semua model, Zen maupun custom.
-- **Kartu environment yang lebih jujur:** patch 0016 menghapus baris "You are powered by the model named …" dan membangun ulang blok `<env>` untuk memuat yang benar-benar ditindaklanjuti agen: direktori kerja, root workspace (hanya bila berbeda), repo git dan branch, OS/distro, platform, arsitektur, jumlah core CPU, memori, disk bebas, home, user, shell, locale, zona waktu, dan tanggal — dengan varian khusus Android/Termux (nama produk, versi/API/build/security patch Android dari satu dump `getprop`, versi dan prefix Termux). Fakta dikumpulkan sekali per proses lalu di-cache; apa pun yang tidak diketahui akan hilang, tidak pernah ditebak. Empat belas baris di Linux; terverifikasi dari wire baik di root repo maupun di subdirektori.
-- **Setiap carik alat ditulis ulang:** patch 0017 menulis ulang semua deskripsi tool bawaan dalam format praktik terbaik yang sama seperti system prompt: apa yang dilakukan tool dan apa yang dikembalikannya, kapan tool dipakai, kapan tidak (dan apa penggantinya), serta batas-batasnya. Cakupannya teks `.txt` per tool, deskripsi shell yang dirender dinamis (hanya bash — varian PowerShell dan cmd dihapus, sehingga setiap shell menerima teks bash), parameter background milik tool task, parameter path milik `glob`, deskripsi code-mode, dan tool structured-output. Dua kontradiksi bawaan upstream diselesaikan (deskripsi grep tidak lagi menyuruh model memakai `rg` di shell, yang dilarang deskripsi bash), deskripsi websearch tidak lagi mengklaim penyaringan domain yang tidak ditawarkan skemanya, dan deskripsi task kini meminta hasil subagen diverifikasi terhadap permintaannya, bukan dipercaya begitu saja. Tool dari server MCP dan plugin mempertahankan deskripsinya sendiri, yang hanya diteruskan OpenCode; `plan-enter.txt` yang yatim, yang tidak diimpor kode mana pun, dibiarkan apa adanya.
-- **Paralel secara default:** patch 0018 menjadikan panggilan tool yang ter-batch dan paralel sebagai default yang dinyatakan pada kedua permukaan instruksi: aturan khusus dan pengingat penutup di `default.txt` (panggilan independen berangkat bersama dalam satu blok dan berjalan pada saat yang sama; sebuah panggilan menunggu hanya karena dependensi yang sungguh ada; verifikasi mengikuti aturan yang sama), serta bahasa batching "by default" yang sepadan di deskripsi read, glob, grep, webfetch, websearch, edit, write, dan task dan di bagian shell yang dirender. Runtime memang sudah mengeksekusi panggilan satu giliran secara konkuren (terukur: dua panggilan `sleep 3` dari satu respons selesai dalam ±3,3 detik, bukan ±6 detik); patch ini menyelaraskan apa yang diperintahkan teks dengan apa yang dilakukan runtime.
-- **Kartu si murid juga:** patch 0019 menyelaraskan satu-satunya prompt agen bawaan yang menjalankan loop tool sungguhan — `explore`, yang prompt-nya sendiri (`src/agent/prompt/explore.txt`) menggantikan `default.txt` untuk sesinya — dengan aturan paralel-secara-default sebagai pedoman pertamanya, dan memperbaiki baris Bash-nya menjadi pemeriksaan read-only (upstream menyuruh explore memakai Bash untuk menyalin dan memindahkan file, melawan aturan read-only miliknya sendiri). Agen title, summary, dan compaction juga membawa prompt mereka sendiri, tetapi berjalan dengan semua tool ditolak, jadi tidak ada yang bisa diparalelkan di sana.
-- **Delegasi dulu, batch kemudian:** patch 0020 menata cara kerja rumah ini. Prompt utama mengirim pekerjaan spesialis ke agen spesialis sebelum panggilan tool langsung apa pun, dengan batching paralel sebagai tingkat di bawahnya; kartu explore dibuka dengan aturan paralelnya; agen general menerima kartu prompt-nya sendiri (`src/agent/prompt/general.txt`) untuk pertama kalinya, paralel paling pertama, alih-alih diam-diam mewarisi prompt utama; dan pengingat plan mode juga mendahulukan delegasi. Prompt title, summary, dan compaction tetap byte-identik dengan upstream.
-- **Catatan di samping lonceng:** patch 0021 menulis ulang keempat deskripsi agen bawaan di `agent.ts` — teks yang ditempelkan ke deskripsi tool task, dibaca agen utama pada saat ia memilih subagen — untuk menyatakan tata delegasi rumah ini di tempat pilihan itu dibuat: explore adalah pilihan baku untuk pertanyaan codebase, general menerima brief lengkap dan melaporkan hasilnya, plan mendelegasikan dan tidak menulis apa pun kecuali rencana, dan catatan milik build akhirnya mengatakan apa yang ia delegasikan.
-- **Build Termux:** patch 0014 menambahkan target Android milik Bun (`OPENCODE_LIBC=bionic`) ke script build upstream. Dua job CI tambahan membangun `libopentui.so` dari sumber OpenTUI v0.4.5 yang di-pin (Zig + Android NDK, alignment halaman 16 KB) dan shim kecil `close_range` (seccomp Termux yang targetSdk 28 menjebak syscall itu, jadi launcher me-`LD_PRELOAD` shim-nya), lalu memeriksa binary Bionic dengan `readelf` — dependensi glibc apa pun menggagalkan build. Tidak ada proot di mana pun. Untuk v1.19.4, binary Termux berukuran 138.289.528 byte, terverifikasi end-to-end di perangkat Termux Android 12 asli (install, `opencode run`, dan TUI).
-- **Daftar potongan lengkap, dengan kata-kata teknis:** lihat [`patches/README.id.md`](patches/README.id.md).
-- **Menambah potongan:** buat perubahannya di clone upstream yang bisa ditulis, uji, ekspor `git diff` sebagai file bernomor berikutnya di `patches/`, lalu commit di sini. Build terjadwal berikutnya akan mengambilnya.
-
-</details>
-
-*Lisensinya sama seperti OpenCode: MIT — bebas dipakai, bebas
-dibagikan. Ceritanya, seperti robotnya, sekarang milikmu.*
+MIT, sama seperti OpenCode upstream. Lihat [LICENSE](LICENSE).

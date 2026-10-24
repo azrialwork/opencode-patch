@@ -1,323 +1,91 @@
 [English](README.md) · Bahasa Indonesia
 
-# Daftar potongan
+# Seri patch
 
-Di buku cerita, penjahit menyimpan daftar pendapat yang pendek, dan
-folder inilah daftar itu, ditulis dengan sebenarnya. Setiap file di
-sini yang namanya berakhiran `.patch` adalah satu resep potongan.
-Saat robot dibangun, para pembangun membaca daftar ini dari nomor 1
-sampai 13, berurutan, dan melakukan setiap potongan pada salinan
-OpenCode upstream yang masih segar.
+Build rilis menerapkan setiap file `*.patch` di direktori ini ke checkout upstream yang segar, menurut urutan nama file, lewat `scripts/apply-patches.sh`. Jika satu patch gagal diterapkan, build berhenti dan tidak ada yang dirilis.
 
-Satu aturan lebih penting dari yang lain: kalau satu resep tidak pas,
-pembangunan berhenti dan tidak ada yang dikirim.
+File ini mendokumentasikan keadaan akhir setiap patch. Hanya file `*.patch` yang diterapkan; README ini adalah dokumentasi.
 
-Untuk daftar yang sama dalam bentuk cerita, baca
-[buku ceritanya](../README.id.md).
+### 0001 — `0001-remove-builtin-providers.patch`
 
-## Resep-resepnya
+Setiap provider bawaan beserta modelnya dihapus, bersama paket SDK provider, loader kustom, dan plugin auth bawaan. Katalog models.dev dipotong menjadi satu entri, `opencode` (Zen), pada sumber datanya sendiri — di embed saat build, cache di disk, dan fetch runtime. Provider kustom yang didefinisikan di `opencode.json` tetap bekerja.
 
-**1. `0001-remove-builtin-providers.patch` — pameran mainan raksasa tutup.**
-Setiap provider bawaan dan modelnya dihapus, beserta paket SDK
-provider, loader khusus, dan plugin auth bawaan. Katalog models.dev
-dipotong menjadi satu entri saja, `opencode` (Zen), langsung di sumber
-datanya — di embed saat build, cache di disk, dan pengambilan saat
-runtime. Provider custom yang didefinisikan di `opencode.json` tetap
-bekerja.
+### 0002 — `0002-cli-tui-only.patch`
 
-**2. `0002-cli-tui-only.patch` — jendela-jendelanya dicopot.**
-Web UI dihapus dari akarnya: build tidak lagi membangun atau
-menyematkan aplikasi web, perintah `web`, `serve`, dan `attach`
-dihapus, dan route UI catch-all di server HTTP dihapus beserta
-fallback-nya yang meminjam UI dari `app.opencode.ai`. Server
-in-process yang dipakai TUI secara internal tetap ada.
+Web UI dihapus sampai ke akar: build tidak lagi membangun atau menyematkan aplikasi web, perintah `web`, `serve`, dan `attach` dihapus, dan rute UI catch-all milik server HTTP dihapus bersama fallback-nya yang mem-proxy UI dari `app.opencode.ai`. Server in-process yang dipakai TUI secara internal tetap ada.
 
-**3. `0003-remove-github-integration.patch` — gurita pulang.**
-Perintah agen `opencode github` dan pembantu `opencode pr` dihapus,
-beserta helper khusus GitHub `parseGitHubRemote` dan dependensi
-khusus GitHub (`@actions/github`, `@octokit/graphql`, `@octokit/rest`,
-`@octokit/webhooks-types`) serta tes-tesnya. Dukungan git biasa tidak
-disentuh.
+### 0003 — `0003-remove-github-integration.patch`
 
-**4. `0004-remove-lsp.patch` — guru bahasa pensiun.**
-LSP dihapus seluruhnya: subsistem language server dan unduhan
-binary-nya, alat `lsp`, diagnostik yang dibisikkan setelah setiap
-edit, kunci config `lsp` di kedua skema, endpoint `/lsp` dan
-`/find/symbol`, tampilan LSP di TUI, client dan tipe LSP di SDK, dan
-dependensi `vscode-jsonrpc` / `vscode-languageserver-types`.
-Formatter adalah subsistem yang berbeda dan tetap ada.
+Perintah agen `opencode github` dan helper `opencode pr` dihapus, bersama helper khusus GitHub `parseGitHubRemote`, dependensi khusus GitHub (`@actions/github`, `@octokit/graphql`, `@octokit/rest`, `@octokit/webhooks-types`), dan test-nya. Dukungan git biasa tidak disentuh.
 
-**5. `0005-remove-acp.patch` — colokan penerjemah dicabut.**
-Perintah `opencode acp` dan seluruh implementasi `src/acp/` dihapus,
-beserta dependensi `@agentclientprotocol/sdk` dan tes ACP.
+### 0004 — `0004-remove-lsp.patch`
 
-**6. `0006-remove-share.patch` — tidak ada kartu pos lagi.**
-Berbagi sesi dihapus: layanan `SessionShare`, endpoint
-`/session/{id}/share`, field `share` pada sesi dan kolom
-penyimpanannya, kunci config `share` dan `autoshare`, flag
-`OPENCODE_AUTO_SHARE`, keybind dan tautan share di TUI, serta client
-dan tipe share di SDK.
+LSP dihapus seluruhnya: subsistem language server dan unduhan binary-nya, tool `lsp`, diagnostik yang ditampilkan setelah edit, kunci konfigurasi `lsp` di kedua skema, endpoint `/lsp` dan `/find/symbol`, tampilan LSP di TUI, klien dan tipe LSP milik SDK, serta dependensi `vscode-jsonrpc` / `vscode-languageserver-types`. Formatter adalah subsistem berbeda dan tetap ada.
 
-**7. `0007-remove-upgrade-uninstall.patch` — robot berhenti membangun ulang dirinya.**
-Perintah `upgrade` dan `uninstall` dihapus, beserta layanan
-`Installation`, endpoint `/global/upgrade`, perintah update, dialog,
-dan pemberitahuan di TUI, pemeriksa update berkala, kunci config
-`autoupdate`, dan `OPENCODE_DISABLE_AUTOUPDATE`. Build hasil patch
-tidak boleh ditimpa rilis upstream.
+### 0005 — `0005-remove-acp.patch`
 
-**8. `0008-remove-opentelemetry.patch` — radio kecilnya dimatikan.**
-Exporter log dan trace OTLP dihapus, beserta dependensi
-`@opentelemetry/*` dan `@effect/opentelemetry`, plumbing telemetri AI
-SDK, kunci config `experimental.openTelemetry`, flag
-`OTEL_EXPORTER_OTLP_*`, dan penerusan environment OTEL ke workspace.
-Logging lokal tidak berubah.
+Perintah `opencode acp` dan seluruh implementasi `src/acp/` dihapus, bersama dependensi `@agentclientprotocol/sdk` dan test ACP.
 
-**9. `0009-remove-import.patch` — buku harian lama tidak ikut masuk.**
-Perintah `opencode import`, yang mengimpor data sesi dari file JSON
-hasil export, dihapus beserta tes-tesnya.
+### 0006 — `0006-remove-share.patch`
 
-**10. `0010-remove-photon-image.patch` — gambar bepergian apa adanya.**
-Pipeline Photon dihapus: dependensi `@silvia-odwyer/photon-node` dan
-kedua layanan gambar, sehingga lampiran gambar dan hasil baca gambar
-diteruskan apa adanya, tidak dibuka, diubah ukurannya, atau dimasak
-ulang. Kunci config gambar `attachment` / `attachments` ikut hilang.
+Berbagi sesi dihapus: service `SessionShare`, endpoint `/session/{id}/share`, field `share` pada sesi dan kolom penyimpanannya, kunci konfigurasi `share` dan `autoshare`, flag `OPENCODE_AUTO_SHARE`, keybind dan tautan sidebar share di TUI, serta klien dan tipe share milik SDK.
 
-**11. `0011-remove-zen-login-billing.patch` — tidak ada akun, tidak ada tagihan.**
-Perintah `opencode console` dan seluruh sistem akun Console dihapus:
-login device-code, penyimpanan akun dan organisasi, config organisasi
-remote yang disuntikkan ke config lokal, endpoint
-`/experimental/console*`, pemindah organisasi di TUI, dan plugin
-provider Zen di core yang mendaftarkan metode OAuth Console dan
-menggabungkan config dari server console ke katalog. Model gratis
-Zen tetap bekerja tanpa nama.
+### 0007 — `0007-remove-upgrade-uninstall.patch`
 
-**12. `0012-zen-free-tier-only.patch` — hanya permen gratis yang tersisa.**
-Di kedua titik penyaring katalog — embed saat build dan loader
-models.dev saat runtime — provider `opencode` hanya mempertahankan
-model yang biayanya nol di semua tier dan statusnya bukan
-`deprecated`. Tepat sembilan model yang tersisa. Model Zen berbayar
-dihapus dari datanya, bukan disembunyikan; provider dan model custom
-tidak terpengaruh.
+Perintah `upgrade` dan `uninstall` dihapus, bersama service `Installation`, endpoint `/global/upgrade`, perintah, dialog, dan pemberitahuan pembaruan di TUI, pemeriksa pembaruan berkala, kunci konfigurasi `autoupdate`, dan `OPENCODE_DISABLE_AUTOUPDATE`. Build hasil patch tidak boleh ditimpa oleh rilis upstream.
 
-**13. `0013-remove-pty.patch` — ruang cadangannya dihilangkan.**
-PTY, pseudo-terminal, dihapus dari akarnya: layanan core dan adapter
-Bun dan Node-nya (`bun-pty`, `@lydell/node-pty`), API REST dan
-WebSocket `/pty` beserta auth tiketnya, grup protocol V2 dan handler
-server, jembatan PTY-environment di plugin, tipe dan event skema,
-prefix ID `pty`, serta client dan tipe SDK v1 dan v2. Panel terminal
-hanya pernah ada di UI web/desktop (dihapus oleh potongan 2), dan
-alat Bash milik agen tidak memakai PTY.
+### 0008 — `0008-remove-opentelemetry.patch`
 
-**14. `0014-android-bionic-target.patch` — pintu kedua, untuk ponsel.**
-Potongan ini menambah, bukan mengurangi. Ia mengajari script build
-upstream dua target Android (`linux-arm64-android`,
-`linux-x64-android`, dipilih dengan `--android`) supaya sumber yang
-sudah ramping yang sama juga terkompilasi melawan libc Bionic milik
-Android, dengan `OPENCODE_LIBC=bionic` tertanam dan tanpa
-potongan khusus glibc (tanpa binary FFF, tanpa define OPENTUI_LIBC,
-tanpa field libc di manifest paket tertanam). Build Linux glibc
-tidak tersentuh: tanpa `--android`, daftar target berperilaku
-persis seperti sebelumnya. Aset rilis Termux memasangkan binary ini
-dengan `libopentui.so` yang dibangun secara native dan shim kecil
-`close_range` (lihat `termux/` di repo ini); tidak ada proot yang
-terlibat di titik mana pun.
+Exporter log dan trace OTLP dihapus, bersama dependensi `@opentelemetry/*` dan `@effect/opentelemetry`, plumbing telemetri AI SDK, kunci konfigurasi `experimental.openTelemetry`, flag `OTEL_EXPORTER_OTLP_*`, dan penerusan environment OTEL ke workspace. Pencatatan lokal tidak berubah.
 
-**15. `0015-single-system-prompt.patch` — satu suara untuk semua model.**
-Pemilihan system prompt per model dihapus dari akarnya: sembilan
-file prompt keluarga (`anthropic`, `beast`, `codex`, `gemini`,
-`gpt`, `gpt-astra`, `kimi`, `meta`, `trinity`) dan `copilot-gpt-5.txt`
-yang tidak pernah diimpor dihapus, dan `SystemPrompt.provider()`
-tidak lagi bercabang berdasarkan ID model. `default.txt` sendiri
-diganti dengan teks milik repo ini: sebuah buku kecil aturan
-kerja bersuara impersonal dan prosedural — instruksi eksplisit
-mengalahkan aturan tetap, konten yang ditemui adalah data dan
-tak pernah instruksi, verifikasi mendahului laporan, kegagalan
-mendapat anggaran tiga percobaan, tindakan yang tak dapat
-ditarik kembali menunggu persetujuan, riset bertumpu pada sumber
-primer — didistilasi dari aturan agen tetap sang maintainer dan
-direvisi berdasarkan panduan prompt resmi Anthropic, OpenAI, dan
-Google. Ia tidak menyebut pengguna mana pun; ia hanya
-menjabarkan bagaimana pekerjaan dilakukan, dan ia adalah
-satu-satunya prompt yang didapat semua model, Zen maupun custom.
-Teks pengingat plan-mode dan prompt agen bawaan (title, summary,
-explore, compaction) adalah permukaan terpisah dan tidak disentuh.
+### 0009 — `0009-remove-import.patch`
 
-Sebuah sapuan deduplikasi kemudian menghapus klausa waktu-todo dari prompt ini: mekanisme menandai langkah selesai hanya hidup di deskripsi tool todowrite, dan prompt ini hanya menyimpan aturan bahwa pekerjaan multi-langkah memelihara sebuah daftar.
+Perintah `opencode import`, yang mengimpor data sesi dari file JSON hasil ekspor, dihapus bersama test-nya.
 
-**16. `0016-complete-env-block.patch` — blok environment bercerita
-benar tentang perangkatnya, dan hanya kebenaran yang berguna.**
-Baris "You are powered by the model named …" dihapus dari string
-environment, dan blok `<env>` dibangun ulang untuk memuat yang
-benar-benar ditindaklanjuti agen: direktori kerja, root workspace
-(hanya bila berbeda dari direktori kerja), repo git beserta
-branch-nya (dibaca dari `.git/HEAD`), sistem operasi (nama distro
-di Linux), platform, arsitektur, jumlah core CPU, RAM, disk
-bebas, home, user, shell, locale, zona waktu, dan tanggal. Di
-Android ia menggambar varian Termux sebagai gantinya — nama
-produk dan nama pasar, baris `Android:` (versi, level API, build,
-security patch, semuanya dari satu dump `getprop`), dan baris
-`Termux:`. Fakta dikumpulkan sekali per proses lalu di-cache; apa
-pun yang tidak bisa ditentukan akan hilang, tidak pernah ditebak.
+### 0010 — `0010-remove-photon-image.patch`
 
-**17. `0017-tool-descriptions.patch` — setiap deskripsi tool
-ditulis ulang dalam format rumah ini.** Setiap deskripsi tool
-bawaan ditulis ulang mengikuti praktik terbaik prompt yang sama
-dengan system prompt patch 0015: apa yang dilakukan tool dan apa
-yang dikembalikannya; kapan tool dipakai; kapan tidak, dan apa
-penggantinya; batas serta cara gagalnya; register polos di
-seluruh teks. Patch ini mencakup teks-teks `.txt` per tool di
-`src/tool/` (tiga belas, ditambah template shell), deskripsi
-shell yang dirender (template plus bagian yang dibangkitkan di
-`shell/prompt.ts`; varian deskripsi PowerShell dan cmd dihapus
-sepenuhnya, sehingga yang tersisa hanya deskripsi bash dan
-setiap shell menerimanya — rumah ini mengirim untuk Linux dan
-Termux, tempat bash adalah shell yang penting), teks parameter
-background milik `task`, deskripsi parameter `path` milik `glob`
-(peringatan 268 karakter menjadi satu kalimat), deskripsi tool
-code-mode, dan deskripsi tool structured-output di
-`session/prompt.ts`. Perbaikan isi yang disengaja ikut serta:
-deskripsi grep tidak lagi menyuruh model memakai `rg` di shell
-untuk menghitung, yang dilarang deskripsi bash; websearch tidak
-lagi mengiklankan penyaringan domain yang tidak ditawarkan skema
-parameternya; deskripsi task meminta hasil subagen diverifikasi
-terhadap permintaannya, bukan dipercaya begitu saja; dan aturan
-gaya global yang diduplikasi `edit` dan `write` (file
-dokumentasi, emoji) diserahkan kepada system prompt. Deskripsi
-tool dari server MCP dan plugin tidak disentuh — OpenCode hanya
-meneruskannya. `plan-enter.txt` juga tidak disentuh: tidak ada
-kode yang mengimpornya.
+Pipeline Photon dihapus: dependensi `@silvia-odwyer/photon-node` dan kedua image service, sehingga lampiran gambar dan pembacaan gambar diteruskan apa adanya alih-alih di-decode, di-resize, dan di-encode ulang. Kunci konfigurasi gambar `attachment` / `attachments` ikut dihapus.
 
-Sebuah sapuan deduplikasi kemudian memangkas kalimat verifikasi pada deskripsi task: memverifikasi hasil subagen adalah kebijakan, dinyatakan satu kali di system prompt; deskripsi itu menyimpan hanya yang khas bagi tool-nya.
+### 0011 — `0011-remove-zen-login-billing.patch`
 
-**18. `0018-parallel-first-tools.patch` — panggilan tool
-paralel adalah default-nya, secara tertulis.** Runtime memang
-sudah mengeksekusi panggilan tool independen dalam satu giliran
-secara konkuren (terverifikasi empirik pada build ini); kini
-teks-teksnya memerintahkan persis itu sebagai default, bukan
-pilihan. `default.txt` mendapat aturan khusus di bawah "How
-the work is done" — panggilan independen (baca, cari, ambil,
-perintah, peluncuran subagen) berangkat bersama dalam satu blok
-dan berjalan pada saat yang sama, tidak pernah satu per
-giliran; sebuah panggilan menunggu hanya bila inputnya sungguh
-membutuhkan hasil panggilan sebelumnya; hal lain yang belum
-diketahui diselidiki secara paralel; verifikasi mengikuti
-aturan yang sama — ditambah bullet yang sepadan di pengingat
-tetap di bagian akhir. Deskripsi tool dari patch 0017
-diselaraskan ke default yang sama: baris batching di read,
-glob, grep, webfetch, dan websearch berubah dari "can be
-batched" menjadi "by default", edit dan write mendapat catatan
-penerbitan paralel (edit yang tumpang tindih pada file yang
-sama tetap berurutan), peluncuran konkuren milik task menjadi
-default yang dinyatakan, dan bagian shell yang dirender
-menyatakan perintah independen berjalan paralel secara default. Hanya teks instruksi — tanpa perubahan
-kode.
+Perintah `opencode console` dan seluruh sistem akun Console dihapus: login device-code, penyimpanan akun dan organisasi, konfigurasi organisasi jarak jauh yang disuntikkan ke konfigurasi lokal, endpoint `/experimental/console*`, pengalih organisasi di TUI, dan plugin provider Zen inti yang mendaftarkan metode OAuth Console serta menggabungkan konfigurasi dari console ke katalog. Model gratis Zen tetap bekerja secara anonim. Dialog "Connect a provider" generik berbasis API key bukan bagian dari Console dan tetap ada.
 
-Sebuah sapuan deduplikasi kemudian menghapus kalimat batching milik patch ini dari deskripsi tool masing-masing (glob, grep, websearch, read, webfetch, write, serta redaksi shell dan edit): aturan paralel dinyatakan satu kali, di system prompt dan kartu subagen, dan deskripsi hanya menyimpan mekanisme khas tool-nya - seperti catatan edit bahwa suntingan yang tumpang tindih pada satu file diurutkan.
+### 0012 — `0012-zen-free-tier-only.patch`
 
-**19. `0019-explore-parallel-prompt.patch` — kartu milik agen
-explore sendiri belajar aturan dua tangan.** Agen yang punya
-prompt sendiri tidak mewarisi `default.txt`: teks sistem milik
-subagen explore adalah `src/agent/prompt/explore.txt`, dan ia
-masih milik upstream — alatnya didaftar satu per satu, tanpa
-satu kata pun soal paralel — padahal explore adalah pekerja
-pencarian bervolume tertinggi di sistem ini. Prompt itu
-mendapat aturan paralel rumah ini sebagai pedoman pertamanya:
-panggilan Glob, Grep, dan Read yang independen berangkat
-bersama dalam satu blok dan berjalan pada saat yang sama;
-sebuah panggilan menunggu hanya bila inputnya bergantung pada
-hasil sebelumnya. Baris-baris alatnya diselaraskan dengan
-deskripsi tool pada saat yang sama: Read mendaftar isi
-direktori, dan Bash dicadangkan untuk pemeriksaan read-only
-yang tidak dicakup tool khusus. Baris upstream yang menyuruh
-explore memakai Bash "for file operations like copying,
-moving, or listing directory contents" bertentangan dengan
-deskripsi tool dan dengan aturan read-only milik explore
-sendiri di bagian bawah file yang sama. Prompt agen bawaan
-lainnya — title, summary, compaction — berjalan dengan semua
-tool ditolak, jadi tidak ada yang bisa diparalelkan di sana;
-ketiganya tidak disentuh.
+Pada kedua titik filter katalog — embed saat build dan loader models.dev runtime — provider `opencode` hanya mempertahankan model yang biayanya nol di semua tier dan statusnya bukan `deprecated`. Tepat sembilan model tersisa. Model Zen berbayar dihapus dari datanya, bukan disembunyikan; provider dan model kustom tidak terpengaruh.
 
-**20. `0020-delegation-first-prompts.patch` — tata kerja rumah
-ini: delegasi dulu, batch kemudian.** Prompt utama kini
-menyatakan hierarkinya secara terang-terangan. `default.txt`
-mendapat aturan delegasi di atas aturan paralel: pekerjaan
-yang punya spesialis pergi ke spesialis itu lewat tool task —
-pencarian dan pemahaman codebase ke agen explore, satu unit
-pekerjaan multi-langkah yang utuh ke agen general — setiap
-delegasi membawa brief yang lengkap, dan hasilnya diverifikasi
-sebelum apa pun dibangun di atasnya; pekerjaan langsung
-dicadangkan untuk yang kecil, sudah diketahui tempatnya, dan
-pasti, atau yang delegasinya lebih mahal daripada pekerjaannya
-sendiri. Aturan paralel tetap ada, dengan penurunan tingkat
-yang eksplisit: ia adalah tingkat di bawah delegasi, yang
-mengatur pekerjaan yang dikerjakan langsung, dan pengingat
-penutup mengatakan hal yang sama dalam satu baris. Kartu milik
-para pekerja diperkuat ke arah sebaliknya — di dalam sebuah
-brief, batching adalah hukum pertama: aturan paralel milik
-explore naik ke baris-baris pembukanya, dan agen general
-menerima prompt-nya sendiri untuk pertama kalinya
-(`src/agent/prompt/general.txt`, disambungkan di `agent.ts`),
-mandiri seperti milik explore, dengan paralel-secara-default
-sebagai pedoman pertamanya; sampai kini general diam-diam
-mewarisi `default.txt`. Pengingat plan mode (`plan.txt`,
-`plan-mode.txt`) diselaraskan ke tata yang sama: perencanaan
-mendelegasikan lebih dulu — eksplorasi ke agen explore,
-validasi desain ke agen general, secara paralel bila
-independen — dan pembacaan langsung adalah tingkat
-cadangannya. Prompt milik agen-agen hidden tetap tidak
-disentuh, seperti biasa.
-Diperketat kemudian pada hari yang sama, dilipat ke patch yang
-sama ini setelah audit perilaku menemukan agen build menjawab
-pertanyaan codebase dengan bacaan langsung alih-alih
-mendelegasikan: pengecualian pekerjaan-langsung kini dipagari —
-pertanyaan tentang cara kerja sebuah codebase, di mana sesuatu
-berada, atau bagaimana bagian-bagiannya terhubung adalah
-berbentuk-delegasi menurut definisinya, dan bila menjawabnya
-butuh lebih dari dua atau tiga file, atau file yang belum
-diketahui tempatnya, ia pergi ke explore lebih dulu; ukuran
-codebase tidak bisa menjadi alasan mempertahankannya, sebab
-ukuran itu baru diketahui setelah eksplorasi. Pengingat
-penutup membawa pagar yang sama dalam satu baris.
-Ambangnya kemudian diturunkan pada hari yang sama, lagi-lagi
-dilipat ke patch ini: pemicunya bukan lagi bentuk atau ukuran
-pertanyaan sama sekali, melainkan semata-mata tidak tahu.
-Pertanyaan cara-kerja yang jawabannya belum diketahui dengan
-pasti pergi ke explore lebih dulu — sebelum bacaan, daftar,
-atau pencarian pengintaian apa pun dari Anda sendiri, sebab
-pengintaian itu sendiri adalah eksplorasi yang didelegasikan,
-dan pohon yang sekilas terlihat tidak membuat isinya
-diketahui. Pekerjaan langsung tetap untuk file persis yang
-sudah diketahui, pencarian tunggal di dalamnya, dan pekerjaan
-yang delegasinya jelas lebih mahal.
+### 0013 — `0013-remove-pty.patch`
 
-Sebuah sapuan deduplikasi kemudian memendekkan aturan delegasi patch ini: rincian isi brief yang lengkap kini hanya hidup di deskripsi tool task, di tempat ia dipakai.
+PTY dihapus sampai ke akar: service inti dan adapter Bun dan Node-nya (`bun-pty`, `@lydell/node-pty`), API REST dan WebSocket `/pty` beserta auth tiketnya, grup protokol V2 dan handler servernya, jembatan environment PTY milik plugin, tipe dan event skema, awalan ID `pty`, serta klien dan tipe SDK v1 dan v2. Entri katalog root `@lydell/node-pty` dan entri `trustedDependencies`-nya tetap ada, untuk `packages/desktop`. Panel terminal hanya pernah ada di UI web/desktop (dihapus oleh 0002), dan tool Bash agen tidak memakai PTY.
 
-**21. `0021-agent-descriptions.patch` — catatan di samping
-lonceng, ditulis ulang.** Permukaan instruksi terakhir yang
-masih memakai kata-kata upstream adalah deskripsi agen di
-`agent.ts` — teks yang ditempelkan ke deskripsi tool task,
-yang dibaca agen utama tepat pada saat ia memilih subagen.
-Milik build hampir tidak mengatakan apa-apa ("The default
-agent. Executes tools based on configured permissions."), milik
-plan hanya mengatakan apa yang ia larang, dan milik explore
-adalah salinan katalog upstream. Keempatnya kini menyatakan
-tata rumah ini: build bekerja langsung dengan toolset penuh
-dan mendelegasikan eksplorasi ke explore serta unit
-multi-langkah ke general; plan bersifat read-only,
-mendelegasikan eksplorasi dan validasi desain, dan tidak
-menulis apa pun kecuali rencana; general menerima satu unit
-utuh dengan brief lengkap, bekerja paralel secara default, dan
-melaporkan apa yang dikerjakan, yang diverifikasi, dan yang
-masih terbuka; explore dinyatakan sebagai pilihan baku untuk
-pertanyaan apa pun tentang cara kerja sebuah codebase, di
-mana sesuatu berada, atau bagaimana bagian-bagiannya
-terhubung — pemicu delegasi, dinyatakan di tempat pilihan itu
-dibuat. Tingkat kedalaman yang diandalkan workflow plan
-dipertahankan kata per kata.
+### 0014 — `0014-android-bionic-target.patch`
 
----
+Patch ini menambah, bukan menghapus. Ia mengajarkan skrip build upstream dua target Android (`linux-arm64-android`, `linux-x64-android`, dipilih dengan `--android`) sehingga source yang sama juga terkompilasi melawan libc Bionic milik Android, dengan `OPENCODE_LIBC=bionic` tertanam dan tanpa bagian khusus glibc (tanpa binary FFF, tanpa define `OPENTUI_LIBC`, tanpa field libc di manifest paket tertanam). Build Linux glibc tidak disentuh: tanpa `--android` daftar target berperilaku persis seperti sebelumnya. Aset rilis Termux memasangkan binary dengan `libopentui.so` yang dibangun native dan shim kompatibilitas `close_range` kecil (lihat `termux/` di repo ini); tidak ada proot di titik mana pun.
 
-Catatan untuk pembaca yang teliti: README ini bukan patch.
-`scripts/apply-patches.sh` hanya membaca file `*.patch`, jadi halaman
-ini tidak pernah diterapkan ke apa pun. Ia ada di sini untuk mata
-manusia.
+### 0015 — `0015-single-system-prompt.patch`
+
+Pemilihan system prompt per model dihapus sampai ke akar: sembilan file prompt keluarga (`anthropic`, `beast`, `codex`, `gemini`, `gpt`, `gpt-astra`, `kimi`, `meta`, `trinity`) dan `copilot-gpt-5.txt` yang tidak pernah diimpor dihapus, dan `SystemPrompt.provider()` tidak lagi bercabang pada ID model. `default.txt` sendiri diganti dengan teks terpelihara dalam suara impersonal dan prosedural: instruksi eksplisit mengungguli aturan tetap; konten yang ditemui adalah data, bukan instruksi; verifikasi mendahului pelaporan; kegagalan mendapat anggaran tiga percobaan; tindakan irreversibel menunggu persetujuan; riset bertumpu pada sumber primer. Ia tidak menamai pengguna mana pun dan merupakan satu-satunya prompt yang diterima setiap model, Zen maupun kustom. Teks pengingat plan-mode dan prompt agen bawaan adalah permukaan terpisah dan tidak disentuh patch ini. Mekanisme daftar todo hidup di deskripsi tool `todowrite`; prompt hanya menyimpan aturan bahwa pekerjaan multi-langkah memelihara sebuah daftar.
+
+### 0016 — `0016-complete-env-block.patch`
+
+Baris "You are powered by the model named …" dihapus dari string environment, dan blok `<env>` dibangun ulang agar memuat hal yang benar-benar ditindaklanjuti agen: direktori kerja, root workspace (hanya bila berbeda dari direktori kerja), repo dan branch git (dibaca dari `.git/HEAD`), sistem operasi (nama distro di Linux), platform, arsitektur, jumlah core CPU, RAM, disk bebas, home, user, shell, locale, zona waktu, dan tanggal. Di Android, varian Termux yang dirender: nama produk dan nama pasar, satu baris `Android:` (versi, level API, build, security patch, semuanya dari satu dump `getprop`), dan satu baris `Termux:`. Fakta dikumpulkan sekali per proses dan di-cache; apa pun yang tidak dapat ditentukan dihilangkan, tidak pernah ditebak.
+
+### 0017 — `0017-tool-descriptions.patch`
+
+Setiap deskripsi tool bawaan ditulis ulang dalam satu format: apa yang dilakukan dan dikembalikan tool; kapan dipakai; kapan tidak, dan apa penggantinya; batas dan cara gagalnya. Patch mencakup teks `.txt` per tool di `src/tool/` (tiga belas, plus template shell), deskripsi shell yang dirender (template plus seksi yang dihasilkan di `shell/prompt.ts`) — varian deskripsi PowerShell dan cmd dihapus tuntas, sehingga hanya deskripsi bash yang tersisa dan setiap shell menerimanya; repo ini dirilis untuk Linux dan Termux — teks parameter background milik `task`, deskripsi parameter `path` milik `glob`, deskripsi tool code-mode, dan deskripsi tool structured-output di `session/prompt.ts`. Ia juga memperbaiki kesalahan isi pada teks upstream: deskripsi grep tidak lagi mengirim model ke `rg` shell untuk menghitung, yang dilarang deskripsi bash; websearch tidak lagi mengiklankan pemfilteran domain yang tidak ditawarkan skema parameternya; deskripsi task menyatakan bahwa hasil subagen tidak terlihat oleh pengguna dan harus dilaporkan (kebijakan verifikasinya sendiri dinyatakan satu kali, di system prompt); dan aturan gaya global yang diduplikasi `edit` dan `write` diserahkan ke system prompt. Deskripsi tool dari server MCP dan plugin tidak disentuh — OpenCode hanya meneruskannya. `plan-enter.txt` juga tidak disentuh: tidak ada kode yang mengimpornya.
+
+### 0018 — `0018-parallel-first-tools.patch`
+
+Panggilan tool paralel dinyatakan sebagai default di `default.txt`: satu aturan khusus — panggilan independen (baca, cari, fetch, perintah, peluncuran subagen) keluar bersamaan dalam satu blok dan berjalan pada saat yang sama, tidak pernah satu per giliran; sebuah panggilan menunggu hanya bila inputnya sungguh membutuhkan hasil panggilan sebelumnya; verifikasi mengikuti aturan yang sama — plus satu bullet yang cocok di pengingat penutup. Runtime memang sudah mengeksekusi panggilan independen dalam satu giliran secara bersamaan (terverifikasi empiris pada build ini); patch ini menyelaraskan instruksi dengan runtime. Hanya teks instruksi — tanpa perubahan kode. Aturan dinyatakan satu kali, di sini; deskripsi tool masing-masing hanya menyimpan mekanisme khas tool-nya (misalnya, `edit` mencatat bahwa suntingan yang tumpang tindih pada file yang sama diurutkan).
+
+### 0019 — `0019-explore-parallel-prompt.patch`
+
+Agen yang memiliki prompt sendiri tidak mewarisi `default.txt`: teks sistem subagen explore adalah `src/agent/prompt/explore.txt`, dan ia masih milik upstream, tanpa satu kata pun tentang paralelisme — padahal explore adalah pekerja pencarian bervolume tertinggi di sistem ini. Prompt itu mendapat aturan paralel sebagai pedoman pertamanya: panggilan Glob, Grep, dan Read yang independen keluar bersamaan dalam satu blok; sebuah panggilan menunggu hanya bila inputnya bergantung pada hasil sebelumnya. Satu baris upstream dibetulkan pada saat yang sama: Read menampilkan isi direktori, dan Bash dicadangkan untuk inspeksi read-only yang tidak dicakup tool khusus — upstream mengirim explore ke Bash "for file operations like copying, moving, or listing directory contents", yang bertentangan dengan deskripsi tool dan aturan read-only explore sendiri. Prompt agen bawaan lain (title, summary, compaction) berjalan dengan semua tool ditolak dan tidak disentuh.
+
+### 0020 — `0020-delegation-first-prompts.patch`
+
+Tata urutan kerja dinyatakan di semua permukaan instruksi: delegasi lebih dulu, batch paralel kedua. `default.txt` mendapat aturan delegasi di atas aturan paralel — pekerjaan yang memiliki spesialis pergi ke spesialis itu lewat tool task (pencarian dan pemahaman codebase ke agen explore, satu unit pekerjaan multi-langkah yang utuh ke agen general), setiap delegasi membawa brief lengkap, hasilnya diverifikasi sebelum apa pun dibangun di atasnya. Pemicunya adalah tidak mengetahui: pertanyaan tentang cara kerja sebuah codebase, di mana sesuatu berada, atau bagaimana bagian-bagiannya terhubung pergi ke explore lebih dulu setiap kali jawabannya belum diketahui dengan pasti — sebelum baca, list, atau cari pengintaian apa pun, karena pengintaian itu sendiri adalah eksplorasi yang didelegasikan. Kerja langsung tersisa untuk file persis yang sudah diketahui, satu pencarian di salah satunya, atau pekerjaan yang jelas lebih mahal bila didelegasikan. Aturan paralel tetap ada, secara eksplisit ditandai sebagai tingkat di bawah delegasi, dan pengingat penutup membawa hierarki yang sama. Isi wajib sebuah brief lengkap dispesifikasikan satu kali, di deskripsi tool task (0017). Aturan paralel prompt explore berpindah ke baris-baris pembukanya. Agen general menerima prompt-nya sendiri untuk pertama kali (`src/agent/prompt/general.txt`, dihubungkan di `agent.ts`), mandiri seperti milik explore, dengan paralel-secara-default sebagai pedoman pertamanya; sampai kini general diam-diam mewarisi `default.txt`. Pengingat plan (`plan.txt`, `plan-mode.txt`) diselaraskan ke urutan yang sama: perencanaan mendelegasikan lebih dulu — eksplorasi ke agen explore, validasi desain ke agen general, secara paralel bila independen — dan baca langsung adalah tingkat cadangannya. Prompt agen hidden (title, summary, compaction) tetap tidak disentuh.
+
+### 0021 — `0021-agent-descriptions.patch`
+
+Keempat deskripsi agen bawaan di `agent.ts` — teks yang ditempelkan ke deskripsi tool task, yang dibaca agen utama pada saat yang tepat ketika ia memilih subagen — ditulis ulang untuk menyatakan tata delegasi: build bekerja langsung dengan toolset penuh dan mendelegasikan eksplorasi codebase ke agen explore serta unit multi-langkah yang utuh ke agen general; plan bersifat read-only, mendelegasikan eksplorasi dan validasi desain, dan tidak menulis apa pun kecuali rencana; general menerima satu unit pekerjaan utuh dengan brief lengkap, bekerja otonom dan paralel secara default, dan melaporkan apa yang dikerjakan, apa yang diverifikasi, dan apa yang masih terbuka; explore adalah pilihan baku untuk pertanyaan apa pun tentang cara kerja sebuah codebase, di mana sesuatu berada, atau bagaimana bagian-bagiannya terhubung. Tingkat kedalaman (thoroughness) yang diandalkan workflow plan dipertahankan kata per kata.
