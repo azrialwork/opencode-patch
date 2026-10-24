@@ -1,0 +1,40 @@
+diff --git a/packages/opencode/src/agent/agent.ts b/packages/opencode/src/agent/agent.ts
+index 828dade2a4..6f79fe2006 100644
+--- a/packages/opencode/src/agent/agent.ts
++++ b/packages/opencode/src/agent/agent.ts
+@@ -140,7 +140,7 @@ const layer = Layer.effect(
+         const agents: Record<string, Info> = {
+           build: {
+             name: "build",
+-            description: "The default agent. Executes tools based on configured permissions.",
++            description: "The default agent. Works directly with the full toolset, and delegates codebase exploration to the explore agent and self-contained multi-step units to the general agent.",
+             options: {},
+             permission: Permission.merge(
+               defaults,
+@@ -155,7 +155,7 @@ const layer = Layer.effect(
+           },
+           plan: {
+             name: "plan",
+-            description: "Plan mode. Disallows all edit tools.",
++            description: "Plan mode. Read-only: explores directly only for small, certain lookups, delegates exploration to explore agents and design validation to general agents, and writes nothing but the plan.",
+             options: {},
+             permission: Permission.merge(
+               defaults,
+@@ -181,7 +181,7 @@ const layer = Layer.effect(
+           },
+           general: {
+             name: "general",
+-            description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
++            description: `General-purpose agent for researching complex questions and executing multi-step tasks. Give it a self-contained unit of work with a complete brief; it works autonomously - in parallel by default - and reports what was done, what was verified, and what remains open. Use it to execute multiple units of work in parallel.`,
+             prompt: PROMPT_GENERAL,
+             permission: Permission.merge(
+               defaults,
+@@ -211,7 +211,7 @@ const layer = Layer.effect(
+               }),
+               user,
+             ),
+-            description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
++            description: `Fast agent specialized for exploring codebases. This is the default choice for any question about how a codebase works, where something lives, or how its parts connect: finding files by patterns (eg. "src/components/**/*.tsx"), searching code for keywords (eg. "API endpoints"), or tracing behavior across files (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
+             prompt: PROMPT_EXPLORE,
+             options: {},
+             mode: "subagent",
