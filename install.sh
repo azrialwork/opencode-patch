@@ -5,7 +5,7 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/azrialwork/opencode-patch/main/install.sh | bash
-#   curl -fsSL .../install.sh | bash -s -- --version v1.19.4 --install-dir ~/.local/bin
+#   curl -fsSL .../install.sh | bash -s -- --version <tag> --install-dir ~/.local/bin
 #
 # Options (flags or environment variables):
 #   --version <tag>      Release tag to install (default: latest release)

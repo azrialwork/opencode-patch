@@ -21,10 +21,10 @@ Seri ini menghapus fitur dan provider sampai ke akarnya — kode, data, dan depe
 | 0009 | remove-import | Menghapus perintah `import`. |
 | 0010 | remove-photon-image | Menghapus pipeline gambar Photon dan dependensinya; lampiran gambar diteruskan apa adanya. |
 | 0011 | remove-zen-login-billing | Menghapus sistem akun Console: login device-code, penyimpanan akun, dan injeksi konfigurasi organisasi. Model Zen gratis tetap bekerja secara anonim. |
-| 0012 | zen-free-tier-only | Mempersempit katalog Zen ke model yang berbiaya nol di semua tier dan tidak deprecated — sembilan model — pada kedua titik filter katalog (embed saat build dan loader runtime). |
+| 0012 | zen-free-tier-only | Mempersempit katalog Zen, pada kedua titik filter katalog (embed saat build dan loader runtime), ke model yang berbiaya nol di semua tier dan tidak deprecated. |
 | 0013 | remove-pty | Menghapus PTY sampai ke akar: service dan adapternya, API REST/WebSocket, grup protokol, dan klien SDK. Tool shell agen tidak memakai PTY. |
 | 0014 | android-bionic-target | Menambahkan target Android ke skrip build upstream (`OPENCODE_LIBC=bionic`) plus pengemasan Termux: `libopentui.so` yang dibangun native dan shim kompatibilitas `close_range`. Tanpa proot. Build Linux glibc tidak terpengaruh. |
-| 0015 | single-system-prompt | Menghapus sepuluh varian system prompt per model dan logika pemilihan berdasarkan ID model. `default.txt` diganti teks terpelihara yang mencakup presedensi dan kepercayaan, verifikasi sebelum pelaporan, anggaran kegagalan tiga percobaan, persetujuan untuk tindakan irreversibel, dan riset berbasis sumber primer. |
+| 0015 | single-system-prompt | Menghapus varian system prompt per model dan logika pemilihan berdasarkan ID model. `default.txt` diganti teks terpelihara yang mencakup presedensi dan kepercayaan, verifikasi sebelum pelaporan, anggaran kegagalan tiga percobaan, persetujuan untuk tindakan irreversibel, dan riset berbasis sumber primer. |
 | 0016 | complete-env-block | Menghapus baris identitas model dari string environment dan membangun ulang blok `<env>` sebagai potret perangkat yang di-cache: direktori kerja, root workspace, branch git, OS/distro, arsitektur, core CPU, RAM, disk bebas, shell, locale, zona waktu, tanggal — dengan varian Android/Termux. Field yang tidak dapat ditentukan dihilangkan, tidak pernah ditebak. |
 | 0017 | tool-descriptions | Menulis ulang setiap deskripsi tool bawaan dalam satu format: apa yang dilakukan dan dikembalikan tool, kapan dipakai, kapan tidak dan apa penggantinya, batas dan cara gagalnya. Deskripsi shell hanya menyisakan varian bash; varian PowerShell dan cmd dihapus. |
 | 0018 | parallel-first-tools | Menyatakan panggilan tool paralel sebagai default di system prompt. Runtime memang sudah mengeksekusi panggilan independen dalam satu giliran secara bersamaan; teks kini memerintahkannya. |
@@ -63,17 +63,14 @@ Instalasi manual: unduh arsip dan `SHA256SUMS` dari [halaman rilis](https://gith
 
 ## Bagaimana rilis dibangun
 
-- Workflow `Release` (`.github/workflows/release.yml`) berjalan setiap enam jam (cron `0 */6 * * *` UTC) dan lewat dispatch manual, dengan input opsional `version` dan `force`.
+- Workflow `Release` (`.github/workflows/release.yml`) berjalan terjadwal (cron `0 */6 * * *` UTC) dan lewat dispatch manual, dengan input opsional `version` dan `force`.
 - Workflow menyelesaikan tag upstream `v1.x.x` stabil terbaru. Versi yang sudah dirilis repositori ini dilewati, kecuali `force` diatur.
 - Patch diterapkan menurut urutan nama file **sebelum** `bun install`, dan install berjalan tanpa `--frozen-lockfile`, sehingga dependensi yang dihapus patch tidak pernah terinstall. Patch yang gagal diterapkan menggagalkan build; tidak ada yang dirilis.
-- Job Termux membangun `libopentui.so` dari source OpenTUI v0.4.5 yang di-pin (Zig dan Android NDK, alignment halaman 16 KB) dan memverifikasi binary Bionic dengan `readelf`; dependensi glibc apa pun menggagalkan build.
+- Job Termux membangun `libopentui.so` dari source OpenTUI yang di-pin (Zig dan Android NDK, alignment halaman 16 KB) dan memverifikasi binary Bionic dengan `readelf`; dependensi glibc apa pun menggagalkan build.
 - Aset dan `SHA256SUMS` diterbitkan sebagai rilis GitHub dengan tag versi upstream.
+- Target Termux terverifikasi end-to-end pada perangkat Android asli: instalasi, loop agen, dan TUI.
 
-Konfigurasi pelacakan ada di [`upstream.json`](upstream.json). Basis saat ini: upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801`.
-
-## Hasil
-
-Untuk upstream v1.19.4, binary Linux x64 hasil patch berukuran 159.951.024 byte, berbanding 214.526.128 byte untuk build upstream (−25,4%). Binary Termux berukuran 138.289.528 byte. Build Termux terverifikasi end-to-end pada perangkat Android 12 asli (instalasi, loop agen, TUI).
+Konfigurasi pelacakan ada di [`upstream.json`](upstream.json). Setiap rilis diberi tag sesuai versi upstream yang dibangunnya.
 
 ## Tata letak repositori
 
@@ -90,7 +87,7 @@ upstream.json  konfigurasi repositori upstream dan pelacakannya
 
 1. Buat perubahan di clone upstream yang dapat ditulis pada tag yang dilacak, dan uji.
 2. Ekspor sebagai file bernomor berikutnya: `git diff > patches/NNNN-nama-singkat.patch`.
-3. Dokumentasikan di [patches/README.id.md](patches/README.id.md).
+3. Dokumentasikan di [patches/README.id.md](patches/README.id.md) dan tambahkan barisnya ke tabel ringkasan di atas.
 4. Commit. Build terjadwal berikutnya akan menerapkannya.
 
 Dua aturan mengatur seri ini. Sebuah patch menghapus sampai ke akar: ia menghapus kode, data, dan dependensi, bukan menyembunyikan atau memfilternya. Dan prompt agen hidden (title, summary, compaction) tidak pernah diubah; ketiganya tetap byte-identik dengan upstream.

@@ -21,10 +21,10 @@ The series removes features and providers at the root — code, data, and depend
 | 0009 | remove-import | Deletes the `import` command. |
 | 0010 | remove-photon-image | Deletes the Photon image pipeline and its dependency; image attachments pass through unmodified. |
 | 0011 | remove-zen-login-billing | Deletes the Console account system: device-code login, account storage, and organization config injection. Zen free models keep working anonymously. |
-| 0012 | zen-free-tier-only | Narrows the Zen catalogue to models that are zero-cost on every tier and not deprecated — nine models — at both catalogue filter points (build-time embed and runtime loader). |
+| 0012 | zen-free-tier-only | Narrows the Zen catalogue, at both catalogue filter points (build-time embed and runtime loader), to models that are zero-cost on every tier and not deprecated. |
 | 0013 | remove-pty | Removes PTY at the root: the service and its adapters, the REST/WebSocket API, the protocol group, and the SDK clients. The agent's shell tool does not use PTY. |
 | 0014 | android-bionic-target | Adds Android targets to the upstream build script (`OPENCODE_LIBC=bionic`) plus Termux packaging: a natively built `libopentui.so` and a `close_range` compatibility shim. No proot. Linux glibc builds are unaffected. |
-| 0015 | single-system-prompt | Deletes the ten per-model system prompt variants and the model-ID selection logic. `default.txt` is replaced by a maintained text covering precedence and trust, verification before reporting, a three-attempt failure budget, approval for irreversible actions, and primary-source research. |
+| 0015 | single-system-prompt | Deletes the per-model system prompt variants and the model-ID selection logic. `default.txt` is replaced by a maintained text covering precedence and trust, verification before reporting, a three-attempt failure budget, approval for irreversible actions, and primary-source research. |
 | 0016 | complete-env-block | Removes the model-identity line from the environment string and rebuilds the `<env>` block as a cached snapshot of the device: working directory, workspace root, git branch, OS/distro, architecture, CPU cores, RAM, free disk, shell, locale, timezone, date — with an Android/Termux variant. Undetermined fields are omitted, never guessed. |
 | 0017 | tool-descriptions | Rewrites every built-in tool description in one format: what the tool does and returns, when to use it, when not to and what to use instead, limits and failure modes. The shell description keeps only the bash variant; the PowerShell and cmd variants are deleted. |
 | 0018 | parallel-first-tools | States parallel tool calls as the default in the system prompt. The runtime already executed the independent calls of one turn concurrently; the texts now instruct it. |
@@ -63,17 +63,14 @@ Manual install: download an archive and `SHA256SUMS` from the [releases page](ht
 
 ## How releases are built
 
-- The `Release` workflow (`.github/workflows/release.yml`) runs every six hours (cron `0 */6 * * *` UTC) and on manual dispatch, with optional `version` and `force` inputs.
+- The `Release` workflow (`.github/workflows/release.yml`) runs on a schedule (cron `0 */6 * * *` UTC) and on manual dispatch, with optional `version` and `force` inputs.
 - It resolves the newest stable upstream `v1.x.x` tag. A version this repository has already released is skipped, unless `force` is set.
 - Patches are applied in filename order **before** `bun install`, and install runs without `--frozen-lockfile`, so dependencies removed by a patch are never installed. A patch that fails to apply fails the build; nothing is released.
-- The Termux jobs build `libopentui.so` from the pinned OpenTUI v0.4.5 sources (Zig and the Android NDK, 16 KB page alignment) and verify the Bionic binary with `readelf`; any glibc dependency fails the build.
+- The Termux jobs build `libopentui.so` from the pinned OpenTUI sources (Zig and the Android NDK, 16 KB page alignment) and verify the Bionic binary with `readelf`; any glibc dependency fails the build.
 - Assets and `SHA256SUMS` are published as a GitHub release under the upstream version tag.
+- The Termux target is verified end-to-end on a real Android device: install, agent loop, and TUI.
 
-Tracking configuration lives in [`upstream.json`](upstream.json). Current basis: upstream `v1.19.4`, commit `148842ef7cb1bc34192b3fff57d0f9721ab9c801`.
-
-## Results
-
-For upstream v1.19.4, the patched Linux x64 binary is 159,951,024 bytes, against 214,526,128 bytes for the upstream build (−25.4%). The Termux binary is 138,289,528 bytes. The Termux build was verified end-to-end on a real Android 12 device (install, agent loop, TUI).
+Tracking configuration lives in [`upstream.json`](upstream.json). Each release is tagged with the upstream version it builds.
 
 ## Repository layout
 
@@ -90,7 +87,7 @@ upstream.json  upstream repository and tracking configuration
 
 1. Make the change in a writable clone of upstream at the tracked tag, and test it.
 2. Export it as the next numbered file: `git diff > patches/NNNN-short-name.patch`.
-3. Document it in [patches/README.md](patches/README.md).
+3. Document it in [patches/README.md](patches/README.md) and add its row to the summary table above.
 4. Commit. The next scheduled build applies it.
 
 Two rules govern the series. A patch removes at the root: it deletes code, data, and dependencies rather than hiding or filtering them. And the hidden agents' prompts (title, summary, compaction) are never modified; they stay byte-identical to upstream.
